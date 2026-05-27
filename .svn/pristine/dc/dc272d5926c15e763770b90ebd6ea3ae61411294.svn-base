@@ -1,0 +1,77 @@
+<?php
+require_once( "class/tcpdf/tcpdf.php" ) ;
+require_once( 'class/db.class.php' ) ;
+require_once( 'class/corp.class.php' ) ;
+
+// 申込書用PDFを出力するクラス
+
+//----------------------------------------------------------------------------
+// Ａ４縦／Ａ４横共通（フォント以外のサイズはmm）
+//----------------------------------------------------------------------------
+
+define( "PDF_A4_WIDTH"				, "210"				) ; // 使用フォント
+define( "PDF_A4_HEIGHT"				, "297"				) ; // 使用フォント
+
+define( "PDF_USE_FONT"				, "kozgopromedium"	) ; // 使用フォント
+define( "PDF_TOP_MARGIN"				, 30				) ; // TOP部分のマージン(ヘッダーは表示部分は無視され、純粋に上限からの値)
+define( "PDF_LEFT_MARGIN"				, 10				) ; // 左側マージン
+define( "PDF_RIGHT_MARGIN"			, 10				) ; // 右側マージン
+
+define( "PDF_INNER_WIDTH"				, PDF_A4_WIDTH - PDF_LEFT_MARGIN - PDF_RIGHT_MARGIN	) ; // A4の実質描画幅
+
+
+define( "PDF_HEADER_MARGIN"			, 10				) ; // ヘッダーマージン
+define( "PDF_FONTSIZE_HEADER_TITLE"	, 20				) ; // ヘッダータイトル部のフォントサイズ
+
+define( "PDF_FOOTER_MARGIN"			, 15				) ; // ヘッダーマージン
+define( "PDF_FONTSIZE_FOOTER"			, 10				) ; // ヘッダータイトル部のフォントサイズ
+
+// 派生クラス定義
+class PDFOrder extends TCPDF
+{
+	var	$arCorp	= array() ;
+
+	function __construct( $cartid )
+	{
+		$obCorp		= new PARTS_Corp( $this -> conn ) ;
+
+		$arCorp = $obCorp -> getOwner() ;
+		if ( count( $arCorp ) > 0 )
+			$this -> arCorp = $arCorp[ 0 ] ;
+
+		parent::__construct(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+	}
+
+	// ヘッダー(元からあるHeader関数は中身が空なので上書きして使用する仕組み)
+	public function	Header()
+	{
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "vsize"		, PDF_INNER_WIDTH ) ;
+		$header = $tmpl -> fetch( "cart/pdf_order_header.tmpl" ) ;
+		unset( $tmpl ) ;
+
+		$header = mb_convert_encoding( $header , "UTF-8" , "SJIS" ) ;
+		$this -> SetFont( PDF_USE_FONT , "B" , PDF_FONTSIZE_HEADER_TITLE ) ;
+		$this -> writeHTML( $header , true , false , true , false ) ;
+	}
+
+	public function	Footer()
+	{
+		$page = $this -> getAliasNumPage() ;
+		$all_page = $this -> getAliasNbPages() ;
+
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "vsize"		, PDF_INNER_WIDTH ) ;
+		$tmpl -> assign( "page"			, $page ) ;
+		$tmpl -> assign( "all_page"		, $all_page ) ;
+		$tmpl -> assign( "data_corp"	, $this -> arCorp ) ;
+		$footer = $tmpl -> fetch( "cart/pdf_order_footer.tmpl" ) ;
+		unset( $tmpl ) ;
+
+		$footer = mb_convert_encoding( $footer , "UTF-8" , "SJIS" ) ;
+		$this -> SetFont( PDF_USE_FONT , "" , PDF_FONTSIZE_FOOTER ) ;
+		$this -> writeHTML( $footer , true , false , true , false ) ;
+	}
+}
+
+?>

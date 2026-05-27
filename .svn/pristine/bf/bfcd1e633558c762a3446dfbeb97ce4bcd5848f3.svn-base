@@ -1,0 +1,59 @@
+/*
+-------------------------------------------------------------------------------
+	Menu
+-------------------------------------------------------------------------------
+*/
+
+#menu
+{
+	text-align : center ;
+	margin : 16px auto 16px ;
+}
+
+div.menu2Col
+{
+	float : left ;
+	display : block ;
+	width : 50% ;
+}
+
+#menu	dl
+{
+	text-align : left ;
+	margin : 16px auto 8px ;
+}
+
+#menu	dl dt
+{
+	height : 20px ;
+	line-height : 20px ;
+	color : #333 ;
+	font-size : 1.0em ;
+	font-weight : bold ;
+	text-align : left ;
+	text-shadow : #999 1px 1px 1px ;
+	vertical-align : middle ;
+	background : url("/admin/img/label.gif") no-repeat left top ;
+	padding-left : 4px ;
+	margin : auto ;
+	margin-left : 8px ;
+	margin-bottom : 8px ;
+	border-bottom : 3px double #009 ;
+}
+
+#menu	ul
+{
+	list-style-image : url("/admin/img/arrow.gif") ;
+	padding : 0px ;
+	padding-left : 22px ;
+	margin-left : 48px ;
+}
+
+#menu:after
+{
+	content : "." ;
+	display : block ;
+	height : 0px ;
+	clear : both ;
+	visibility : hidden ;
+}

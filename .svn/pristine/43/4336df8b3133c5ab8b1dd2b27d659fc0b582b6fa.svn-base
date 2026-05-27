@@ -1,0 +1,386 @@
+<?php
+
+// イベント情報一覧
+function	fetchEventList( $mode = "" )
+{
+	global	$arImage ;
+
+	$now = time() ;
+	$last = $now + ( 86400 * 31 ) ;
+	
+	// WHERE句の作成
+	$where  = sprintf( "WHERE edit_flg = %d " , DEF_EDITSTATUS_OPENED ) ;
+	$where .= sprintf( "AND start_date <= to_timestamp( '%s' , 'YYYYMMDD' ) " , date( "Ymd" , $now ) ) ;
+	$where .= sprintf( "AND end_date >= to_timestamp( '%s' , 'YYYYMMDD' ) " , date( "Ymd" , $now ) ) ;
+
+	$tmpl_file = "event/event_index.tmpl" ;
+
+	$limit = NUMBER_PER_EVENT_TOP ;
+	if ( $mode == "select" )
+	{
+		// 開催開始日と終了日が入力されていないデータ
+		$where .= sprintf( "AND ( " ) ;
+		$where .= sprintf( "( " ) ;
+		$where .= sprintf( "( hold_start_date = to_timestamp( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_end_date = to_timestamp( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( ") " ) ;
+
+		// 開催終了日が入力されているデータ
+		$where .= sprintf( "OR ( " ) ;
+		$where .= sprintf( "( hold_start_date != to_timestamp( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_end_date != to_timestamp( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_end_date >= to_timestamp( '%s' , 'YYYYMMDD' ) ) " , date( "Ymd" ) ) ;
+		$where .= sprintf( ") " ) ;
+
+		// 開催開始日のみ入力されているデータ
+		$where .= sprintf( "OR ( " ) ;
+		$where .= sprintf( "( hold_start_date != to_timestamp( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_end_date = to_timestamp( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_start_date >= to_timestamp( '%s' , 'YYYYMMDD' ) ) " , date( "Ymd" ) ) ;
+		$where .= sprintf( ") " ) ;
+
+		$where .= sprintf( ") " ) ;
+
+		$tmpl_file = "event/event_index.tmpl" ;
+	}
+	else if ( $mode == "top" )
+	{
+		// 開催終了日が入力されているデータ
+		$where .= sprintf( "AND ( " ) ;
+		$where .= sprintf( "( " ) ;
+		$where .= sprintf( "( hold_start_date != to_timestamp( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_end_date != to_timestamp( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_end_date >= to_timestamp( '%s' , 'YYYYMMDD' ) ) " , date( "Ymd" ) ) ;
+		$where .= sprintf( ") " ) ;
+
+		// 開催開始日のみ入力されているデータ
+		$where .= sprintf( "OR ( " ) ;
+		$where .= sprintf( "( hold_start_date != to_timestamp( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_end_date = to_timestamp( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_start_date >= to_timestamp( '%s' , 'YYYYMMDD' ) ) " , date( "Ymd" ) ) ;
+		$where .= sprintf( ") " ) ;
+
+		$where .= sprintf( ") " ) ;
+
+		// 常時表示のもの意外
+		$where .= sprintf( "AND priority = 0 " ) ;
+
+		$tmpl_file = "event/event_index.tmpl" ;
+
+		$limit = 1 ;
+	}
+
+	$arEvent = array() ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		// SQL文作成
+		$sql  = "" ;
+		$sql .= "SELECT count(*) FROM event_data " ;
+		$sql .= $where ;
+
+		$cnt = 0 ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+				$cnt = $obDB -> getValue( $record , "count" ) ;
+			$obDB -> closeRecord( $record ) ;
+		}
+
+		if ( $cnt != 0 )
+		{
+			$sql  = "" ;
+			$sql .= "SELECT * FROM event_data " ;
+			$sql .= $where ;
+			
+			if ( $mode == 2 )
+				$sql .= "ORDER BY hold_start_date , start_date , update_date DESC " ;
+			else
+				$sql .= "ORDER BY start_date DESC , update_date DESC " ;
+			$sql .= sprintf( "LIMIT %d OFFSET 0 " , $limit ) ;
+
+			$record = $obDB -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				$cnt = $obDB -> getDataCount( $record ) ;
+				for ( $i = 0 ; $i < $limit ; $i ++ )
+				{
+					$arData = $obDB -> getValues( $record , $i ) ;
+					$arEvent[] = $arData ;
+				}
+				$obDB -> closeRecord( $record ) ;
+			}
+		}
+		
+	}
+	
+	$data = "" ;
+	
+	$obEvent = new PARTS_Event() ;
+	if ( $obEvent -> isOpen() == true )
+	{
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "mode"			, $mode ) ;
+		$tmpl -> assign( "event_data"	, $arEvent ) ;
+		$data = $tmpl -> fetch( $tmpl_file ) ;
+		unset( $tmpl ) ;
+	}
+	return $data ;
+}
+
+// イベント情報カレンダー
+function	fetchEventCalender( $func = DEF_PERSONAL_FUNC_TOP )
+{
+	global	$arImage ;
+
+	switch ( $func )
+	{
+	case	DEF_PERSONAL_FUNC_TOP :
+		$class = "mainContentsEventCalender" ;
+		break ;
+	default :
+		$class = "eventCalender" ;
+		break ;
+	}
+
+	$tab = "		" ;
+
+	// 当月のカレンダーを表示する
+	$year = date( "Y" ) ;
+	$month = date( "n" ) ;
+
+	$calenderSub = "" ;
+	$arColor = array( "FFA3E6" , "8DADFF" ) ;
+	for ( $i = 0 ; $i < 2 ; $i ++ )
+	{
+		$calenderSub .= fetchEventCalenderSub( $year , $month , $arColor[ $i ] ) ;
+	
+		// 翌月のカレンダーを表示する
+		$date = mktime( 0 , 0 , 0 , $month , 1 , $year ) ;
+		$max = date( "t" , $date ) ;
+		$date = mktime( 0 , 0 , 0 , $month , $max , $year ) + 86400 ;
+		$year = date( "Y" , $date ) ;
+		$month = date( "n" , $date ) ;
+	}
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "func"			, $func ) ;
+	$tmpl -> assign( "class"		, $class ) ;
+	$tmpl -> assign( "calender"		, $calenderSub ) ;
+	$calender = $tmpl -> fetch( "event/calender_index.tmpl" ) ;
+	unset( $tmpl ) ;
+	
+	return $calender ;
+}
+
+function	fetchEventCalenderSub( $year , $month , $color = "FF0000" )
+{
+	$date = mktime( 0 , 0 , 0 , $month , 1 , $year ) ;
+	$max = date( "t" , $date ) ;
+	$year = date( "Y" , $date ) ;
+	$month = date( "n" , $date ) ;
+
+	// スケジュールデータを初期化
+	$arSchedule = array() ;
+	for( $i = 0 ; $i < 31 ; $i ++ )
+	{
+		$key = sprintf( "day%02d" , $i + 1 ) ;
+		$arSchedule[ $key ] = 0 ;
+	}
+	
+	$today = mktime( 0 , 0 , 0 , date( "n" ) , date( "d" ) , date( "Y" ) ) ;
+
+	// 登録されているイベントを検索する（開催日が登録されているもののみ）
+	$arCount = CheckEvent( $date , $today ) ;
+
+	$tab = "				" ;
+	// 当月を表示
+	$specify_wid = 60 ;
+	$specify_hgt = 32 ;
+
+	$nullSize = 3 ;
+	
+	$arCalender = array() ;
+	$w = date( "w" , $date ) ;
+	$day = 1 ;
+	while( $max >= $day )
+	{
+		$arCalenderSub = array() ;
+		for ( $i = 0 ; $i < 7 ; $i ++ )
+		{
+			if ( $day == 1 && $w != $i )
+			{
+				$arCalenderSub[] = array( "date" => "" , "today" => FALSE , "link" => "" , "count" => 0 ) ;
+			}
+			else if ( $max < $day )
+			{
+				$arCalenderSub[] = array( "date" => "" , "today" => FALSE , "link" => "" , "count" => 0 ) ;
+			}
+			else
+			{
+				$count = 0 ;
+				if ( empty( $arCount[ $year ][ $month ][ $day ] ) == false )
+					$count = $arCount[ $year ][ $month ][ $day ] ;
+				
+				$today = FALSE ;
+				$szDate = date( "Ymd" , mktime( 0 , 0 , 0 , $month , $day , $year ) ) ;
+				if ( $szDate == date( "Ymd" ) )
+					$today = TRUE ;
+				
+				// イベント情報へのリンクの作成
+				$link  = "" ;
+				if ( $count > 0 )
+				{
+					$link = sprintf( "/event/list/D%s.html" , $szDate ) ;
+				}
+				
+				$arCalenderSub[] = array( "date" => sprintf( "%d" , $day  ) , "today" => $today , "link" => $link , "count" => $count ) ;
+
+				$day ++ ;
+			}
+		}
+		$arCalender[] = $arCalenderSub ;
+	}
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "color"			, $color ) ;
+	$tmpl -> assign( "font"				, 24 ) ;
+	$tmpl -> assign( "width"			, $specify_wid ) ;
+	$tmpl -> assign( "height"			, $specify_hgt ) ;
+	$tmpl -> assign( "year"				, date( "Y" , $date ) ) ;
+	$tmpl -> assign( "month"			, date( "n" , $date ) ) ;
+	$tmpl -> assign( "calender_data"	, $arCalender ) ;
+	$calender = $tmpl -> fetch( "event/calender_sub.tmpl" ) ;
+	unset( $tmpl ) ;
+	
+	return $calender ;
+}
+
+// 該当日付にイベントが登録されているか
+function	CheckEvent( $date , $today )
+{
+	$arData = array() ;
+	$arCount = array() ;
+	$count = 0 ;
+	
+	// データの初期化
+	$year	= date( "Y" , $date ) ;
+	$month	= date( "m" , $date ) ;
+	$arCount[ $year ][ $month ][ 0 ] = 0 ;
+	
+
+	// 該当する月のスケジュールデータを取り出す
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = sprintf( "SELECT * FROM event_data " ) ;
+
+		$where  = "" ;
+		// 開催開始日と終了日が入力されていないデータ
+		$where  = sprintf( "WHERE edit_flg = %d " , DEF_EDITSTATUS_OPENED ) ;
+		$where .= sprintf( "AND ( " ) ;
+		$where .= sprintf( "( " ) ;
+//		$where .= sprintf( "( start_date <= to_date( '%s' , 'YYYYMMDD' ) ) " , date( "Ymd" , $date ) ) ;
+//		$where .= sprintf( "AND " ) ;
+//		$where .= sprintf( "( end_date >= to_date( '%s' , 'YYYYMMDD' ) ) " , date( "Ymd" , $date ) ) ;
+//		$where .= sprintf( "AND " ) ;
+//		$where .= sprintf( "( hold_start_date = to_date( '19700101' , 'YYYYMMDD' ) ) " ) ;
+///		$where .= sprintf( "AND " ) ;
+//		$where .= sprintf( "( hold_end_date = to_date( '19700101' , 'YYYYMMDD' ) ) " ) ;
+//		$where .= sprintf( ") " ) ;
+
+		// 開催終了日が入力されているデータ
+//		$where .= sprintf( "OR ( " ) ;
+		$where .= sprintf( "( start_date <= to_date( '%s' , 'YYYYMMDD' ) ) " , date( "Ymd" , $today ) ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( end_date >= to_date( '%s' , 'YYYYMMDD' ) ) " , date( "Ymd" , $today ) ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_start_date != to_date( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_end_date != to_date( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_start_date <= to_date( '%s' , 'YYYYMMDD' ) ) " , date( "Ymt" , $date ) ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_end_date >= to_date( '%s' , 'YYYYMMDD' ) ) " , date( "Ym01" , $date ) ) ;
+		$where .= sprintf( ") " ) ;
+
+		// 開催開始日のみ入力されているデータ
+		$where .= sprintf( "OR ( " ) ;
+		$where .= sprintf( "( start_date <= to_date( '%s' , 'YYYYMMDD' ) ) " , date( "Ymd" , $today ) ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( end_date >= to_date( '%s' , 'YYYYMMDD' ) ) " , date( "Ymd" , $today ) ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_start_date != to_date( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( hold_end_date = to_date( '19700101' , 'YYYYMMDD' ) ) " ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( "( " ) ;
+		$where .= sprintf( " hold_start_date <= to_date( '%s' , 'YYYYMMDD' ) " , date( "Ymt" , $date ) ) ;
+		$where .= sprintf( "AND " ) ;
+		$where .= sprintf( " hold_start_date >= to_date( '%s' , 'YYYYMMDD' ) " , date( "Ym01" , $date ) ) ;
+		$where .= sprintf( ") " ) ;
+		$where .= sprintf( ") " ) ;
+
+		$where .= sprintf( ") " ) ;
+
+		$where .= sprintf( "ORDER BY hold_start_date , hold_end_date " ) ;
+		
+//		$record = $obDB -> executeSQL( $sql . $where ) ;
+//		if ( $record )
+//		{
+//			$cnt = $obDB -> getDataCount( $record ) ;
+//			for ( $i = 0 ; $i < $cnt ; $i ++ )
+//			{
+//				$arData[ $i ] = $obDB -> getValues( $record , $i ) ;
+//			}
+//			$obDB -> closeRecord( $record ) ;
+//		}
+		
+	}
+	
+	$cnt = count( $arData ) ;
+
+	for ( $i = 0 ; $i < $cnt ; $i ++ )
+	{
+		$hold_start_date = $arData[ $i ][ "hold_start_date" ] ;
+		$hold_end_date = $arData[ $i ][ "hold_end_date" ] ;
+		
+		if ( date2( "Ymd" , $hold_end_date ) == "19700101" )
+		{
+			// 開催日のみのデータの場合
+			$year = date2( "Y" , $hold_start_date ) ;
+			$month = date2( "n" , $hold_start_date ) ;
+			$day = date2( "j" , $hold_start_date ) ;
+			
+			$arCount[ $year ][ $month ][ $day ] ++ ;
+		}
+		else
+		{
+			// 開催期間があるデータの場合
+			$start_date = strtotime( date2( "Y/m/d" , $hold_start_date ) ) ;
+			while ( date( "Ymd" , $start_date ) <= date2( "Ymd" , $hold_end_date ) )
+			{
+				$year = date( "Y" , $start_date ) ;
+				$month = date( "n" , $start_date ) ;
+				$day = date( "j" , $start_date ) ;
+				$arCount[ $year ][ $month ][ $day ] ++ ;
+				
+				$start_date += 86400 ;	// 次の日へ
+			}
+		}
+	}
+
+	return $arCount ;
+}
+
+?>

@@ -1,0 +1,276 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	// 基本パラメータ変換
+	if ( empty( $mode ) == true )
+		$mode = "update" ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	// DB
+	$obProduct = new PARTS_Product() ;
+	$obCategory	= new PARTS_Category() ;
+	$blams = new BLAMS() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obProduct -> assignGlobal( $additional ) ;
+
+	// 検索用パラメータ変換
+	$S_NAME = $obProduct -> mb2sb( $S_NAME ) ;
+
+	if ( $S_CATEGORYID == "" )
+		$S_CATEGORYID = -1 ;
+
+	if ( $S_MAIN_FLG == "" )
+		$S_MAIN_FLG = -1 ;
+
+	if ( $S_EDIT_FLG == "" )
+		$S_EDIT_FLG = -1 ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obProduct -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page ;
+
+	// タイトル取得時のキー初期化
+	$menu = -1 ;
+	switch( $S_KIND )
+	{
+	case	DEF_CATEGORY_PRODUCT :
+		$menu = FUNC_PRODUCT ;
+		break ;
+	case	DEF_CATEGORY_ITEM :
+		$menu = FUNC_ITEM ;
+		break ;
+	}
+	
+	if ( empty( $_SESSION[ 'S_ID' ] ) == TRUE )
+		$s_id = "" ;
+	else
+		$s_id = $_SESSION[ 'S_ID' ] ;
+	$location = sprintf( "Location: /%s/menu.php?SSID=%s" , DEF_SITE_ROOTPATH , $s_id ) ;
+	if ( $menu == -1 )
+		header( $location ) ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $obProduct , $obCategory ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+	exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $obProduct , $obCategory )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 該当データ数取得
+	$arWhere = array() ;
+	$arWhere[ "type"		] = $S_KIND ;
+
+	if ( $S_CATEGORYID != -1 )
+		$arWhere[ "categoryid"	] = $S_CATEGORYID ;
+
+	$cnt = $obProduct -> getCount( $arWhere ) ;
+	$arProduct = $obProduct -> getData( $arWhere , $page , NUMBER_PER_PAGE ) ;
+
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$arList = array() ;
+	$paging = 0 ;
+	$pageJump = 0;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $obProduct ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+
+	// 検索フォームの表示
+	$search = FetchSearch( $blams , $arParamFind , $obProduct , $obCategory ) ;
+
+	if ( $S_KIND == DEF_CATEGORY_PRODUCT )
+	{
+		$arHeader = array(
+			array( "caption" => "名称"				, "class" => "w496 left" ) ,
+			array( "caption" => "カテゴリ"			, "class" => "w216 left" ) ,
+			array( "caption" => "主力商品フラグ"	, "class" => "w120 left" ) ,
+			array( "caption" => "表示順"			, "class" => "w064 left" ) ,
+		) ;
+	}
+	else
+	{
+		$arHeader = array(
+			array( "caption" => "商品名"			, "class" => "w496 left" ) ,
+			array( "caption" => "カテゴリ"			, "class" => "w216 left" ) ,
+			array( "caption" => "主力商品フラグ"	, "class" => "w120 left" ) ,
+			array( "caption" => "表示順"			, "class" => "w064 left" ) ,
+		) ;
+	}
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, TRUE				) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind , $obProduct , $obCategory )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$arCategory_local	= array() ;
+	$arCategory			= array() ;
+	$arCategory_local = $obCategory -> createCategoryArray( 0 , 0 , 0 , false , $S_KIND ) ;
+	for( $i = 0 ; $i < count( $arCategory_local ) ; $i ++ )
+	{
+		$key = key( $arCategory_local[ $i ] ) ;
+		$value = $arCategory_local[ $i ][ $key ] ;
+		$arCategory[ $key ] = $value ;
+	}
+
+	$arFoem = array() ;
+
+	$value = "" ;
+	$form	= $blams -> fetchSelectbox( "S_CATEGORYID" , $S_CATEGORYID , $arCategory , 192 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "カテゴリ" , $form , 128 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form	= $blams -> fetchButton( "hidden" , "S_KIND" , $S_KIND ) ;
+	$value .= $blams -> fetchTD( $form , 0 , "" , "" , BLAMS_FORMAT_NOBORDER ) ;
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "append_disable"	, FALSE				) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $page , $arParamFind , $obProduct )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	$arResult	= $obProduct -> arData ;
+	$alias		= $obProduct -> alias ;
+	$calias		= $obProduct -> obCategory -> alias ;
+
+	$cnt = count( $arResult ) ;
+	for ( $index = 0 ; $index < $cnt ; $index ++ )
+	{
+		// データの取得
+		$arData		= $arResult[ $index ] ;
+		
+		$productid			= $arData[ $alias . "_productid"	] ;
+		$name				= $arData[ $alias . "_name"			] ;
+		$sort				= $arData[ $alias . "_sort"			] ;
+		$categoryid			= $arData[ $alias . "_categoryid"	] ;
+		$main_flg			= $arData[ $alias . "_main_flg"		] ;
+
+		$szCategoryName		= $arData[ $calias . "_name"		] ;
+
+		$szMain_flg = "" ;
+		if( $main_flg == 1 )
+		{
+			$szMain_flg = "有" ;
+		}
+		else
+		{
+			$szMain_flg = "無" ;
+		}
+
+		$arAnchor[ "url" 			] = "edit.php"				;
+		$arAnchor[ "idname"			] = $alias . "_productid"	;
+		$arAnchor[ "id"				] = $productid	 			;
+		$arAnchor[ "param"			] = $param					;
+		$arAnchor[ "anchor"			] = $name					;
+		$arAnchor[ "caption"		] = $name					;
+		$arAnchor[ "class"			] = "border left"			;
+		$arAnchor[ "script"			] = ""						;
+		$arAnchor[ "date_format"	] = ""						;
+		
+		$arData = array() ;
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $szCategoryName	,	"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szMain_flg		,	"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $sort			,	"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arList[] = $arData ;
+	}
+	
+	return $arList ;
+}
+
+?>

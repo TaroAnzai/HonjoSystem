@@ -1,0 +1,95 @@
+<?php
+
+// ページングの表示
+function	fetchtPaging( &$page , $max , $limit , $link , $func = -1 , &$maxpage = 1 )
+{
+	$class = "" ;
+	switch ( $func )
+	{
+	}
+
+	$paging = "" ;
+	
+	if ( $max > 0 )
+	{
+		$maxpage = ceil( $max / $limit ) ;
+		if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+	
+		$start = $page * $limit ;
+		$end = $page * $limit + $limit ;
+		if ( $end >= $max )
+			$end = $max ;
+			
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "class"	, $class ) ;
+		$tmpl -> assign( "limit"	, $limit ) ;
+		$tmpl -> assign( "start"	, $start ) ;
+		$tmpl -> assign( "end"		, $end ) ;
+		$tmpl -> assign( "page"		, $page ) ;
+		$tmpl -> assign( "max"		, $max ) ;
+		$tmpl -> assign( "maxpage"	, $maxpage ) ;
+		$tmpl -> assign( "link"		, $link ) ;
+		$paging = $tmpl -> fetch( "paging.tmpl" ) ;
+
+		unset( $tmpl ) ;
+	}
+	
+	return $paging ;
+}
+
+// ページングの表示
+function	fetchtPagejump( &$page , $max , $jump , $limit , $link , $func = -1 )
+{
+	$class = "" ;
+	switch ( $func )
+	{
+	}
+
+	$pagejump = "" ;
+
+	if ( $max > 0 )
+	{
+		$maxpage = ceil( $max / $limit ) ;
+		if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$start = floor( $page / $jump ) * $jump ;
+		$end = $start + $jump ;
+		if ( $maxpage < $end )
+			$end = $maxpage ;
+		
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "class"	, $class ) ;
+		$tmpl -> assign( "start"	, $start ) ;
+		$tmpl -> assign( "end"		, $end ) ;
+		$tmpl -> assign( "page"		, $page ) ;
+		$tmpl -> assign( "maxpage"	, $maxpage ) ;
+		$tmpl -> assign( "link"		, $link ) ;
+		$pagejump = $tmpl -> fetch( "pagejump.tmpl" ) ;
+
+		unset( $tmpl ) ;
+	}
+	return $pagejump ;
+}
+
+// ページングの表示
+function	fetchtPageback( $page , $link , $func = -1 )
+{
+	$class = "" ;
+	switch ( $func )
+	{
+	}
+
+	$pageback = "" ;
+	
+	$link = sprintf( "%s/P%d.html" , $link , $page ) ;
+	
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "class"	, $class ) ;
+	$tmpl -> assign( "link"		, $link ) ;
+	$pageback = $tmpl -> fetch( "pageback.tmpl" ) ;
+	unset( $tmpl ) ;
+	
+	return $pageback ;
+}
+?>

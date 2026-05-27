@@ -1,0 +1,33 @@
+<?php
+	error_reporting( E_ALL ) ;
+
+	require_once "Services/Twitter.php";
+	require_once "HTTP/OAuth/Consumer.php" ;
+	require_once( "../../../../lib/system.php") ;
+
+	session_start() ;
+
+	$request_token_url	= "https://api.twitter.com/oauth/request_token" ;
+	$authorize_url		= "https://api.twitter.com/oauth/authorize" ;
+	$access_token_url	= "https://api.twitter.com/oauth/access_token" ;
+
+	$http_request = new HTTP_Request2();
+	$http_request -> setConfig( 'ssl_verify_peer' , false ) ;
+
+	$consumer_request = new HTTP_OAuth_Consumer_Request() ;
+	$consumer_request -> accept( $http_request ) ;
+
+	$consumer = new HTTP_OAuth_Consumer( DEF_TWITTER_CUSTOMER_KEY, DEF_TWITTER_CUSTOMER_SECRET ) ;
+	$consumer -> accept( $consumer_request ) ;
+
+	$consumer -> setToken( $_SESSION[ "request_token" ] ) ;
+	$consumer -> setTokenSecret( $_SESSION[ "request_token_secret" ] ) ;
+
+	$consumer -> getAccessToken( $access_token_url, $_GET["oauth_verifier"] ) ;
+
+	$_SESSION[ "access_token" ]			= $consumer -> getToken() ;
+	$_SESSION[ "access_token_secret" ]	= $consumer -> getTokenSecret() ;
+
+print_r($_SESSION) ;
+
+?>

@@ -1,0 +1,296 @@
+<?php
+	ini_set( "display_errors" ,1 ) ;
+
+	require_once( "../../lib/common.php") ;
+
+//$time = microtime( true ) ;
+//debug( $time ) ; 
+
+	$obPhoto = new PARTS_Photo() ;
+//
+//	引数
+//		$photoid
+//		$specify_wid
+//		$specify_hgt
+//
+	$bg_r = 255 ;
+	$bg_g = 255 ;
+	$bg_b = 255 ;
+
+	$trimming	= 1 ;
+	$plane		= false ;
+	$edge		= 0 ;
+
+	$specify_wid = 160 ;
+	$specify_hgt = 120 ;
+	$innerX = 0 ;
+	$innerY = 0 ;
+
+	// パスよりパラメータを取得する
+	$path = "" ;
+	if ( empty( $_SERVER['PATH_INFO'] ) == false )
+		$path = $_SERVER['PATH_INFO'] ;
+	$path = str_replace( ".png" , "" , $path ) ;
+	$path = str_replace( ".gif" , "" , $path ) ;
+	$path = str_replace( ".jpg" , "" , $path ) ;
+	$arList = explode( "/" , $path ) ;
+
+	for ( $i = 1 ; $i < count( $arList ) ; $i ++ )
+	{
+		$flg   = substr( $arList[ $i ] , 0 , 1 ) ;
+		$value = substr( $arList[ $i ] , 1 ) ;
+		switch( $flg )
+		{
+		case	"I" :	// color
+			${ $obPhoto -> primarykey } = $value ;
+			break ;
+		case	"W" :	// width
+			$specify_wid = intval( $value ) ;
+			break ;
+		case	"H" :	// height
+			$specify_hgt = intval( $value ) ;
+			break ;
+		case	"P" :	// 画像トリミング指定
+			if ( intval( $value ) == 2 )
+				$trimming = 0 ;
+			else if ( intval( $value ) == 3 )
+				$trimming = 1 ;
+			else if ( intval( $value ) == 4 )
+				$trimming = 2 ;
+			
+			break ;
+		case	"E" :	// 縁取り指定
+			$edge = intval( $value ) ;
+			break ;
+		case	"B" :	// 背景色
+			$bgcolor = hexdec( $value ) ;
+			$bg_r = ( $bgcolor >> 16 ) & 0xff ;
+			$bg_g = ( $bgcolor >>  8 ) & 0xff ;
+			$bg_b = ( $bgcolor       ) & 0xff ;
+		            
+			$edge = TRUE ;
+			if ( intval( $value ) == 0 )
+				$edge = FALSE ;
+			break ;
+		}
+	}
+
+	$b_secure = false ;
+	$font = DEF_FONT_FILE_ENG ;
+
+	if ( empty( ${ $obPhoto -> primarykey } ) == true )
+		${ $obPhoto -> primarykey } = -1 ;
+
+	// 写真情報取得
+	$file = null ;
+	$arResult = array() ;
+	if ( ${ $obPhoto -> primarykey } != -1 )
+	{
+		$arWhere = array() ;
+		$arWhere[ $obPhoto -> primarykey ] = ${ $obPhoto -> primarykey } ;
+		$arResult = $obPhoto -> getData( $arWhere ) ;
+	
+		if ( count( $arResult ) > 0 )
+		{
+			$arResult = $arResult[ 0 ] ;
+			$file	= $arResult[ $obPhoto -> alias . "_data"	] ;
+			$kind	= $arResult[ $obPhoto -> alias . "_kind"	] ;
+			unset( $arResult ) ;
+			
+			if ( $kind == DEF_UPLOAD_MERCHANDISE )
+				$b_secure = true ;
+	
+			// base64デコード
+			$file = base64_decode( $file ) ;
+			
+		}
+	}
+
+	// 画像の作成
+	$minsize = 80 ;
+	if ( $specify_wid == "" )
+		$specify_wid = $minsize ;
+
+	if ( $specify_hgt == "" )
+		$specify_hgt = $minsize ;
+
+	$maxX = $specify_wid ;
+	$maxY = $specify_hgt ;
+
+	$imgh = ImageCreateTrueColor( $maxX , $maxY ) ;
+	$back = ImageColorAllocate( $imgh , $bg_r , $bg_g , $bg_b ) ;
+	ImageFill( $imgh , 0 , 0 , $back ) ;
+	
+	// 写真情報取得
+	if ( $file != "" )
+	{
+		$info = getImageSizeFromString( $file ) ;
+
+		// GIFファイルの場合はそのまま画像を出力する
+		if ( $info[ 2 ] == IMAGETYPE_GIF )
+		{
+			header( 'Content-type: ' . $info[ 3 ] ) ;
+			header( 'Content-Length: ' . strlen( $file ) ) ;
+			echo $file ;
+			exit ;
+		}
+		else
+		{
+			$imagePlane = ImageCreateFromString( $file ) ;
+	
+			$srcX = ImageSx( $imagePlane ) ; ;
+			$srcY = ImageSy( $imagePlane ) ;
+	
+			$perX = $maxX / $srcX ;
+			$perY = $maxY / $srcY ;
+	
+			if ( $perX > $perY )
+				$perX = $perY ;
+			else
+				$perY = $perX ;
+				
+			$destX = $srcX * $perX ;
+			$destY = $srcY * $perY ;
+	
+			$x = ( $maxX - $destX ) / 2 ;
+			$y = ( $maxY - $destY ) / 2 ;
+	
+	
+	//debug( $perX ) ;
+	//debug( $perY ) ;
+	//debug( $destX ) ;
+	//debug( $destY ) ;
+			
+			// 元画像をFullColorに変換
+			ImageCopyResampled( $imgh , $imagePlane , $x , $y , 0 , 0 , $destX , $destY , $srcX , $srcY ) ;
+			ImageDestroy( $imagePlane );
+			unset( $imagePlane ) ;
+			unset( $file ) ;
+		}
+	}
+	else if ( ${ $obPhoto -> primarykey } != -1 )
+	{
+		$font = DEF_FONT_FILE_JP_HGMSG ;
+
+		$x = 0 ;
+
+		$subject = "このアイテムは" ;
+		$size = $maxX / ( mb_strlen( $subject , "utf8" ) + 5 ) ;
+
+		$y = $size * -1.5 ;
+
+		$subject = "このアイテムは\nシステムにより\n削除されています。" ;
+		writeWatermark( $imgh , $subject , $x , $y , $size , $font , "000099" ) ;
+	}
+	else
+	{
+		$x = 0 ;
+		$y = 0 ;
+
+		$subject = "No Image" ;
+		$size = $maxX / ( strlen( $subject ) - 1 ) ;
+		writeWatermark( $imgh , $subject , $x , $y , $size , $font , "000099" ) ;
+	}
+
+	if ( $imgh )
+	{
+		if ( $b_secure == true )
+		{
+			// 横幅全体に透かしを入れる
+			$x = 0 ;
+			$y = 0 ;
+
+			$s = 2 ;
+
+			$subject = "SAMPLE" ;
+			$size = $maxX / ( strlen( $subject ) - 1 ) ;
+
+			writeWatermark( $imgh , $subject , $x - $s , $y - $s , $size , $font , "000000" , 80 ) ;
+			writeWatermark( $imgh , $subject , $x      , $y      , $size , $font , "ffffff" , 80 ) ;
+		
+			// 画像右下にCopyrightを表示する
+			$obCorp	= new PARTS_Corp( $obPhoto -> conn ) ;
+			$arCorp = $obCorp -> getOwner() ;
+			if ( count( $arCorp ) > 0 )
+			{
+				$arCorp = $arCorp[ 0 ] ;
+				$size = 9 ;
+				$subject = sprintf( "(C)%s" , $arCorp[ "cp_name_en" ] ) ;
+				writeCopyright( $imgh , $subject , $x , $y , $size , $font , "000000" , "ffffff" ) ;
+			}
+		}
+	}
+
+//$time = microtime( true ) - $time ;
+//debug( $time ) ; 
+	
+	ob_start( "output_handler" ) ;
+	ImagePng( $imgh ) ;
+	ob_end_flush();
+
+	ImageDestroy( $imgh ) ;
+	
+	exit ;
+
+// $opacity : 0 不透明 ～ 127 完全な透明
+function	writeWatermark( &$im , $subject , $ox , $oy , $size , $font , $color , $opacity = 0 )
+{
+	$bgcolor = hexdec( $color ) ;
+	$bg_r = ( $bgcolor >> 16 ) & 0xff ;
+	$bg_g = ( $bgcolor >>  8 ) & 0xff ;
+	$bg_b = ( $bgcolor       ) & 0xff ;
+
+	$col = ImageColorAllocateAlpha( $im , $bg_r , $bg_g , $bg_b , $opacity ) ;
+
+	$pos = array() ;
+	$pos = ImageTTFBbox( $size , 0 , $font, $subject ) ;
+
+	$maxX = ImageSx( $im ) ;
+	$maxY = ImageSy( $im ) ;
+	
+	$x = ( $maxX - abs( $pos[ 4 ] ) ) / 2 ;
+	$y = ( $maxY - abs( $pos[ 5 ] ) ) / 2 + abs( $pos[ 5 ] ) ;
+		
+	ImageTTFText(	$im , $size, 0 ,
+					$x + $ox ,
+					$y + $oy ,
+					$col , $font , $subject ) ;
+}
+
+function	writeCopyright( $im , $subject , $x , $y , $size , $font , $color , $shadow )
+{
+	$bgcolor = hexdec( $color ) ;
+	$bg_r = ( $bgcolor >> 16 ) & 0xff ;
+	$bg_g = ( $bgcolor >>  8 ) & 0xff ;
+	$bg_b = ( $bgcolor       ) & 0xff ;
+	$col1 = ImageColorAllocate( $im , $bg_r , $bg_g , $bg_b ) ;
+
+	$bgcolor = hexdec( $shadow ) ;
+	$bg_r = ( $bgcolor >> 16 ) & 0xff ;
+	$bg_g = ( $bgcolor >>  8 ) & 0xff ;
+	$bg_b = ( $bgcolor       ) & 0xff ;
+	$col2 = ImageColorAllocate( $im , $bg_r , $bg_g , $bg_b ) ;
+
+	$pos = array() ;
+	$pos = ImageTTFBbox( $size , 0 , $font, $subject ) ;
+
+	$maxX = ImageSx( $im ) ; ;
+	$maxY = ImageSy( $im ) ;
+
+	$x = ( $maxX - abs( $pos[ 4 ] ) ) ;
+	$y = ( $maxY - abs( $pos[ 5 ] ) ) ;
+
+	for ( $xx = $x - 2 ; $xx <= $x + 2 ; $xx ++ )
+		for ( $yy = $y - 2 ; $yy <= $y + 2 ; $yy ++ )
+			ImageTTFText( $im , $size , 0 , $xx , $yy , $col2 , $font , $subject ) ;
+	ImageTTFText( $im , $size , 0 , $x , $y , $col1 , $font , $subject ) ;
+}
+
+function output_handler( $img )
+{
+	header( 'Content-type: image/png' ) ;
+	header( 'Content-Length: ' . strlen( $img) ) ;
+	return $img;
+}
+
+?>

@@ -1,0 +1,326 @@
+<?php
+/*
+* BLAMS
+*
+* 管理画面定数定義ファイル<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+
+//
+// セッション名
+//
+session_name( "SSA" ) ;
+
+//
+// サイトタイトル関連
+//
+define( "TITLE_SITENAME"			,	"管理サイト" ) ;	// サイト名
+
+//
+// サイトルートパス
+//
+define( "DEF_SITE_ROOTPATH"			,	"admin" ) ;
+
+//
+// 管理画面テンプレートパス
+//
+if ( defined( "DEF_ADMIN_TEMPLATENAME" ) )
+	define( "DEF_DEFAULT_TEMPLATENAME"	, "admin" ) ;
+else
+	define( "DEF_DEFAULT_TEMPLATENAME"	, DEF_ADMIN_TEMPLATENAME ) ;
+
+//
+// function table
+//
+$_FUNC = 0 ;
+define( "FUNC_LOGIN"				,	$_FUNC ++	) ;		// LOGIN
+define( "FUNC_LOGOUT"				,	$_FUNC ++	) ;		// LOGOUT
+define( "FUNC_TOPMENU"				,	$_FUNC ++	) ;		// TOPMENU
+define( "FUNC_ADMIN"				,	$_FUNC ++	) ;		// サイト管理者情報
+define( "FUNC_MEMBER"				,	$_FUNC ++	) ;		// 一般会員情報
+define( "FUNC_TOP"					,	$_FUNC ++	) ;		// ＴＯＰ情報
+define( "FUNC_TOPICS"				,	$_FUNC ++	) ;		// 新着情報
+define( "FUNC_ITEM"					,	$_FUNC ++	) ;		// 商品情報
+define( "FUNC_MERCHANDISE"			,	$_FUNC ++	) ;		// 商品情報
+define( "FUNC_MERCHANDISE_MASTER"	,	$_FUNC ++	) ;		// 商品マスター情報
+define( "FUNC_PRODUCT"				,	$_FUNC ++	) ;		// 業務情報
+define( "FUNC_RECRUIT"				,	$_FUNC ++	) ;		// 採用情報
+define( "FUNC_CATEGORY_PRODUCT"		,	$_FUNC ++	) ;		// 業種カテゴリ情報
+define( "FUNC_CATEGORY_ITEM"		,	$_FUNC ++	) ;		// 商品カテゴリ情報
+define( "FUNC_CATEGORY_DECORATION"	,	$_FUNC ++	) ;		// のし種類
+define( "FUNC_CATEGORY_MENU"		,	$_FUNC ++	) ;		// メニューカテゴリ情報
+define( "FUNC_CATEGORY_POST"		,	$_FUNC ++	) ;		// 役職カテゴリー情報
+define( "FUNC_CATEGORY_SITEADMIN"	,	$_FUNC ++	) ;		// サイト管理者情報
+define( "FUNC_CATEGORY_LINK"		,	$_FUNC ++	) ;		// リンク情報
+define( "FUNC_SELF"					,	$_FUNC ++	) ;		// 自社情報
+define( "FUNC_PARTNER"				,	$_FUNC ++	) ;		// 主要取引先情報
+define( "FUNC_OCCUPATION"			,	$_FUNC ++	) ;		// 業務履歴情報
+define( "FUNC_MAILADDRESS"			,	$_FUNC ++	) ;		// メールアドレス情報
+define( "FUNC_MENU"					,	$_FUNC ++	) ;		// メニュー情報
+define( "FUNC_PRIVACY"				,	$_FUNC ++	) ;		// 個人情報規約
+define( "FUNC_RULES"				,	$_FUNC ++	) ;		// 免責事項
+define( "FUNC_PROGRAM"				,	$_FUNC ++	) ;		// 活動内容
+define( "FUNC_ORDERSLAW"			,	$_FUNC ++	) ;		// 通信販売の法規に基づく表記
+define( "FUNC_EYECATCH"				,	$_FUNC ++	) ;		// アイキャッチ
+define( "FUNC_SUPPORT"				,	$_FUNC ++	) ;		// サポート
+define( "FUNC_FACEBOOK"				,	$_FUNC ++	) ;		// FACEBOOK
+define( "FUNC_BANNER"				,	$_FUNC ++	) ;		// アフィリエイト編集
+define( "FUNC_LOGINFO"				,	$_FUNC ++	) ;		// アクセス解析
+define( "FUNC_PERMISSION"			,	$_FUNC ++	) ;		// 管理者権限情報
+define( "FUNC_ORDER"				,	$_FUNC ++	) ;		// 注文情報
+define( "FUNC_SALES"				,	$_FUNC ++	) ;		// 売上情報
+define( "FUNC_INQUIRY"				,	$_FUNC ++	) ;		// 問合せ情報
+define( "FUNC_CARRIAGE"				,	$_FUNC ++	) ;		// 送料情報
+define( "FUNC_COLLECTABLE"			,	$_FUNC ++	) ;		// 手数料情報
+define( "FUNC_CAMPAIGN"				,	$_FUNC ++	) ;		// キャンペーン情報
+define( "FUNC_CONFIG"				,	$_FUNC ++	) ;		// 諸設定情報
+define( "FUNC_CORP"					,	$_FUNC ++	) ;		// 企業会員情報
+define( "FUNC_CATEGORY_MEMBER"		,	$_FUNC ++	) ;		// 一般会員レベル情報
+define( "FUNC_CATEGORY_CORP"		,	$_FUNC ++	) ;		// 企業会員レベル情報
+define( "FUNC_MAILMAGAZINE"			,	$_FUNC ++	) ;		// メールマガジン
+define( "FUNC_LINK"					,	$_FUNC ++	) ;		// リンク情報
+define( "FUNC_MANUAL"				,	$_FUNC ++	) ;		// マニュアル
+define( "FUNC_SOCIAL"				,	$_FUNC ++	) ;		// SNS連携
+
+$_FUNC = 80 ;
+define( "FUNC_MAXNO"				,	$_FUNC ++	) ;		// FUNC最大値
+
+$_FUNC = 256 ;
+define( "FUNC_CTRL_POSTGRESQL"		,	$_FUNC ++	) ;		// PostgreSQL操作
+define( "FUNC_CTRL_ZIPCODE"			,	$_FUNC ++	) ;		// Zip Code 登録
+define( "FUNC_CTRL_ZIPCODE_POPUP"	,	$_FUNC ++	) ;		// Zip Code 登録 (POPUP)
+define( "FUNC_CTRL_STATUS_POPUP"	,	$_FUNC ++	) ;		// カートの状態 (POPUP)
+
+// メニュー項目のタイトル
+global	$arMenuTitle ;
+$arMenuTitle = 	array(
+		"ショップ管理" ,
+		"コンテンツ管理" ,
+		"サイト管理" ,
+		"ユーザー管理" ,
+		"システム管理" ,
+	);
+
+//
+// メニュー表示権限 （ ※DB管理へ移行予定 ）
+//
+global	$arPermission ;
+$arPermission = array(
+							   // NA  ADMIN
+	FUNC_LOGIN					=> array( 0 , 100 => 0 ) ,		// ログイン
+	FUNC_LOGOUT					=> array( 0 , 100 => 0 ) ,		// ログアウト
+	FUNC_TOPMENU				=> array( 0 , 100 => 0 ) ,		// TOPメニュー
+	FUNC_ADMIN					=> array( 0 , 100 => 1 ) ,		// サイト管理者
+	FUNC_MEMBER					=> array( 0 , 100 => 1 ) ,		// 一般会員情報
+	FUNC_TOP					=> array( 0 , 100 => 1 ) ,		// ＴＯＰ情報 管理
+	FUNC_TOPICS					=> array( 0 , 100 => 1 ) ,		// 新着情報 管理
+	FUNC_ITEM					=> array( 0 , 100 => 1 ) ,		// 商品情報 管理
+	FUNC_PRODUCT				=> array( 0 , 100 => 1 ) ,		// 業務情報 管理
+	FUNC_RECRUIT				=> array( 0 , 100 => 1 ) ,		// 採用情報 管理
+	FUNC_MERCHANDISE			=> array( 0 , 100 => 1 ) ,		// 商品情報（ショップ用） 管理
+	FUNC_MERCHANDISE_MASTER		=> array( 0 , 100 => 1 ) ,		// 商品マスター情報
+	FUNC_CARRIAGE				=> array( 0 , 100 => 1 ) ,		// 送料情報
+	FUNC_COLLECTABLE			=> array( 0 , 100 => 1 ) ,		// 手数料情報
+	FUNC_CAMPAIGN				=> array( 0 , 100 => 1 ) ,		// キャンペーン情報
+	FUNC_ORDER					=> array( 0 , 100 => 1 ) ,		// 注文情報
+	FUNC_SALES					=> array( 0 , 100 => 1 ) ,		// 売上情報
+	FUNC_INQUIRY				=> array( 0 , 100 => 1 ) ,		// 問合せ情報
+	FUNC_CATEGORY_PRODUCT		=> array( 0 , 100 => 1 ) ,		// 商品カテゴリ情報
+	FUNC_CATEGORY_ITEM			=> array( 0 , 100 => 1 ) ,		// 商品カテゴリ情報
+	FUNC_CATEGORY_DECORATION	=> array( 0 , 100 => 1 ) ,		// のし種類
+	FUNC_CATEGORY_MENU			=> array( 0 , 100 => 1 ) ,		// メニューカテゴリ情報
+	FUNC_CATEGORY_POST			=> array( 0 , 100 => 1 ) ,		// 役職カテゴリ情報
+	FUNC_CATEGORY_SITEADMIN		=> array( 0 , 100 => 1 ) ,		// サイト管理者情報
+	FUNC_CATEGORY_LINK			=> array( 0 , 100 => 1 ) ,		// リンク情報
+	FUNC_SELF					=> array( 0 , 100 => 1 ) ,		// 自社情報
+	FUNC_PARTNER				=> array( 0 , 100 => 1 ) ,		// 主要取引先情報
+	FUNC_OCCUPATION				=> array( 0 , 100 => 1 ) ,		// 業務履歴情報
+	FUNC_MAILADDRESS			=> array( 0 , 100 => 1 ) ,		// メールアドレス情報
+	FUNC_MENU					=> array( 0 , 100 => 1 ) ,		// メニュー情報
+	FUNC_PRIVACY				=> array( 0 , 100 => 1 ) ,		// 個人情報規約
+	FUNC_RULES					=> array( 0 , 100 => 1 ) ,		// 免責事項
+	FUNC_PROGRAM				=> array( 0 , 100 => 1 ) ,		// 活動内容
+	FUNC_ORDERSLAW				=> array( 0 , 100 => 1 ) ,		// 通信販売の法規に基づく表記
+	FUNC_EYECATCH				=> array( 0 , 100 => 1 ) ,		// EYE CATCH
+	FUNC_SUPPORT				=> array( 0 , 100 => 1 ) ,		// サポート
+	FUNC_FACEBOOK				=> array( 0 , 100 => 1 ) ,		// facebookページ タブアプリ用
+	FUNC_BANNER					=> array( 0 , 100 => 1 ) ,		// 自社情報
+	FUNC_LOGINFO				=> array( 0 , 100 => 1 ) ,		// アクセス解析
+	FUNC_MANUAL					=> array( 0 , 100 => 1 ) ,		// マニュアル
+	FUNC_PERMISSION				=> array( 0 , 100 => 1 ) ,		// 管理者権限情報
+	FUNC_CONFIG					=> array( 0 , 100 => 1 ) ,		// 諸設定情報
+	FUNC_CORP					=> array( 0 , 100 => 1 ) ,		// 企業会員情報
+	FUNC_CATEGORY_MEMBER		=> array( 0 , 100 => 1 ) ,		// 一般会員レベル情報
+	FUNC_CATEGORY_CORP			=> array( 0 , 100 => 1 ) ,		// 企業会員レベル情報
+	FUNC_MAILMAGAZINE			=> array( 0 , 100 => 1 ) ,		// メールマガジン
+	FUNC_LINK					=> array( 0 , 100 => 1 ) ,		// 企業会員情報
+	FUNC_MANUAL					=> array( 0 , 100 => 1 ) ,		// マニュアル
+	FUNC_SOCIAL					=> array( 0 , 100 => 1 ) ,		// SNS連携
+
+	FUNC_CTRL_POSTGRESQL		=> array( 0 , 100 => 1 ) ,		// PostgreSQL操作
+	FUNC_CTRL_ZIPCODE			=> array( 0 , 100 => 1 ) ,		// Zip Code 登録
+) ;
+
+global	$arFunction ;
+$arFunction = array(
+	"FUNC_LOGIN"				=>	FUNC_LOGIN					,
+	"FUNC_LOGOUT"				=>	FUNC_LOGOUT					,
+	"FUNC_TOPMENU"				=>	FUNC_TOPMENU				,
+	"FUNC_ADMIN"				=>	FUNC_ADMIN					,
+	"FUNC_MEMBER"				=>	FUNC_MEMBER					,
+	"FUNC_TOP"					=>	FUNC_TOP					,
+	"FUNC_TOPICS"				=>	FUNC_TOPICS					,
+	"FUNC_ITEM"					=>	FUNC_ITEM					,
+	"FUNC_PRODUCT"				=>	FUNC_PRODUCT				,
+	"FUNC_RECRUIT"				=>	FUNC_RECRUIT				,
+	"FUNC_MERCHANDISE"			=>	FUNC_MERCHANDISE			,
+	"FUNC_MERCHANDISE_MASTER"	=>	FUNC_MERCHANDISE_MASTER		,
+	"FUNC_CARRIAGE"				=>	FUNC_CARRIAGE				,
+	"FUNC_COLLECTABLE"			=>	FUNC_COLLECTABLE			,
+	"FUNC_CAMPAIGN"				=>	FUNC_CAMPAIGN				,
+	"FUNC_ORDER"				=>	FUNC_ORDER					,
+	"FUNC_SALES"				=>	FUNC_SALES					,
+	"FUNC_INQUIRY"				=>	FUNC_INQUIRY				,
+	"FUNC_CATEGORY_PRODUCT"		=>	FUNC_CATEGORY_PRODUCT		,
+	"FUNC_CATEGORY_ITEM"		=>	FUNC_CATEGORY_ITEM			,
+	"FUNC_CATEGORY_DECORATION"	=>	FUNC_CATEGORY_DECORATION	,
+	"FUNC_CATEGORY_MENU"		=>	FUNC_CATEGORY_MENU			,
+	"FUNC_CATEGORY_POST"		=>	FUNC_CATEGORY_POST			,
+	"FUNC_CATEGORY_SITEADMIN"	=>	FUNC_CATEGORY_SITEADMIN		,
+	"FUNC_CATEGORY_LINK"		=>	FUNC_CATEGORY_LINK			,
+	"FUNC_SELF"					=>	FUNC_SELF					,
+	"FUNC_PARTNER"				=>	FUNC_PARTNER				,
+	"FUNC_OCCUPATION"			=>	FUNC_OCCUPATION				,
+	"FUNC_MAILADDRESS"			=>	FUNC_MAILADDRESS			,
+	"FUNC_MENU"					=>	FUNC_MENU					,
+	"FUNC_PRIVACY"				=>	FUNC_PRIVACY				,
+	"FUNC_RULES"				=>	FUNC_RULES					,
+	"FUNC_PROGRAM"				=>	FUNC_PROGRAM				,
+	"FUNC_ORDERSLAW"			=>	FUNC_ORDERSLAW				,
+	"FUNC_EYECATCH"				=>	FUNC_EYECATCH				,
+	"FUNC_SUPPORT"				=>	FUNC_SUPPORT				,
+	"FUNC_FACEBOOK"				=>	FUNC_FACEBOOK				,
+	"FUNC_BANNER"				=>	FUNC_BANNER					,
+	"FUNC_LOGINFO"				=>	FUNC_LOGINFO				,
+	"FUNC_MANUAL"				=>	FUNC_MANUAL					,
+	"FUNC_PERMISSION"			=>	FUNC_PERMISSION				,
+	"FUNC_CONFIG"				=>	FUNC_CONFIG					,
+	"FUNC_CORP"					=>	FUNC_CORP					,
+	"FUNC_CATEGORY_MEMBER"		=>	FUNC_CATEGORY_MEMBER		,
+	"FUNC_CATEGORY_CORP"		=>	FUNC_CATEGORY_CORP			,
+	"FUNC_MAILMAGAZINE"			=>	FUNC_MAILMAGAZINE			,
+	"FUNC_LINK"					=>	FUNC_LINK					,
+	"FUNC_MANUAL"				=>	FUNC_MANUAL					,
+	"FUNC_SOCIAL"				=>	FUNC_SOCIAL					,
+
+	"FUNC_CTRL_POSTGRESQL"		=>	FUNC_CTRL_POSTGRESQL		,
+	"FUNC_CTRL_ZIPCODE"			=>	FUNC_CTRL_ZIPCODE			,
+	"FUNC_CTRL_ZIPCODE_POPUP"	=>	FUNC_CTRL_ZIPCODE_POPUP		,
+	"FUNC_CTRL_STATUS_POPUP"	=>	FUNC_CTRL_STATUS_POPUP		,
+) ;
+
+//
+// メニュー項目のリストとURL
+//
+$slimstat = sprintf( "window.open('/%s/maintenance/analog.php' , '_slimstat_');return false;" , DEF_SITE_ROOTPATH ) ;
+
+global	$arNavi ;
+$arNavi = array(
+	//		NO	種類						メニュータイトル					URL
+	FUNC_LOGIN					=> array(	0 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "ログイン"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/index.php"														) ,
+	FUNC_LOGOUT					=> array(	0 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "ログアウト"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/logout.php"													) ,
+
+	FUNC_MERCHANDISE			=> array(	0 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "商品情報（ショップ用）"		,	"url" => "/" . DEF_SITE_ROOTPATH . "/merchandise/list.php?S_KIND="	. DEF_CATEGORY_ITEM				) ,
+	FUNC_ORDER					=> array(	0 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "注文情報"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/order/list.php"												) ,
+	FUNC_SALES					=> array(	0 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "売上情報"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/sales/list.php"												) ,
+	FUNC_CARRIAGE				=> array(	0 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "送料情報"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/carriage/list.php"												) ,
+	FUNC_COLLECTABLE			=> array(	0 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "手数料情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/collectable/list.php"									) ,
+	FUNC_CATEGORY_DECORATION	=> array(	0 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "のし種類情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/category/list.php?S_KIND="	. DEF_CATEGORY_DECORATION			) ,
+	FUNC_MAILMAGAZINE			=> array(	0 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "メールマガジン"				,	"url" => "/" . DEF_SITE_ROOTPATH . "/mailmagazine/list.php"											) ,
+
+	FUNC_TOPMENU				=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "TOPメニュー"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/menu.php"														) ,
+	FUNC_MENU					=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "メニュー情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/menu/list.php"													) ,
+	FUNC_TOP					=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "TOP情報"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/top/list.php"													) ,
+	FUNC_TOPICS					=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "TOPICS情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/topics/list.php"												) ,
+	FUNC_PRODUCT				=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "業種情報"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/product/list.php?S_KIND="	. DEF_CATEGORY_PRODUCT				) ,
+	FUNC_ITEM					=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "商品情報"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/product/list.php?S_KIND="	. DEF_CATEGORY_ITEM					) ,
+	FUNC_CAMPAIGN				=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "キャンペーン情報"				,	"url" => "/" . DEF_SITE_ROOTPATH . "/campaign/list.php"												) ,
+	FUNC_PRIVACY				=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "個人情報規約"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/fixed/edit.php?S_TYPE=" . DEF_PAGE_PRIVACY						) ,
+	FUNC_RULES					=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "ご利用規約など"				,	"url" => "/" . DEF_SITE_ROOTPATH . "/fixed/edit.php?S_TYPE=" . DEF_PAGE_RULES						) ,
+	FUNC_PROGRAM				=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "活動内容"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/fixed/edit.php?S_TYPE=" . DEF_PAGE_PROGRAM						) ,
+	FUNC_ORDERSLAW				=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "通信販売の法規に基づく表記"	,	"url" => "/" . DEF_SITE_ROOTPATH . "/fixed/edit.php?S_TYPE=" . DEF_PAGE_ORDERSLAW					) ,
+	FUNC_EYECATCH				=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "アイキャッチ"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/fixed/edit.php?S_TYPE=" . DEF_PAGE_EYECATCH					) ,
+	FUNC_SUPPORT				=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "サポート"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/fixed/edit.php?S_TYPE=" . DEF_PAGE_SUPPORT						) ,
+	FUNC_FACEBOOK				=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "facebookページ情報"			,	"url" => "/" . DEF_SITE_ROOTPATH . "/facebook/list.php"							) ,
+	FUNC_BANNER					=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "アフィリエイト情報"			,	"url" => "/" . DEF_SITE_ROOTPATH . "/banner/list.php"												) ,
+	FUNC_LINK					=> array(	1 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "リンク情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/link/list.php"													) ,
+
+	FUNC_SELF					=> array(	2 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "自社情報"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/corp/edit.php?S_GROUPFLG=" . DEF_CORP_GROUP_SELF				) ,
+	FUNC_PARTNER				=> array(	2 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "主要取引先情報"				,	"url" => "/" . DEF_SITE_ROOTPATH . "/partner/list.php"												) ,
+	FUNC_RECRUIT				=> array(	2 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "採用情報"						,	"url" => "/" . DEF_SITE_ROOTPATH . "/recruit/list.php"												) ,
+	FUNC_OCCUPATION				=> array(	2 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "業務履歴情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/occupation/list.php"											) ,
+	FUNC_MAILADDRESS			=> array(	2 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "連絡用メールアドレス情報"		,	"url" => "/" . DEF_SITE_ROOTPATH . "/mailaddress/list.php"											) ,
+	FUNC_CONFIG					=> array(	2 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "諸設定情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/config/list.php"												) ,
+	FUNC_SOCIAL					=> array(	2 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "SNS連携情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/social/edit.php"												) ,
+
+	FUNC_ADMIN					=> array(	3 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "サイト管理者情報"				,	"url" => "/" . DEF_SITE_ROOTPATH . "/admin/list.php"												) ,
+	FUNC_CATEGORY_SITEADMIN		=> array(	3 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "サイト管理者レベル情報"		,	"url" => "/" . DEF_SITE_ROOTPATH . "/category/list.php?S_KIND="	. DEF_CATEGORY_SITEADMIN			) ,
+	FUNC_PERMISSION				=> array(	3 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "サイト管理者権限情報"			,	"url" => "/" . DEF_SITE_ROOTPATH . "/permission/list.php"											) ,
+	FUNC_MEMBER					=> array(	3 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "一般会員情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/member/list.php"												) ,
+	FUNC_CATEGORY_MEMBER		=> array(	3 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "一般会員レベル情報"			,	"url" => "/" . DEF_SITE_ROOTPATH . "/category/list.php?S_KIND="	. DEF_CATEGORY_MEMBER				) ,
+	FUNC_CORP					=> array(	3 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "企業会員情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/corp/list.php?S_GROUPFLG=" . DEF_CORP_GROUP_OTHER				) ,
+	FUNC_CATEGORY_CORP			=> array(	3 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "企業会員レベル情報"			,	"url" => "/" . DEF_SITE_ROOTPATH . "/category/list.php?S_KIND="	. DEF_CATEGORY_CORP					) ,
+	FUNC_INQUIRY				=> array(	3 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "問合せ情報"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/inquiry/list.php"												) ,
+
+	FUNC_MERCHANDISE_MASTER		=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "商品マスター情報"				,	"url" => "/" . DEF_SITE_ROOTPATH . "/master/merchandise/list.php"									) ,
+	FUNC_CATEGORY_MENU			=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "メニューカテゴリ情報"			,	"url" => "/" . DEF_SITE_ROOTPATH . "/category/list.php?S_KIND="	. DEF_CATEGORY_MENU					) ,
+	FUNC_CATEGORY_PRODUCT		=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "業務カテゴリ情報"				,	"url" => "/" . DEF_SITE_ROOTPATH . "/category/list.php?S_KIND="	. DEF_CATEGORY_PRODUCT				) ,
+	FUNC_CATEGORY_ITEM			=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "商品カテゴリ情報"				,	"url" => "/" . DEF_SITE_ROOTPATH . "/category/list.php?S_KIND="	. DEF_CATEGORY_ITEM					) ,
+	FUNC_CATEGORY_POST			=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "役職カテゴリ情報"				,	"url" => "/" . DEF_SITE_ROOTPATH . "/category/list.php?S_KIND="	. DEF_CATEGORY_POST					) ,
+	FUNC_CATEGORY_LINK			=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "リンクカテゴリ情報"			,	"url" => "/" . DEF_SITE_ROOTPATH . "/category/list.php?S_KIND="	. DEF_CATEGORY_LINK					) ,
+	FUNC_LOGINFO				=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "アクセス解析"					,	"url" => "#analog"														,	"script" => $slimstat	) ,
+	FUNC_MANUAL					=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "マニュアル"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/maintenance/manual.pdf" 								) ,
+	FUNC_CTRL_POSTGRESQL		=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "PostgreSQL操作"				,	"url" => "/" . DEF_SITE_ROOTPATH . "/maintenance/db.php" 											) ,
+	FUNC_CTRL_ZIPCODE			=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "郵便番号登録"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/maintenance/zip.php" 											) ,
+	FUNC_CTRL_ZIPCODE_POPUP		=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "郵便番号検索"					,	"url" => "/" . DEF_SITE_ROOTPATH . "/"					 											) ,
+	FUNC_CTRL_STATUS_POPUP		=> array(	4 ,	DEF_SITETYPE_NORMAL		,	"anchor" => "カート状態表示更新"			,	"url" => "/" . DEF_SITE_ROOTPATH . "/"					 											) ,
+) ;
+
+global	$arFunctionTitle ;
+$arFunctionTitle = array(
+	DEF_CATEGORY_PRODUCT		=> FUNC_CATEGORY_PRODUCT ,
+	DEF_CATEGORY_ITEM			=> FUNC_CATEGORY_ITEM ,
+	DEF_CATEGORY_MENU			=> FUNC_CATEGORY_MENU ,
+	DEF_CATEGORY_POST			=> FUNC_CATEGORY_POST ,
+	DEF_CATEGORY_LINK			=> FUNC_CATEGORY_LINK ,
+	DEF_CATEGORY_DECORATION		=> FUNC_CATEGORY_DECORATION ,
+
+	DEF_CATEGORY_SITEADMIN		=> FUNC_CATEGORY_SITEADMIN ,
+	DEF_CATEGORY_MEMBER			=> FUNC_CATEGORY_MEMBER ,
+	DEF_CATEGORY_CORP			=> FUNC_CATEGORY_CORP ,
+) ;
+
+global	$arFunctionWebpageTitle ;
+$arFunctionWebpageTitle = array(
+	DEF_PAGE_PRIVACY			=> FUNC_PRIVACY ,
+	DEF_PAGE_RULES				=> FUNC_RULES ,
+	DEF_PAGE_PROGRAM			=> FUNC_PROGRAM ,
+	DEF_PAGE_ORDERSLAW			=> FUNC_ORDERSLAW ,
+	DEF_PAGE_EYECATCH			=> FUNC_EYECATCH ,
+	DEF_PAGE_SUPPORT			=> FUNC_SUPPORT ,
+) ;
+
+//
+// サイト画面構成基本サイズ
+//
+define( "DEF_BASE_TSIZE"			,	168	) ;		// タイトル領域幅（編集画面）
+define( "DEF_BASE_VSIZE"			,	280	) ;		// 値表示領域幅１（編集画面）
+define( "DEF_BASE_VSIZE3"			,	488	) ;		// 値表示領域幅３（編集画面）
+
+define( "DEF_BASE_VSIZE4"			,	550	) ;		// 値表示領域幅4（編集画面）
+
+?>

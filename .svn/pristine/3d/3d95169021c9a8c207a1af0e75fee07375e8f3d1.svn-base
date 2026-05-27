@@ -1,0 +1,156 @@
+<?php
+/**
+* BLAMS 基本関数郡 諸設定用クラス
+*
+* 役員情報管理用クラス
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Officer extends DB_Common
+{
+	var	$obPhoto ;
+
+	function	__construct(  $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "officer_data" ;
+		$alias		= "ofc" ;
+		$primarykey	= "officerid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> searchkey = array(
+				"S_GROUPFLG"		,
+				"S_GROUPPARENTID"	,
+			) ;
+
+		$this -> obPhoto	= new PARTS_Photo( $this -> conn ) ;
+
+		$this -> images = array( "photoid" , "photoid1" , "photoid_map" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+	
+	// データの取得
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+	
+	// SQL文の作成
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+		
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		// 企業IDで検索
+		if ( $corpid != -1 )
+			$sql .= sprintf( "AND %s.corpid = %d " , $this -> alias , $corpid ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.post , " , $this -> alias ) ;
+				$sql .= sprintf( "%s.name   " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		return $sql ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+			// 年月
+			if ( ${ $alias . "_post" } == -1 )
+				$error .= "・役職を選択してください。\n" ;
+	
+			// 内容
+			if ( ${ $alias . "_name" } == "" )
+				$error .= "・氏名が入力されていません。\n" ;
+	
+			// 画像
+			$obPhoto = $this -> obPhoto ;
+			$error .= $obPhoto -> checkData( $alias . "_photoid_img"		, $alias . "_photoid_tmp"		, $arParam , "img"	, "画像"	) ;
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+}
+?>

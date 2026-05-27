@@ -1,0 +1,105 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	if ( empty( $_POST[ "passwd" ] ) != true )
+		$passwd = $_POST[ "passwd" ] ;
+
+	if ( empty( $_POST[ "_FILES" ] ) != true )
+		$_FILES = $_POST[ "_FILES" ] ;
+
+	// 実際に転送されたファイルがある場合は ファイル名を変更する
+	$filename = "" ;
+	if ( empty( $_FILES ) == false )
+	{
+		$filename_upload = $_FILES[ "filename" ] ;
+		if ( is_uploaded_file( $filename_upload[ "tmp_name" ] ) )
+		{
+			$filename = "/tmp/" . $filename_upload[ "name" ] ;
+	
+			clearstatcache() ;
+			if ( file_exists( $filename ) )
+			{
+				unlink( $filename ) ;
+			}
+			
+			if ( move_uploaded_file( $filename_upload[ "tmp_name" ] , $filename ) )
+			{
+		    	chmod( $filename , 0644 ) ;
+			}
+			else
+			{
+				$filename = "" ;
+			}
+		}
+	}
+
+	if ( empty( $passwd ) == true )
+		$passwd = "" ;
+
+	$sqlfile = "zip/createtable.sql" ;
+
+	// SQL文の実行
+	$arResult = array() ;
+	if ( $passwd != "" && $filename != "" )
+	{
+		$path = realpath( "./" ) ;
+		$path = $path . "/../../../db/" ;
+		$path = realpath( $path ) ;
+	
+		$command  = sprintf( "cd %s;" , $path  ) ;
+		$command .= sprintf( "PGUSER='%s';export PGUSER;" , DB_SERVICE_USER ) ;
+
+		if ( defined( "DB_HOST" ) == true )
+			$command .= sprintf( "PGHOST='%s';export PGHOST;" , DB_HOST ) ;
+		if ( defined( "DB_PORT" ) == true )
+			$command .= sprintf( "PGPORT='%s';export PGPORT;" , DB_PORT ) ;
+
+		$command .= sprintf( "PGPASSWORD='%s';export PGPASSWORD;" , $passwd ) ;
+		$command .= sprintf( "/usr/local/pgsql/bin/psql %s -f ./%s 2>&1" , DB_SERVICE_NAME , $sqlfile ) ;
+
+		exec( $command , $result ) ;
+		for ( $i = 0 ; $i < count( $result ) ; $i ++ )
+		{
+			$msg = $result[ $i ] ;
+			$msg = str_replace( "../../../db/zip/" , "" , $msg ) ;
+			$arResult[] = $msg ;
+		}
+	}
+
+	$menu = FUNC_CTRL_ZIPCODE ;
+
+	$blams = new BLAMS() ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	$data = FetchMaintenance( $blams , $funcname , $filename , $arResult ) ;
+
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , DEF_ADMIN ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+	
+	exit ;
+
+//
+// パスワード入力フォームの表示
+//
+function	FetchMaintenance( $blams , $funcname , $filename , $arResult )
+{
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"		, $funcname	) ;
+	$tmpl -> assign( "filename"		, $filename ) ;
+	$tmpl -> assign( "result_data"	, $arResult ) ;
+	$data = $tmpl -> fetch( "maintenance/zip.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+?>

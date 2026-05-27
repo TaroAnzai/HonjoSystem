@@ -1,0 +1,40 @@
+<?php
+	ini_set( "display_errors" , 1 ) ;
+	require_once( "server.ini.php" ) ;
+	require_once( "conf/user.ini.php" ) ;
+	require_once( "class/blams.class.php" ) ;
+	require_once( "class/terminal.class.php" ) ;
+
+	// Excel出力
+	
+	ob_implicit_flush() ;
+	
+	//print_r( $argv ) ;
+
+	// データを保存するフォルダの作成
+	$date	= new DateTime() ;
+	$date -> modify ( "-1 day" ) ;
+	$year	= intval( $date -> format( "Y" ) ) ;
+	$month	= intval( $date -> format( "m" ) ) ;
+
+	@mkdir( sprintf( "%s/%04d" , NAC_DATA_FOLDER_REPORT , $year ) ) ;
+	@mkdir( sprintf( "%s/%04d/%02d" , NAC_DATA_FOLDER_REPORT , $year , $month ) ) ;
+
+	$tmpfile = sprintf( "%s%s.~~~" , NAC_REPORT , $date -> format( "ymd" ) ) ;
+	$orgfile = sprintf( "%s%s.xls" , NAC_REPORT , $date -> format( "ymd" ) ) ;
+	$tmppath = sprintf( "%s/%s" , NAC_DATA_FOLDER_REPORT , $tmpfile ) ;
+	$orgpath = sprintf( "%s/%s" , NAC_DATA_FOLDER_REPORT , $orgfile ) ;
+
+	// 該当する日付のデータを取得する
+	$obTerminal = new PARTS_Terminal() ;
+	$alias = $obTerminal -> alias ;
+	
+	$arWhere = array() ;
+	$arWhere[ "command"			] = NAC_STORAGE_PRODUCT ;
+	$arWhere[ "create_date_d"	] = $date -> format( "Y-m-d 00:00:00" ) ;
+	
+	$arResult = $obTerminal -> getData( $arWhere ) ;
+
+$obTerminal = debug( $arResult ) ;
+
+?>

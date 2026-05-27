@@ -1,0 +1,1601 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+	require_once( "class/member_corp.class.php" ) ;
+	require_once( "class/member_mail.class.php" ) ;
+	require_once( "class/member_temp.class.php" ) ;
+
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	if ( empty( $order ) == true )
+		$order = "" ;
+
+	$mode = "" ;
+	$func = "" ;
+
+	// 登録ボタン名によって処理を分ける
+	$arMode = array( "append" , "appendmail" , "appendtemp" , "update" , "delete" , "changeLevel" ) ;
+	GetSystemMode( $mode , $func , $arMode ) ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams		= new BLAMS() ;
+	$obMember	= new PARTS_Member( $obSession -> conn ) ;
+	$obMemberM	= new PARTS_MemberMail( $obSession -> conn ) ;
+	$obMemberT	= new PARTS_MemberTemp( $obSession -> conn ) ;
+	$obCorp		= new PARTS_Corp( $obSession -> conn ) ;
+	$obCategory	= new PARTS_Category( $obSession -> conn ) ;
+
+	$alias 		= $obMember -> alias ;
+	$primarykey	= $obMember -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// 編集データ保存
+	$arParam = array() ;
+	
+	$additional = array() ;
+	$additional[] = "page" ;
+	$additional[] = "order" ;
+	$obMember -> assignGlobal( $additional , $arParam ) ;
+	$obMemberT -> assignGlobal( $additional , $arParam ) ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obMember -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"			] = $page			;
+	$arParamFind[ "order"			] = $order			;
+
+	// データ取得時のキー初期化
+	$getdatakey = ${ $keyname } ;
+
+	// タイトル取得時のキー初期化
+	$menu = FUNC_MEMBER ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> getFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu , "/js/member.js" ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	$error = "" ;
+	switch ( $mode )
+	{
+	// 新規登録モード
+	case "append" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "input" :
+		case "back" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データを初期化
+			if ( $func != "back" )
+			{
+				$obMember -> initData( $arParam ) ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		// 新規確認画面
+		case "confrm" :
+			// 入力データ検査
+			$error = $obMember -> checkData( $mode , $func , $arParam ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+
+				// 機能を「入力」に戻す
+				$func = "input" ;
+
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			break ;
+
+		// 新規完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 登録処理" , $funcname ) ;
+
+			// 新規登録実施
+			if ( $obMember -> insertData( $arParam ) == TRUE )
+			{
+				$error = "正常に登録されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・登録に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+		}
+		break ;
+
+	// 新規登録モード
+	// メール送信から本登録してもらう流れ
+	case "appendmail" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "input" :
+		case "back" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データを初期化
+			if ( $func != "back" )
+			{
+				$obMemberM -> initData( $arParam ) ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInputMail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		// 新規確認画面
+		case "confrm" :
+			// 入力データ検査
+			$error = $obMemberM -> checkData( $mode , $func , $arParam ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetailMail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+
+				// 機能を「入力」に戻す
+				$func = "input" ;
+
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInputMail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			break ;
+
+		// 新規完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 登録処理" , $funcname ) ;
+
+			// 新規登録実施
+			if ( $obMemberM -> tempMemberInsert( $arParam ) == TRUE )
+			{
+				$mail_error = $obMemberM -> sendTempMember( $arParam ) ;
+				if( $mail_error == "" )
+					$error = "正常に登録されました。\n" ;
+				else
+					$error = $mail_error ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・登録に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+		}
+		break ;
+
+	// 新規登録モード
+	// 仮登録
+	case "appendtemp" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "input" :
+		case "back" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データを初期化
+			if ( $func != "back" )
+			{
+				$obMemberT -> initData( $arParam ) ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInputTemp( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		// 新規確認画面
+		case "confrm" :
+			// 入力データ検査
+			$error = $obMemberT -> checkData( $mode , $func , $arParam ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetailTemp( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+
+				// 機能を「入力」に戻す
+				$func = "input" ;
+
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInputTemp( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			break ;
+
+		// 新規完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 登録処理" , $funcname ) ;
+
+			// 新規登録実施
+			if ( $obMemberT -> tempMemberInsert( $arParam ) == FALSE )
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・登録に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+		}
+		break ;
+
+	// 更新モード
+	case "update" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "input" :
+		case "back" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 更新入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データをDBから再取得（初期化）
+			if ( $func != "back" )
+			{
+				// データをDBから再取得（初期化）
+				$arParam = $obMember -> getAt( $getdatakey ) ;
+				$now_date = new DateTime();
+				$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+				$arParam[ ${ $alias . "_update_date" } ] = $now ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			break ;
+
+		// 更新確認画面
+		case "confrm" :
+
+			// 入力データ検査
+			$error = $obMember -> checkData( $mode , $func , $arParam ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 更新入力" , $funcname ) ;
+
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+
+				// 機能を「入力」に戻す
+				$func = "input" ;
+
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			break ;
+
+		// 更新完了画面
+		case "done" :
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 更新処理" , $funcname ) ;
+
+			// 更新登録実施
+			if ( updateData( $arParam ) == TRUE )
+			{
+				$error = "正常に更新されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・更新に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+
+		case "next" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			$arNextPrev = $obMember -> getNextPrevMemberID( $getdatakey , $arParamFind ) ;
+
+			if( $arNextPrev[ "next" ] != -1 )
+				$getdatakey = $arNextPrev[ "next" ] ;
+
+			// データをDBから再取得（初期化）
+			$arParam = $obMember -> getAt( $getdatakey ) ;
+
+			$arNextPrev = $obMember -> getNextPrevMemberID( $getdatakey , $arParamFind ) ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $arNextPrev ) ;
+			break ;
+
+		case "prev" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			$arNextPrev = $obMember -> getNextPrevMemberID( $getdatakey , $arParamFind ) ;
+			if( $arNextPrev[ "prev" ] != -1 )
+				$getdatakey = $arNextPrev[ "prev" ] ;
+			
+			// データをDBから再取得（初期化）
+			$arParam = $obMember -> getAt( $getdatakey ) ;
+
+			$arNextPrev = $obMember -> getNextPrevMemberID( $getdatakey , $arParamFind ) ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $arNextPrev ) ;
+			break ;
+
+		// 初期画面、もしくはFunctionの指定がない場合
+		default :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			$arNextPrev = $obMember -> getNextPrevMemberID( $getdatakey , $arParamFind ) ;
+
+			// データをDBから再取得（初期化）
+			$arParam = $obMember -> getAt( $getdatakey ) ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $arNextPrev ) ;
+			break ;
+		}
+		break ;
+
+	// 削除モード
+	case "delete" :
+
+		// 機能分岐
+		switch( $func )
+		{
+
+		// 削除確認画面
+		case "confrm" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 削除確認" , $funcname ) ;
+
+			// 削除確認メッセージ表示
+			$error  = "【重要】\n" ;
+			$error .= "・" . $funcname ;
+			$error .= "を削除すると、該当会員はその後ログインできなくなります。\n" ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			break ;
+
+		// 削除完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 削除処理" , $funcname ) ;
+
+			// 削除処理実施
+			if ( $obMember -> deleteData( $arParam ) == TRUE )
+			{
+				$error = "正常に削除されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・削除に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+		}
+		break ;
+
+	// 会員レベル変更
+	case "changeLevel" :
+
+		// 機能分岐
+		switch( $func )
+		{
+
+		// 本登録にする
+		case "regist" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			if( $obMember -> changeLevel( $arParam ) == false )
+				$error = "・本登録への変更に失敗しました。" ;
+
+			if( $error == "" )
+				$error = $obMember -> sendTrueRegistMail( $arParam ) ;
+
+			$mode = "update" ;
+			$func = "default" ;
+			$arNextPrev = $obMember -> getNextPrevMemberID( $getdatakey , $arParamFind ) ;
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $arNextPrev ) ;
+			break ;
+
+		// 仮登録に戻す
+		case "unregist" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			if( $obMember -> changeLevel( $arParam ) == false )
+				$error = "・仮登録への変更に失敗しました。" ;
+
+			$mode = "update" ;
+			$func = "default" ;
+			$arNextPrev = $obMember -> getNextPrevMemberID( $getdatakey , $arParamFind ) ;
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $arNextPrev ) ;
+			break ;
+		}
+		break ;
+	}
+
+	// 「一覧に戻る」の表示
+	// 次の会員、前の会員でpageを修正するので下へ
+	if ( $mode != "append" )
+		$pageback = $blams -> fetchPageback( "list.php" , $arParamFind ) ;
+
+	// ページ全体の生成
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+	$contents = $blams -> fetchContents( $pageback . $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+	exit ;
+
+// ボタンの表示
+function	FetchButton( $blams , $mode , $func , $memberid = -1 , $arNextPrev = array() , $arParam = array() )
+{
+	global $obMember ;
+	$alias = $obMember -> alias ;
+
+	$arProcess = array(
+		//					ボタン名								MODE								Action
+		"list"				=>	array( "value" => "一覧に戻る"		, "name" => "list"					, "action" => "list.php"	, "target" => "" , "org_action" => "" ) ,
+		"detail"			=>	array( "value" => "詳細に戻る"		, "name" => "update[default]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"append_confrm"		=>	array( "value" => "新規確認"		, "name" => "append[confrm]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_done"		=>	array( "value" => "登録します"		, "name" => "append[done]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_cancel"		=>	array( "value" => "キャンセル"		, "name" => "append[cancel]"		, "action" => "list.php"	, "target" => "" , "org_action" => "" ) ,
+		"append_back"		=>	array( "value" => "戻る"			, "name" => "append[back]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"appendmail_confrm"	=>	array( "value" => "新規確認"		, "name" => "appendmail[confrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"appendmail_done"	=>	array( "value" => "登録します"		, "name" => "appendmail[done]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"appendmail_cancel"	=>	array( "value" => "キャンセル"		, "name" => "appendmail[cancel]"	, "action" => "list.php"	, "target" => "" , "org_action" => "" ) ,
+		"appendmail_back"	=>	array( "value" => "戻る"			, "name" => "appendmail[back]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"appendtemp_confrm"	=>	array( "value" => "新規確認"		, "name" => "appendtemp[confrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"appendtemp_done"	=>	array( "value" => "登録します"		, "name" => "appendtemp[done]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"appendtemp_cancel"	=>	array( "value" => "キャンセル"		, "name" => "appendtemp[cancel]"	, "action" => "list.php"	, "target" => "" , "org_action" => "" ) ,
+		"appendtemp_back"	=>	array( "value" => "戻る"			, "name" => "appendtemp[back]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"update_input"		=>	array( "value" => "更新"			, "name" => "update[input]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_confrm"		=>	array( "value" => "更新確認"		, "name" => "update[confrm]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_done"		=>	array( "value" => "更新します"		, "name" => "update[done]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_cancel"		=>	array( "value" => "キャンセル"		, "name" => "update[default]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_back"		=>	array( "value" => "戻る"			, "name" => "update[back]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"delete_confrm"		=>	array( "value" => "削除"			, "name" => "delete[confrm]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"delete_done"		=>	array( "value" => "削除します"		, "name" => "delete[done]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"delete_cancel"		=>	array( "value" => "キャンセル"		, "name" => "update[default]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"next"				=>	array( "value" => "次の会員へ"		, "name" => "update[next]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"prev"				=>	array( "value" => "前の会員へ"		, "name" => "update[prev]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"printtemp"			=>	array( "value" => "仮登録用印刷"	, "name" => "printtemp[default]"	, "action" => "pdf_tempmember.php"			,	"target" => "_blank" 		, "org_action" => "edit.php" ) ,
+		"changeLevelR"		=>	array( "value" => "本登録にする"	, "name" => "changeLevel[regist]"	, "action" => ""			, "target" => ""  , "org_action" => "" ) ,
+		"changeLevelU"		=>	array( "value" => "仮登録に戻す"	, "name" => "changeLevel[unregist]"	, "action" => ""			, "target" => ""  , "org_action" => "" ) ,
+
+		"StartNewLine"		=>	array( "value" => ""				, "name" => "StartNewLine"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+	) ;
+
+	$arOperation = array() ;
+	switch( $mode )
+	{
+	case "append" :
+		switch( $func )
+		{
+		case "input" :
+		case "back" :
+			$arOperation = array( "append_confrm" , "append_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "append_done" , "append_back" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "list" ) ;
+			break ;
+		}
+		break ;
+
+	case "appendmail" :
+		switch( $func )
+		{
+		case "input" :
+		case "back" :
+			$arOperation = array( "appendmail_confrm" , "appendmail_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "appendmail_done" , "appendmail_back" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "list" ) ;
+			break ;
+		}
+		break ;
+
+	case "appendtemp" :
+		switch( $func )
+		{
+		case "input" :
+		case "back" :
+			$arOperation = array( "appendtemp_confrm" , "appendtemp_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "appendtemp_done" , "appendtemp_back" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "list" , "printtemp" ) ;
+			break ;
+		}
+		break ;
+
+	case "update" :
+		switch( $func )
+		{
+		case "input" :
+		case "back" :
+			$arOperation = array( "update_confrm" , "update_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "update_done" , "update_back" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "detail" ) ;
+			break ;
+		default :
+			$arOperation = array( "prev" , "next" , "StartNewLine" , "StartNewLine" , "update_input" , "delete_confrm" , "printtemp" , "changeLevelR" , "changeLevelU" ) ;
+			if( $arNextPrev[ "next" ] == -1 )
+				unset( $arOperation[ 1 ] ) ;
+			if( $arNextPrev[ "prev" ] == -1 )
+				unset( $arOperation[ 0 ] ) ;
+			if( $arNextPrev[ "next" ] == -1 && $arNextPrev[ "prev" ] == -1 )
+			{
+				unset( $arOperation[ 2 ] ) ;
+				unset( $arOperation[ 3 ] ) ;
+			}
+			
+			// 申請中なら本登録ボタンを表示
+			// 有料会員なら仮登録へ戻すボタンを表示
+			// それ以外はボタン表示なし
+			$m_level = $arParam[ $alias . "_level_renew" ] ;
+			if ( $m_level == -1 )
+				$m_level = $arParam[ $alias . "_level" ] ;
+			
+			if (
+					$m_level == DEF_MEMBER_LEVEL_FREE_APPLY ||
+					$m_level == DEF_MEMBER_LEVEL_THIRTY_APPLY ||
+					$m_level == DEF_MEMBER_LEVEL_NOLIMIT_APPLY
+				)
+			{
+				unset( $arOperation[ 8 ] ) ;
+			}
+			elseif(
+					$m_level == DEF_MEMBER_LEVEL_FREE || 
+					$m_level == DEF_MEMBER_LEVEL_THIRTY || 
+					$m_level == DEF_MEMBER_LEVEL_NOLIMIT
+				)
+			{
+				unset( $arOperation[ 7 ] ) ;
+			}
+			else
+			{
+				unset( $arOperation[ 7 ] ) ;
+				unset( $arOperation[ 8 ] ) ;
+			}
+			break ;
+		}
+		break ;
+
+	case "delete" :
+		switch( $func )
+		{
+		case "confrm" :
+			$arOperation = array( "delete_done" , "delete_cancel" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "list" ) ;
+			break ;
+		}
+		break ;
+	}
+
+	$arButton = array() ;
+//	for ( $i = 0 ; $i < count( $arOperation ) ; $i ++ )
+//		$arButton[] = $arProcess[ $arOperation[ $i ] ] ;
+	if( is_array( $arOperation ) )
+	{
+		foreach( $arOperation as $value )
+			$arButton[] = $arProcess[ $value ] ;
+	}
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "id"				, "edit_form"		) ;
+	$tmpl -> assign( "button_data"		, $arButton			) ;
+	$data = $tmpl -> fetch( "common/button.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+
+}
+
+// 詳細表示
+function	FetchDetail( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $arNextPrev = array() )
+{
+	global $obMember ;
+	$alias = $obMember -> alias ;
+
+	global $obCorp ;
+
+//debug( $arParam ) ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $keys => $values )
+		${ $keys } = $values ;
+
+	foreach ( $arParamFind as $keys => $values )
+		${ $keys } = $values ;
+
+	// 一般会員レベル
+	global	$arMemberLevel ;
+	$szMemberLevel = $arMemberLevel[ ${ $alias . "_level" } ] ;
+	if ( $szMemberLevel == "" )
+		$szMemberLevel = "不明" ;
+
+	// 一般会員レベル(変更)
+	$szMemberLevelRenew = "" ;
+	if ( ${ $alias . "_level_renew" } != -1 )
+	{
+		$szMemberLevelRenew = $arMemberLevel[ ${ $alias . "_level_renew" } ] ;
+		if ( $szMemberLevelRenew == "" )
+			$szMemberLevelRenew = "不明" ;
+	}
+	
+	// 社名
+	$szCorpName = $obCorp -> createLongName(	${ $alias .  "_name"		} ,
+												${ $alias . "_title"		} ,
+												${ $alias . "_position"		} ,
+												${ $alias . "_department"	}
+											) ;
+
+	// 住所
+	global	$arState ;
+	if( ${ $alias . "_state" } == -1 )
+	{
+		$szAddress = "未登録" ;
+	}
+	else
+	{
+		$szAddress  = $arState[ ${ $alias . "_state" } ][ 2 ] ;
+		$szAddress .= ${ $alias . "_city" } ;
+		$szAddress .= ${ $alias . "_addr1" } ;
+		$szAddress .= "　" ;
+		$szAddress .= ${ $alias . "_addr2" } ;
+		$szAddress = sprintf( "〒%s-%s　%s" , ${ $alias . "_zip1" } , ${ $alias . "_zip2" } , $szAddress ) ;
+	}
+
+	// 電話＆ＦＡＸ
+	if ( ${ $alias . "_tel1" } != "" && ${ $alias . "_tel2" } != "" && ${ $alias . "_tel3" } != "" )
+		$szTel = sprintf( "%s-%s-%s" , ${ $alias . "_tel1" }  , ${ $alias . "_tel2" }  , ${ $alias . "_tel3" } ) ;
+	else
+		$szTel = "未登録" ;
+
+	if ( ${ $alias . "_fax1" } != "" && ${ $alias . "_fax2" } != "" && ${ $alias . "_fax3" } != "" )
+		$szFax = sprintf( "%s-%s-%s" , ${ $alias . "_fax1" } , ${ $alias . "_fax2" } , ${ $alias . "_fax3" } ) ;
+	else
+		$szFax = "未登録" ;
+
+	// メールマガジン
+	if( is_array( ${ $alias . "_magazine" } ) )
+	{
+		if ( in_array( DEF_MAILTOHOME , ${ $alias . "_magazine" } ) && in_array( DEF_MAILTOPORT , ${ $alias . "_magazine" } ) )
+		{
+			$szMagazine = "自宅アドレスと、携帯アドレスへ" ;
+		}
+		else if( in_array( DEF_MAILTOHOME , ${ $alias . "_magazine" } ) )
+		{
+			$szMagazine = "自宅アドレスのみへ" ;
+		}
+		else if( in_array( DEF_MAILTOPORT , ${ $alias . "_magazine" } ) )
+		{
+			$szMagazine = "携帯アドレスのみへ" ;
+		}
+		else
+		{
+			$szMagazine = "メールマガジン必要なし" ;
+		}
+	}
+	else
+	{
+		$szMagazine = "メールマガジン必要なし" ;
+	}
+
+
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+
+	$arForm = array() ;
+
+	$passwd = DEF_DUMMY_PASSWORD ;
+	if ( $login_level == DEF_ADMIN )
+		$passwd = $obMember -> decrypt( ${ $alias . "_passwd" } ) ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "ログインID" , ${ $alias . "_loginid" } , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD(	"パスワード ※" ,
+									$passwd				  ,
+									$tsize ,
+									$vsize ,
+									"col1" ,
+									"left" ,
+									"middle" ,
+									BLAMS_FORMAT_ESCAPE ,
+									1 , 1 , 1 , 1 ,
+									$alias . "_crypt_passwd" ,
+									${ $alias . "_crypt_passwd" }
+								) ;
+	$arForm[] = $value ;
+
+	if ( empty( $szMemberLevelRenew ) == false )
+		$szMemberLevel .= " → " . $szMemberLevelRenew ;
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "会員レベル" , $szMemberLevel , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "組織名 ※" , $szCorpName , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "カナ ※" , ${ $alias . "_kana" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "組織名（英語） ※" , ${ $alias . "_name_en" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "部署名"          , ${ $alias . "_department" }    , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE ) ;
+	$value .= $blams -> fetchTHTD( "部署名（英語）"  , ${ $alias . "_department_en" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "住所 ※" , $szAddress , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "電話番号 ※" , $szTel , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "ＦＡＸ" , $szFax , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "連絡先名" , 		${ $alias . "_agent_name" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE ) ;
+	$value .= $blams -> fetchTHTD( "メールアドレス" , 	${ $alias . "_agent_email" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE ) ;
+	$arForm[] = $value ;
+
+	if( $mode == "update" )
+	{
+		$add_button = "" ;
+		$add_button = $blams -> FetchButton( "button" , $alias . "_id_ref" , "詳細表示" , "" , "idPopup(this,'mb_memberid','update[input]','admin','');" , $alias . "_id_ref" , true ) ;
+		$value = "" ;
+		$value .= $blams -> fetchTHTD( "シリアル/PID" , 		$add_button , $tsize , $vsize , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+		$arForm[] = $value ;
+	}
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "現在ポイント" , sprintf( "%.3f" , ${ $alias . "_point" } ) , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "合計ポイント" , sprintf( "%.3f" , ${ $alias . "_total_point" } ) , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "メールマガジン" , $szMagazine , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func , ${ $alias . "_memberid" } , $arNextPrev , $arParam ) ;
+
+	$arParamFind[ $alias . "_create_date" ] = ${ $alias . "_create_date" } ;
+	$arParamFind[ $alias . "_update_date" ] = ${ $alias . "_update_date" } ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "input_data"		, $arParam			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/confrm.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 入力フォームの表示
+function	FetchInput( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_level )
+{
+	global $obMember ;
+	global $obCategory ;
+	$alias = $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $keys => $values )
+		${ $keys } = $values ;
+
+	foreach ( $arParamFind as $keys => $values )
+		${ $keys } = $values ;
+
+	// 一般会員レベル
+	global	$arMemberLevel ;
+
+	// 法人格
+	global $arCustomerTitle ;
+
+	// 法人格位置
+	global $arCustomerPosition ;
+
+	// 都道府県テーブル生成
+	global	$arStateName ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$isize	= $vsize - 16 ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+	$isize3	= $vsize3 - 16 ;
+
+	$arForm = array() ;
+
+	$passwd = "" ;
+	if ( empty( ${ $alias . "_passwd" } ) == false )
+		$passwd = DEF_DUMMY_PASSWORD ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_loginid" , ${ $alias . "_loginid" } , $isize  , MAX_LOGINID , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "ログインID ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchPasswordbox(	$alias . "_passwd" ,
+											$passwd ,
+											$alias . "_crypt_passwd" ,
+											${ $alias . "_crypt_passwd" } ,
+											$isize  , MAX_PASSWD , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "パスワード ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $alias . "_level" , ${ $alias . "_level" } , $arMemberLevel , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "会員レベル ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_name" , ${ $alias . "_name" } , $isize3  , MAX_CORPNAME , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "組織名 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_kana" , ${ $alias . "_kana" } , $isize3  , MAX_CORPNAME , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "カナ ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_name_en" , ${ $alias . "_name_en" } , $isize3  , MAX_CORPNAME*2 , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "組織名（英語） ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_department" , ${ $alias . "_department" } , $isize  , MAX_CORPNAME ) ;
+	$value .= $blams -> fetchTHTD( "部署名" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_department_en" , ${ $alias . "_department_en" } , $isize  , MAX_CORPNAME , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "部署名（英語）" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $alias . "_title" , ${ $alias . "_title" } , $arCustomerTitle , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "法人格 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchSelectbox( $alias . "_position" , ${ $alias . "_position" } , $arCustomerPosition , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "法人格位置 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputZip(	$alias . "_zip" ,
+										${ $alias . "_zip1" } ,
+										${ $alias . "_zip2" } ,
+										"郵便番号検索" ,
+										$alias . "_zip" ,
+										sprintf( "%s_zip,%s_state,%s_city,%s_addr1" , $alias , $alias , $alias , $alias ) ,
+										"郵便番号検索" , true ) ;
+	$value .= $blams -> fetchTHTD( "郵便番号 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $alias . "_state" , ${ $alias . "_state" } , $arStateName , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "都道府県 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_city" , ${ $alias . "_city" } , $isize  , MAX_CITY , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "市区町村 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_addr1" , ${ $alias . "_addr1" } , $isize3  , MAX_ADDR , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "住所 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_addr2" , ${ $alias . "_addr2" } , $isize3  , MAX_ADDR , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "ビル名" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputPhone( $alias . "_tel" , ${ $alias . "_tel1" } , ${ $alias . "_tel2" } , ${ $alias . "_tel3" } ) ;
+	$value .= $blams -> fetchTHTD( "電話番号 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+
+	$form   = $blams -> fetchInputPhone( $alias . "_fax" , ${ $alias . "_fax1" } , ${ $alias . "_fax2" } , ${ $alias . "_fax3" } ) ;
+	$value .= $blams -> fetchTHTD( "FAX" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_agent_name" , ${ $alias . "_agent_name" } , $isize  , MAX_USERNAME , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "連絡先名" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_agent_email" , ${ $alias . "_agent_email" } , $isize  , MAX_EMAIL , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "メールアドレス" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_point" , ${ $alias . "_point" } , $isize  , MAX_POINT , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "現在ポイント" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_total_point" , ${ $alias . "_total_point" } , $isize  , MAX_POINT , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "合計ポイント" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	global $arMailTo ;
+	$value = "" ;
+	$form   = $blams -> fetchCheckbox( $alias . "_magazine" , ${ $alias . "_magazine" } , $arMailTo , "" ) ;
+	$value .= $blams -> fetchTHTD( "メールマガジン" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func ) ;
+
+	$arParamFind[ $alias . "_create_date" ] = ${ $alias . "_create_date" } ;
+	$arParamFind[ $alias . "_update_date" ] = ${ $alias . "_update_date" } ;
+	$arParamFind[ $alias . "_level_renew" ] = ${ $alias . "_level_renew" } ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, $alias . "_memberid"		) ;
+	$tmpl -> assign( "idvalue"			, ${ $alias . "_memberid" }	) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 詳細表示
+function	FetchDetailMail( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $arNextPrev = array() )
+{
+	global $obMemberM ;
+	$alias = $obMemberM -> alias ;
+
+	global $obCorp ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $keys => $values )
+		${ $keys } = $values ;
+
+	foreach ( $arParamFind as $keys => $values )
+		${ $keys } = $values ;
+
+	// 一般会員レベル
+	global	$arMemberLevel ;
+	$szMemberLevel = $arMemberLevel[ ${ $alias . "_level" } ] ;
+	if ( $szMemberLevel == "" )
+		$szMemberLevel = "不明" ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+
+	$arForm = array() ;
+
+	$passwd = DEF_DUMMY_PASSWORD ;
+	if ( $login_level == DEF_ADMIN )
+		$passwd = $obMemberM -> decrypt( ${ $alias . "_passwd" } ) ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "ログインID" , ${ $alias . "_loginid" } , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD(	"パスワード ※" ,
+									$passwd				  ,
+									$tsize ,
+									$vsize ,
+									"col1" ,
+									"left" ,
+									"middle" ,
+									BLAMS_FORMAT_ESCAPE ,
+									1 , 1 , 1 , 1 ,
+									$alias . "_crypt_passwd" ,
+									${ $alias . "_crypt_passwd" }
+								) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "会員レベル" , $szMemberLevel , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "メールアドレス" , 	${ $alias . "_agent_email" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func , ${ $alias . "_memberid" } , $arNextPrev ) ;
+
+	$arParamFind[ $alias . "_create_date" ] = ${ $alias . "_create_date" } ;
+	$arParamFind[ $alias . "_update_date" ] = ${ $alias . "_update_date" } ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "input_data"		, $arParam			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/confrm.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 詳細表示
+function	FetchDetailTemp( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $arNextPrev = array() )
+{
+	global $obMemberT ;
+	$alias = $obMemberT -> alias ;
+
+	global $obCorp ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $keys => $values )
+		${ $keys } = $values ;
+
+	foreach ( $arParamFind as $keys => $values )
+		${ $keys } = $values ;
+
+	// 住所
+	global	$arState ;
+	if( ${ $alias . "_state" } == -1 )
+	{
+		$szAddress = "未登録" ;
+	}
+	else
+	{
+		$szAddress  = $arState[ ${ $alias . "_state" } ][ 2 ] ;
+		$szAddress .= ${ $alias . "_city" } ;
+		$szAddress .= ${ $alias . "_addr1" } ;
+		$szAddress .= "　" ;
+		$szAddress .= ${ $alias . "_addr2" } ;
+		$szAddress = sprintf( "〒%s-%s　%s" , ${ $alias . "_zip1" } , ${ $alias . "_zip2" } , $szAddress ) ;
+	}
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+
+	$arForm = array() ;
+
+	$passwd = DEF_DUMMY_PASSWORD ;
+	if ( $login_level == DEF_ADMIN )
+		$passwd = $obMemberT -> decrypt( ${ $alias . "_passwd" } ) ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "ログインID" , ${ $alias . "_loginid" } , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD(	"パスワード ※" ,
+									$passwd				  ,
+									$tsize ,
+									$vsize ,
+									"col1" ,
+									"left" ,
+									"middle" ,
+									BLAMS_FORMAT_ESCAPE ,
+									1 , 1 , 1 , 1 ,
+									$alias . "_crypt_passwd" ,
+									${ $alias . "_crypt_passwd" }
+								) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "名前" , 	${ $alias . "_name" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$add_button = "" ;
+	$add_button = $blams -> FetchButton( "button" , $alias . "_id_ref" , "入力画面を開く" , "" , "idPopup(this,'mb_memberid','append[back]','admin','');" , $alias . "_id_ref" , true ) ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "シリアル/PID" , 	$add_button , $tsize , $vsize , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "住所 ※" , $szAddress , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func , ${ $alias . "_memberid" } , $arNextPrev ) ;
+
+	$arParamFind[ $alias . "_create_date" ] = ${ $alias . "_create_date" } ;
+	$arParamFind[ $alias . "_update_date" ] = ${ $alias . "_update_date" } ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "input_data"		, $arParam			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/confrm.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 入力フォームの表示
+function	FetchInputMail( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_level )
+{
+	global $obMemberM ;
+	global $obCategory ;
+	$alias = $obMemberM -> alias ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $keys => $values )
+		${ $keys } = $values ;
+
+	foreach ( $arParamFind as $keys => $values )
+		${ $keys } = $values ;
+
+	// 一般会員レベル
+	// ゲストに固定する
+	global	$arMemberLevel ;
+	foreach( $arMemberLevel as $key => $value )
+	{
+		if( $key != 99 )
+			unset( $arMemberLevel[ $key ] ) ;
+	}
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$isize	= $vsize - 16 ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+	$isize3	= $vsize3 - 16 ;
+
+	$arForm = array() ;
+
+	$obSerialno = new PARTS_Serialno() ;
+	$loginid = "" ;
+	if ( empty( ${ $alias . "_loginid" } ) == true )
+		$loginid = $obSerialno -> createSerialNo( SERIALNO_TYPE_MEMBER ) ;
+	else
+		$loginid = ${ $alias . "_loginid" } ;
+
+	$passwd = "" ;
+	if ( empty( ${ $alias . "_passwd" } ) == true )
+		$passwd = $obMemberM -> makePassword() ;
+	else
+		$passwd = $obMemberM -> decrypt( ${ $alias . "_passwd" } ) ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_loginid" , $loginid , $isize  , MAX_LOGINID , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "ログインID ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchPasswordbox(	$alias . "_passwd" ,
+											$passwd ,
+											$alias . "_crypt_passwd" ,
+											${ $alias . "_crypt_passwd" } ,
+											$isize  , MAX_PASSWD , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "パスワード ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $alias . "_level" , ${ $alias . "_level" } , $arMemberLevel , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "会員レベル ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_agent_email" , ${ $alias . "_agent_email" } , $isize  , MAX_EMAIL , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "メールアドレス ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func ) ;
+
+	$arParamFind[ $alias . "_create_date" ] = ${ $alias . "_create_date" } ;
+	$arParamFind[ $alias . "_update_date" ] = ${ $alias . "_update_date" } ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, $alias . "_memberid"		) ;
+	$tmpl -> assign( "idvalue"			, ${ $alias . "_memberid" }	) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 入力フォームの表示
+function	FetchInputTemp( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_level )
+{
+	global $obMemberT ;
+	global $obCategory ;
+	$alias = $obMemberT -> alias ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $keys => $values )
+		${ $keys } = $values ;
+
+	foreach ( $arParamFind as $keys => $values )
+		${ $keys } = $values ;
+
+	// 都道府県テーブル生成
+	global	$arStateName ;
+
+	// 一般会員レベル
+	// ゲストに固定する
+	global	$arMemberLevel ;
+	foreach( $arMemberLevel as $key => $value )
+	{
+		if( $key != 99 )
+			unset( $arMemberLevel[ $key ] ) ;
+	}
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$isize	= $vsize - 16 ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+	$isize3	= $vsize3 - 16 ;
+
+	$arForm = array() ;
+
+	$obSerialno = new PARTS_Serialno() ;
+	$loginid = "" ;
+	if ( empty( ${ $alias . "_loginid" } ) == true )
+		$loginid = $obSerialno -> createSerialNo( SERIALNO_TYPE_MEMBER ) ;
+	else
+		$loginid = ${ $alias . "_loginid" } ;
+
+	$passwd = "" ;
+	if ( empty( ${ $alias . "_passwd" } ) == true )
+		$passwd = $obMemberT -> makePassword() ;
+	else
+		$passwd = $obMemberT -> decrypt( ${ $alias . "_passwd" } ) ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_loginid" , $loginid , $isize  , MAX_LOGINID , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "ログインID ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchPasswordbox(	$alias . "_passwd" ,
+											$passwd ,
+											$alias . "_crypt_passwd" ,
+											${ $alias . "_crypt_passwd" } ,
+											$isize  , MAX_PASSWD , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "パスワード ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_name" , ${ $alias . "_name" } , $isize  , MAX_LOGINID , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "名前" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$add_button = "" ;
+	$add_button = $blams -> FetchButton( "button" , $alias . "_id_ref" , "入力画面を開く" , "" , "idPopup(this,'mb_memberid','append[back]','admin','');" , $alias . "_id_ref" , true ) ;
+
+	for( $i = 0 ; $i < 3 ; $i ++ )
+	{
+		for( $j = 0 ; $j < 2 ; $j ++ )
+		{
+			if( !isset( ${ $alias . "_serverid" . $j }[ $i ] ) )
+				${ $alias . "_serverid" . $j }[ $i ] = "" ;
+			$add_button .= $blams -> fetchHidden( $alias . "_serverid" . $j . "[]" , ${ $alias . "_serverid" . $j }[ $i ] ) ;
+		}
+
+		for( $j = 0 ; $j < 5 ; $j ++ )
+		{
+			if( !isset( ${ $alias . "_serverno" . $j }[ $i ] ) )
+				${ $alias . "_serverno" . $j }[ $i ] = "" ;
+			$add_button .= $blams -> fetchHidden( $alias . "_serverno" . $j . "[]" , ${ $alias . "_serverno" . $j }[ $i ] ) ;
+		}
+	}
+	for( $i = 0 ; $i < 20 ; $i ++ )
+	{
+		for( $j = 0 ; $j < 2 ; $j ++ )
+		{
+			if( !isset( ${ $alias . "_monitorid" . $j }[ $i ] ) )
+				${ $alias . "_monitorid" . $j }[ $i ] = "" ;
+			$add_button .= $blams -> fetchHidden( $alias . "_monitorid" . $j . "[]" , ${ $alias . "_monitorid" . $j }[ $i ] ) ;
+		}
+
+		for( $j = 0 ; $j < 5 ; $j ++ )
+		{
+			if( !isset( ${ $alias . "_monitorno" . $j }[ $i ] ) )
+				${ $alias . "_monitorno" . $j }[ $i ] = "" ;
+			$add_button .= $blams -> fetchHidden( $alias . "_monitorno" . $j . "[]" , ${ $alias . "_monitorno" . $j }[ $i ] ) ;
+		}
+	}
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "シリアル/PID" , $add_button , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputZip(	$alias . "_zip" ,
+										${ $alias . "_zip1" } ,
+										${ $alias . "_zip2" } ,
+										"郵便番号検索" ,
+										$alias . "_zip" ,
+										sprintf( "%s_zip,%s_state,%s_city,%s_addr1" , $alias , $alias , $alias , $alias ) ,
+										"郵便番号検索" , true ) ;
+	$value .= $blams -> fetchTHTD( "郵便番号 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $alias . "_state" , ${ $alias . "_state" } , $arStateName , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "都道府県 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_city" , ${ $alias . "_city" } , $isize  , MAX_CITY , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "市区町村 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_addr1" , ${ $alias . "_addr1" } , $isize3  , MAX_ADDR , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "住所 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_addr2" , ${ $alias . "_addr2" } , $isize3  , MAX_ADDR , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "ビル名" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func ) ;
+
+	$arParamFind[ $alias . "_create_date" ] = ${ $alias . "_create_date" } ;
+	$arParamFind[ $alias . "_update_date" ] = ${ $alias . "_update_date" } ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, $alias . "_memberid"		) ;
+	$tmpl -> assign( "idvalue"			, ${ $alias . "_memberid" }	) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 詳細表示
+function	FetchDone( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam )
+{
+	global $obMember ;
+	$alias = $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $keys => $values )
+		${ $keys } = $values ;
+
+	$button = FetchButton( $blams , $mode , $func ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, $alias . "_memberid"		) ;
+	$tmpl -> assign( "idvalue"			, ${ $alias . "_memberid" }	) ;
+	$data = $tmpl -> fetch( "common/done.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+function	updateData( &$arParam )
+{
+	global $obMember ;
+	$alias = $obMember -> alias ;
+
+	$result = false ;
+
+	// ここからはサーバーID等は更新しない
+	// 専用ページのみから更新できる
+
+	unset( $arParam[ $alias . "_monitorid" ] ) ;
+	unset( $arParam[ $alias . "_monitorno" ] ) ;
+	unset( $arParam[ $alias . "_serverid" ] ) ;
+	unset( $arParam[ $alias . "_serverno" ] ) ;
+
+	$result = $obMember -> updateData( $arParam ) ;
+	return $result ;
+}
+
+?>

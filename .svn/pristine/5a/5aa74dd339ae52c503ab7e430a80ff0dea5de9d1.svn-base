@@ -1,0 +1,215 @@
+function idPopup( self , target , mode , from , sid )
+{
+	var formid = self.form.id ;
+	var item = self.name ;
+
+	if ( formid != "" )
+	{
+		var objForm = document.getElementById( formid ) ;
+	
+		if ( objForm )
+		{
+			var memberid	= objForm.elements[ target ].value ;
+			var url = "" ;
+
+			url  = "/admin/member/edit_id.php?" ;
+			url += mode + "=from edit" ;
+			url += "&mb_memberid=" + memberid ;
+			url += "&from=" + from ;
+			url += "&sid=" + sid ;
+			url += "&S_TARGET=" + target ;
+
+			if( mode == "append[back]" )
+				url += makeGetURL() ;
+
+			var colorbox		= item + "Colorbox" ;
+			var colorboxClass	= "." + colorbox ;
+			var objHref			= document.getElementById( colorbox ) ;
+			if ( objHref )
+			{
+				objHref.href = url ;
+				$(colorboxClass).colorbox( {width:"95%", height:"95%", iframe:true} ) ;
+				$(colorboxClass).click() ;
+			}
+		}
+	}
+}
+
+function makeGetURL()
+{
+	var objForm = document.getElementById( "edit_form" ) ;
+
+	var obServerid0 = objForm.elements[ "mb_serverid0[]" ] ;
+	var obServerid1 = objForm.elements[ "mb_serverid1[]" ] ;
+
+	var obServerno0 = objForm.elements[ "mb_serverno0[]" ] ;
+	var obServerno1 = objForm.elements[ "mb_serverno1[]" ] ;
+	var obServerno2 = objForm.elements[ "mb_serverno2[]" ] ;
+	var obServerno3 = objForm.elements[ "mb_serverno3[]" ] ;
+	var obServerno4 = objForm.elements[ "mb_serverno4[]" ] ;
+
+	var obMonitorid0 = objForm.elements[ "mb_monitorid0[]" ] ;
+	var obMonitorid1 = objForm.elements[ "mb_monitorid1[]" ] ;
+
+	var obMonitorno0 = objForm.elements[ "mb_monitorno0[]" ] ;
+	var obMonitorno1 = objForm.elements[ "mb_monitorno1[]" ] ;
+	var obMonitorno2 = objForm.elements[ "mb_monitorno2[]" ] ;
+	var obMonitorno3 = objForm.elements[ "mb_monitorno3[]" ] ;
+	var obMonitorno4 = objForm.elements[ "mb_monitorno4[]" ] ;
+
+	var url = "" ;
+	for( var i = 0 ; i < 3 ; i ++ )
+	{
+		if( obServerid0[ i ].value != "" )
+			url += "&mb_serverid0[" + i + "]=" + obServerid0[ i ].value ;
+		if( obServerid1[ i ].value != "" )
+			url += "&mb_serverid1[" + i + "]=" + obServerid1[ i ].value ;
+
+		if( obServerno0[ i ].value != "" )
+			url += "&mb_serverno0[" + i + "]=" + obServerno0[ i ].value ;
+		if( obServerno1[ i ].value != "" )
+			url += "&mb_serverno1[" + i + "]=" + obServerno1[ i ].value ;
+		if( obServerno2[ i ].value != "" )
+			url += "&mb_serverno2[" + i + "]=" + obServerno2[ i ].value ;
+		if( obServerno3[ i ].value != "" )
+			url += "&mb_serverno3[" + i + "]=" + obServerno3[ i ].value ;
+		if( obServerno4[ i ].value != "" )
+			url += "&mb_serverno4[" + i + "]=" + obServerno4[ i ].value ;
+	}
+
+	for( var i = 0 ; i < 20 ; i ++ )
+	{
+		if( obMonitorid0[ i ].value != "" )
+			url += "&mb_monitorid0[" + i + "]=" + obMonitorid0[ i ].value ;
+		if( obMonitorid1[ i ].value != "" )
+			url += "&mb_monitorid1[" + i + "]=" + obMonitorid1[ i ].value ;
+
+		if( obMonitorno0[ i ].value != "" )
+			url += "&mb_monitorno0[" + i + "]=" + obMonitorno0[ i ].value ;
+		if( obMonitorno1[ i ].value != "" )
+			url += "&mb_monitorno1[" + i + "]=" + obMonitorno1[ i ].value ;
+		if( obMonitorno2[ i ].value != "" )
+			url += "&mb_monitorno2[" + i + "]=" + obMonitorno2[ i ].value ;
+		if( obMonitorno3[ i ].value != "" )
+			url += "&mb_monitorno3[" + i + "]=" + obMonitorno3[ i ].value ;
+		if( obMonitorno4[ i ].value != "" )
+			url += "&mb_monitorno4[" + i + "]=" + obMonitorno4[ i ].value ;
+	}
+	return url ;
+}
+
+function setIDData()
+{
+	var objForm = document.getElementById( "edit_form" ) ;
+	var objParent = window.parent ;
+	var objPFrom = objParent.document.getElementById( "edit_form" ) ;
+
+	if ( objForm && objParent && objPFrom )
+	{
+		var obServerid0 = objForm.elements[ "mb_serverid0[]" ] ;
+		var obServerid1 = objForm.elements[ "mb_serverid1[]" ] ;
+
+		var obServerno0 = objForm.elements[ "mb_serverno0[]" ] ;
+		var obServerno1 = objForm.elements[ "mb_serverno1[]" ] ;
+		var obServerno2 = objForm.elements[ "mb_serverno2[]" ] ;
+		var obServerno3 = objForm.elements[ "mb_serverno3[]" ] ;
+		var obServerno4 = objForm.elements[ "mb_serverno4[]" ] ;
+
+		var obMonitorid0 = objForm.elements[ "mb_monitorid0[]" ] ;
+		var obMonitorid1 = objForm.elements[ "mb_monitorid1[]" ] ;
+
+		var obMonitorno0 = objForm.elements[ "mb_monitorno0[]" ] ;
+		var obMonitorno1 = objForm.elements[ "mb_monitorno1[]" ] ;
+		var obMonitorno2 = objForm.elements[ "mb_monitorno2[]" ] ;
+		var obMonitorno3 = objForm.elements[ "mb_monitorno3[]" ] ;
+		var obMonitorno4 = objForm.elements[ "mb_monitorno4[]" ] ;
+
+		var obPServerid0 = objPFrom.elements[ "mb_serverid0[]" ] ;
+		var obPServerid1 = objPFrom.elements[ "mb_serverid1[]" ] ;
+
+		var obPServerno0 = objPFrom.elements[ "mb_serverno0[]" ] ;
+		var obPServerno1 = objPFrom.elements[ "mb_serverno1[]" ] ;
+		var obPServerno2 = objPFrom.elements[ "mb_serverno2[]" ] ;
+		var obPServerno3 = objPFrom.elements[ "mb_serverno3[]" ] ;
+		var obPServerno4 = objPFrom.elements[ "mb_serverno4[]" ] ;
+
+		var obPMonitorid0 = objPFrom.elements[ "mb_monitorid0[]" ] ;
+		var obPMonitorid1 = objPFrom.elements[ "mb_monitorid1[]" ] ;
+
+		var obPMonitorno0 = objPFrom.elements[ "mb_monitorno0[]" ] ;
+		var obPMonitorno1 = objPFrom.elements[ "mb_monitorno1[]" ] ;
+		var obPMonitorno2 = objPFrom.elements[ "mb_monitorno2[]" ] ;
+		var obPMonitorno3 = objPFrom.elements[ "mb_monitorno3[]" ] ;
+		var obPMonitorno4 = objPFrom.elements[ "mb_monitorno4[]" ] ;
+
+		// 親のvalueは全クリアする
+		for( var i = 0 ; i < 3 ; i ++ )
+		{
+			obPServerid0[ i ].value = "" ;
+			obPServerid1[ i ].value = "" ;
+			obPServerno0[ i ].value = "" ;
+			obPServerno1[ i ].value = "" ;
+			obPServerno2[ i ].value = "" ;
+			obPServerno3[ i ].value = "" ;
+			obPServerno4[ i ].value = "" ;
+		}
+		for( var i = 0 ; i < 20 ; i ++ )
+		{
+			obPMonitorid0[ i ].value = "" ;
+			obPMonitorid1[ i ].value = "" ;
+			obPMonitorno0[ i ].value = "" ;
+			obPMonitorno1[ i ].value = "" ;
+			obPMonitorno2[ i ].value = "" ;
+			obPMonitorno3[ i ].value = "" ;
+			obPMonitorno4[ i ].value = "" ;
+		}
+
+		var sid_cnt = 0 ;
+		var sno_cnt = 0 ;
+		var mid_cnt = 0 ;
+		var mno_cnt = 0 ;
+
+		// 親のvalueへ挿入（上詰）
+		for( var i = 0 ; i < 3 ; i ++ )
+		{
+			// php の checkData で一つだけ空等はエラーにしているので先頭だけみる
+			if( obServerid0[ i ].value != "" )
+			{
+				obPServerid0[ sid_cnt ].value = obServerid0[ i ].value ;
+				obPServerid1[ sid_cnt ].value = obServerid1[ i ].value ;
+				sid_cnt ++ ;
+			}
+
+			if( obServerno0[ i ].value != "" )
+			{
+				obPServerno0[ sno_cnt ].value = obServerno0[ i ].value ;
+				obPServerno1[ sno_cnt ].value = obServerno1[ i ].value ;
+				obPServerno2[ sno_cnt ].value = obServerno2[ i ].value ;
+				obPServerno3[ sno_cnt ].value = obServerno3[ i ].value ;
+				obPServerno4[ sno_cnt ].value = obServerno4[ i ].value ;
+				sno_cnt ++ ;
+			}
+		}
+
+		for( var i = 0 ; i < 20 ; i ++ )
+		{
+			if( obMonitorid0[ i ].value != "" )
+			{
+				obPMonitorid0[ mid_cnt ].value = obMonitorid0[ i ].value ;
+				obPMonitorid1[ mid_cnt ].value = obMonitorid1[ i ].value ;
+				mid_cnt ++ ;
+			}
+
+			if( obMonitorno0[ i ].value != "" )
+			{
+				obPMonitorno0[ mno_cnt ].value = obMonitorno0[ i ].value ;
+				obPMonitorno1[ mno_cnt ].value = obMonitorno1[ i ].value ;
+				obPMonitorno2[ mno_cnt ].value = obMonitorno2[ i ].value ;
+				obPMonitorno3[ mno_cnt ].value = obMonitorno3[ i ].value ;
+				obPMonitorno4[ mno_cnt ].value = obMonitorno4[ i ].value ;
+				mno_cnt ++ ;
+			}
+		}
+	}
+}
+

@@ -1,0 +1,344 @@
+<?php
+/**
+* BLAMS 基本関数郡 会社用クラス
+*
+* メールマガジン用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+ini_set( "display_errors" ,1 ) ;
+
+//
+// メールマガジン種類
+//
+$_FUNC = 0 ;
+define( "DEF_MAILMAG_TYPE_TEXT"		, $_FUNC ++			) ;
+define( "DEF_MAILMAG_TYPE_HTML"		, $_FUNC ++			) ;
+//define( "DEF_MAILMAG_TYPE_BOTH"		, $_FUNC ++			) ;
+
+global	$arMailMagType ;
+$arMailMagType = array(
+	DEF_MAILMAG_TYPE_TEXT	=> "TEXT" ,
+	DEF_MAILMAG_TYPE_HTML	=> "HTMLメール" ,
+//	DEF_MAILMAG_TYPE_BOTH	=> "TEXT+HTMLメール" ,
+) ;
+
+//
+// メールマガジン送信方法
+//
+$_FUNC = 0 ;
+define( "DEF_MAILMAG_SEND_INC"		, $_FUNC ++			) ;
+define( "DEF_MAILMAG_SEND_TIME"		, $_FUNC ++			) ;
+
+global	$arMailMagSendType ;
+$arMailMagSendType = array(
+	DEF_MAILMAG_SEND_INC	=> "即時配信" ,
+	DEF_MAILMAG_SEND_TIME	=> "日時指定配信"
+) ;
+
+//
+// メールマガジン送信状態
+//
+$_FUNC = 0 ;
+define( "DEF_MAILMAG_SENDFLG_PEND"		, $_FUNC ++			) ;
+define( "DEF_MAILMAG_SENDFLG_OPENED"	, $_FUNC ++			) ;
+define( "DEF_MAILMAG_SENDFLG_COMP"		, $_FUNC ++			) ;
+
+global	$arMailMagSendFlg ;
+$arMailMagSendFlg = array(
+	DEF_MAILMAG_SENDFLG_PEND	=> "未送信" ,
+	DEF_MAILMAG_SENDFLG_OPENED	=> "配信開始" ,
+	DEF_MAILMAG_SENDFLG_COMP	=> "配信済み"
+) ;
+
+require_once(	"class/db.class.php" ) ;
+
+class PARTS_Mailmag extends DB_Common
+{
+	function	__construct(  $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "mailmag_data" ;
+		$alias		= "mag" ;
+		$primarykey	= "mailmagid" ;
+
+		parent::__construct(  $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> searchkey = array(
+				"S_TYPE"		,
+				"S_SEND_TYPE"	,
+				"S_SEND_FLG"	,
+				"S_EDIT_FLG"	,
+			) ;
+
+		// 追加項目
+		$this -> fieldsData[] = array( "name" => "send_date_y"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "send_date_m"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "send_date_d"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "send_date_h"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "send_date_i"			, "type" => "" , "format" => "%s" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	// データの取得
+	// 社名の整形も含む
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		if ( $adminid != -1 )
+			$sql .= sprintf( "AND %s.adminid = %d " , $this -> alias , $adminid ) ;
+
+		if ( $corpid != -1 )
+			$sql .= sprintf( "AND %s.corpid = %d " , $this -> alias , $corpid ) ;
+
+		if ( $listid != -1 )
+			$sql .= sprintf( "AND %s.listid = %d " , $this -> alias , $listid ) ;
+
+		if ( $type != -1 )
+			$sql .= sprintf( "AND %s.type = %d " , $this -> alias , $type ) ;
+
+		if ( $send_type != -1 )
+			$sql .= sprintf( "AND %s.send_type = %d " , $this -> alias , $send_type ) ;
+
+		if ( $send_flg != -1 )
+			$sql .= sprintf( "AND %s.send_flg = %d " , $this -> alias , $send_flg ) ;
+
+		if ( $edit_flg != -1 )
+			$sql .= sprintf( "AND %s.edit_flg = %d " , $this -> alias , $edit_flg ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.mailmagid " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+
+	// ID の取得
+	function getID( $index = 0 )
+	{
+		$id = -1 ;
+		
+		if ( $this -> isOpen() == true )
+		{
+			if ( is_array( $this -> arData ) == true )
+			{
+				if ( isset( $this -> arData[ $index ][ sprintf( "%s_corpid" , $this -> alias ) ] ) == true )
+				{
+					$id = $this -> arData[ $index ][ sprintf( "%s_corpid" , $this -> alias ) ] ;
+				}
+			}
+		}
+		
+		return $id ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$updt = "" ;
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// データ送信設定画面のUpdateDataからのcheckDataかの判別するためのフラグ
+			if ( $updt == "" )
+				$updt = FALSE ;
+
+			// 送信状態
+
+			// 種類
+
+			// 表題の入力検査
+			if ( ${ $alias . "_subject" } == "" )
+				$error .= "・表題が入力されていません。\n" ;
+
+			// 本文
+			if ( ${ $alias . "_sentence_text" } == "" && ${ $alias . "_type" } == DEF_MAILMAG_TYPE_TEXT )
+				$error .= "・テキスト用本文を入力してください。\n" ;
+
+			if ( ${ $alias . "_sentence_html" } == "" && ${ $alias . "_type" } == DEF_MAILMAG_TYPE_HTML )
+				$error .= "・HTML用本文を入力してください。\n" ;
+
+			// 送信方法
+			if ( ${ $alias . "_send_type" } == -1 )
+				$error .= "・送信方法が選択されていません。\n" ;
+
+			// 送信日時
+			$arParam[ $alias . "_send_date" ] = "0001-01-01 00:00:00" ;
+			if ( ${ $alias . "_send_type"	} == DEF_MAILMAG_SEND_TIME 
+			  && ${ $alias . "_send_flg"	} != DEF_MAILMAG_SENDFLG_OPENED && $updt == FALSE )
+			{
+				if ( ( is_numeric( ${ $alias . "_send_date_y" } ) ) &&
+					 ( is_numeric( ${ $alias . "_send_date_m" } ) ) &&
+					 ( is_numeric( ${ $alias . "_send_date_d" } ) ) &&
+					 ( is_numeric( ${ $alias . "_send_date_h" } ) ) &&
+					 ( is_numeric( ${ $alias . "_send_date_i" } ) ) )
+				{
+					$send_date_new = sprintf(	"%04d-%02d-%02d %02d:%02d:00" , 
+												${ $alias . "_send_date_y" } , 
+												${ $alias . "_send_date_m" } , 
+												${ $alias . "_send_date_d" } , 
+												${ $alias . "_send_date_h" } , 
+												${ $alias . "_send_date_i" } ) ;
+					$obSend_date_new = date_create( $send_date_new ) ;
+					if ( $obSend_date_new !== false )
+					{
+						// 送信日時の更新
+						$obSend_date_check = new DateTime() ;
+						$obSend_date_check -> modify( "+15 minutes" ) ;
+
+						$send_date_new		= $obSend_date_new -> format( "Y-m-d H:i:s" ) ;
+						$send_date_check	= $obSend_date_check -> format( "Y-m-d H:i:s" ) ;
+
+						if ( $send_date_check < $send_date_new )
+							$arParam[ $alias . "_send_date" ] = $send_date_new ;
+						else
+							$error .= "・現在時刻の15分以内の時間を設定できません。\n" ;
+					}
+					else
+					{
+						$error .= "・送信日時が正しく入力されていません\n" ;
+					}
+				}
+				else
+				{
+					$error .= "・送信日時が正しく入力されていません。\n" ;
+				}
+			}
+			elseif( ${ $alias . "_send_type"	} == DEF_MAILMAG_SEND_TIME 
+				 && ${ $alias . "_send_flg"		} == DEF_MAILMAG_SENDFLG_OPENED )
+			{
+				$arParam[ $alias . "_send_date" ] = ${ $alias . "_send_date" } ;
+			}
+	
+			// 編集状態
+			if ( ${ $alias . "_edit_flg" } == -1 )
+				$error .= "・編集状態が選択されていません。\n" ;
+
+			if( $func == "database" )
+				$arParam[ $alias . "_send_date"		] = sprintf( "'%s'" , ${ $alias . "_send_date" } ) ;
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+	
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+
+		$alias		= $this -> alias ;
+
+		$now_date = new DateTime() ;
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+
+		$send_date = new DateTime() ;
+		$send_date -> modify( "+1 minutes" ) ;
+		$min = 5 - intval( $send_date -> format( "i" ) ) % 5 ;
+		$fmt = sprintf( "+%d minutes" , 15 + $min ) ;
+		$send_date -> modify( $fmt ) ;
+
+		$arParam[ $alias . "_mailmagid"		] = -1 ;
+		$arParam[ $alias . "_adminid"		] = -1 ;
+		$arParam[ $alias . "_listid"		] = -1 ;
+		$arParam[ $alias . "_type"			] = 0 ;
+		$arParam[ $alias . "_subject"		] = "" ;
+		$arParam[ $alias . "_sentence_text"	] = "" ;
+		$arParam[ $alias . "_sentence_html"	] = "" ;
+		$arParam[ $alias . "_send_type"		] = 1 ;
+		$arParam[ $alias . "_send_date"		] = "" ;
+		$arParam[ $alias . "_send_date_y"	] = $send_date -> format( "Y" ) ;
+		$arParam[ $alias . "_send_date_m"	] = $send_date -> format( "n" ) ;
+		$arParam[ $alias . "_send_date_d"	] = $send_date -> format( "j" ) ;
+		$arParam[ $alias . "_send_date_h"	] = $send_date -> format( "H" ) ;
+		$arParam[ $alias . "_send_date_i"	] = $send_date -> format( "i" ) ;
+		$arParam[ $alias . "_send_flg"		] = DEF_MAILMAG_SENDFLG_PEND ;
+		$arParam[ $alias . "_edit_flg"		] = DEF_EDITSTATUS_EDITTING ;
+
+		$arParam[ $alias . "_create_date"	] = $now ;
+		$arParam[ $alias . "_update_date"	] = $now ;
+	}
+
+}
+?>

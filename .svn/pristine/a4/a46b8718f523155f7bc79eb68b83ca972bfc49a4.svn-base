@@ -1,0 +1,456 @@
+<?php
+
+// アンカーの表示（地域）
+function	fetchAnchorArea( $area = -1 , $city = -1 , $arParam , $func )
+{
+	unset( $arParam[ "S_ID" ] ) ;
+	unset( $arParam[ "S_ADDR" ] ) ;
+	unset( $arParam[ "S_AREA" ] ) ;
+	unset( $arParam[ "S_CITYINDEX" ] ) ;
+
+	$class = "" ;
+	$tmpldir = "" ;
+	switch ( $func )
+	{
+	case	DEF_PERSONAL_FUNC_PRODUCT :
+		$tmpldir	= "product/" ;
+		$top		= "/product" ;
+		$class		= "Product" ;
+		$kind		= DEF_CATEGORY_PRODUCT ;
+		$kind_name	= "" ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_ITEM :
+		$tmpldir	= "item/" ;
+		$top		= "/item" ;
+		$class		= "Item" ;
+		$kind		= DEF_CATEGORY_ITEM ;
+		$kind_name	= "" ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_MERCHANDISE :
+		$tmpldir	= "merchandise/" ;
+		$top		= "/merchandise" ;
+		$class		= "Merchandise" ;
+		$kind		= DEF_CATEGORY_ITEM ;
+		$arAnchor = array() ;
+		$arAnchor[]	= array( "link" => "" , "name" => sprintf( "・商品検索" ) ) ;
+		$kind_name	= "全て" ;
+		break ;
+	}
+	$top = MakeLinkParam( $arParam ) ;
+
+	global $arCity ;
+
+	$arAnchor = array() ;
+	$arSublink = array() ;
+
+	$arAnchor[] = array( "link" => "" , "name" => "・全域検索" ) ;
+
+	$link = sprintf( "" ) ;
+	if ( $city != -1 )
+	{
+		// 市町村が指定されている場合、
+		$link = $top . sprintf( "/A%d/index.html" , $arCity[ $city ][ 0 ] ) ;
+		$arAnchor[] = array( "link" => $top . "/index.html" , "name" => "全域" ) ;
+		$arAnchor[] = array( "link" => $link , "name" => $arCity[ $city ][ 1 ] ) ;
+		$arAnchor[] = array( "link" => "" , "name" => $arCity[ $city ][ 2 ] ) ;
+	}
+	else if ( $area != -1 )
+	{
+		// 地域が指定されている場合、
+		$arAnchor[] = array( "link" => $top . "/index.html" , "name" => "全域" ) ;
+
+		// サブリンク市町村名
+		for ( $i = 0 ; $i < count( $arCity ) ; $i ++ )
+		{
+			if ( $arCity[ $i ][ 0 ] == $area )
+			{
+				$link = $top . sprintf( "/M%d/index.html" , $i ) ;
+				$arSublink[] = array( "link" => $link , "name" => $arCity[ $i ][ 3 ] ) ;
+				
+				if ( count( $arAnchor ) == 2 )
+					$arAnchor[] = array( "link" => "" , "name" => $arCity[ $i ][ 1 ] ) ;
+			}
+		}
+	}
+	else
+	{
+		// 全域
+		$arAnchor[] = array( "link" => "" , "name" => "全域" ) ;
+
+		// サブリンク地域名
+		for ( $i = 0 ; $i < count( $arCity ) ; $i ++ )
+		{
+			$link = $top . sprintf( "/A%d/index.html" , $arCity[ $i ][ 0 ] ) ;
+			$arSublink[ $arCity[ $i ][ 0 ] ] = array( "link" => $link , "name" => $arCity[ $i ][ 1 ] ) ;
+		}
+	}
+
+	$anchorArea = "" ;
+	if ( $tmpldir != "" )
+	{
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "class"		, $class ) ;
+		$tmpl -> assign( "anchor_data"	, $arAnchor ) ;
+		$tmpl -> assign( "link_data"	, $arSublink ) ;
+		$anchorArea = $tmpl -> fetch( $tmpldir . "anchor.tmpl" ) ;
+	}
+	unset( $tmpl ) ;
+	
+	return $anchorArea ;
+}
+
+// アンカーの表示
+function	fetchAnchorCategory( $categoryid , $arParam , $func )
+{
+	unset( $arParam[ "S_ID" ] ) ;
+	unset( $arParam[ "S_CATEGORY" ] ) ;
+
+	$class = "" ;
+	$kind = "" ;
+	$arAnchor = array() ;
+	$arSublink = array() ;
+
+	global	$funcAnchor ;
+	$arAnchor[]	= array( "link" => "" , "name" => sprintf( "・%s検索" , $funcAnchor ) ) ;
+	$kind_name	= "全て" ;
+
+	switch ( $func )
+	{
+	case	DEF_PERSONAL_FUNC_PRODUCT :
+		$tmpldir	= "product/" ;
+		$top		= "/product" ;
+		$class		= "Product" ;
+		$kind		= DEF_CATEGORY_PRODUCT ;
+		$kind_name	= "" ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_ITEM :
+		$tmpldir	= "item/" ;
+		$top		= "/item" ;
+		$class		= "Item" ;
+		$kind		= DEF_CATEGORY_ITEM ;
+		$kind_name	= "" ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_MERCHANDISE :
+		$tmpldir	= "merchandise/" ;
+		$top		= "/merchandise" ;
+		$class		= "Merchandise" ;
+		$kind		= DEF_CATEGORY_ITEM ;
+		$arAnchor = array() ;
+		$arAnchor[]	= array( "link" => "" , "name" => sprintf( "・商品検索" ) ) ;
+		$kind_name	= "全て" ;
+		break ;
+	}
+	$top .= MakeLinkParam( $arParam ) ;
+
+	// カテゴリーIDから、カテゴリ情報を取得する。
+	$category1 = 0 ;
+	$category2 = 0 ;
+	$category3 = 0 ;
+	
+	$arCategory1 = array() ;
+	$arCategory2 = array() ;
+	$arCategory3 = array() ;
+
+	// カテゴリDB
+	$obCategory = new PARTS_Category() ;
+	$cAlias = $obCategory -> alias ;
+	
+	if ( $obCategory -> isOpen() )
+	{
+		if ( is_array( $categoryid ) == TRUE )
+		{
+			if ( count( $categoryid ) == 1 )
+				$categoryid = $categoryid[ 0 ] ;
+			else
+				$categoryid = -1 ;
+		}
+		
+		if ( $categoryid != -1 )
+		{
+			$cAlias = $obCategory -> alias ;
+			$arCurrent = $obCategory -> getAt( $categoryid ) ;
+			if ( count( $arCurrent ) > 0 )
+			{
+				$category1 = $arCurrent[ $cAlias . "_category1" ] ;
+				$category2 = $arCurrent[ $cAlias . "_category2" ] ;
+				$category3 = $arCurrent[ $cAlias . "_category3" ] ;
+	
+				$arCategory1 = $obCategory -> createCategoryArray( $category1 , 0 , -1 , TRUE , $kind ) ;
+				
+				if ( $category2 != 0 )
+					$arCategory2 = $obCategory -> createCategoryArray( $category1 , $category2 , 0 , TRUE , $kind ) ;
+					
+				if ( $category3 != 0 )
+					$arCategory3 = $obCategory -> createCategoryArray( $category1 , $category2 , $category3 , TRUE , $kind ) ;
+			}
+		}
+		else
+		{
+			// 大項目のリストを取得する。
+			$arCategory = $obCategory -> createCategoryArray( 0 , -1 , -1 , FALSE , $kind ) ;
+		}
+
+	}
+
+	$link = sprintf( "" ) ;
+
+	if ( $categoryid != -1 )
+	{
+		if ( $category1 != 0 && $category2 == 0 && $category3 == 0 )
+		{
+			// 大項目の場合
+			if ( $kind_name != "" )
+				$arAnchor[] = array( "link" => $top . "/index.html" , "name" => $kind_name ) ;
+			$arAnchor[] = array( "link" => "" , "name" => $arCurrent[ $cAlias . "_name" ] ) ;
+
+			// 中項目のリンクを作成する
+			for ( $i = 1 ; $i < count( $arCategory1 ) ; $i ++ )
+			{
+				$keys	= array_keys( $arCategory1[ $i ] ) ; 
+				$link = $top . sprintf( "/C%d/index.html" , $keys[ 0 ] ) ;
+				$arSublink[] = array( "link" => $link , "name" => $arCategory1[ $i ][ $keys[ 0 ] ] ) ;
+			}
+		}
+		else if (  $category1 != 0 && $category2 != 0 && $category3 == 0 )
+		{
+			// 中項目の場合
+			if ( $kind_name != "" )
+				$arAnchor[] = array( "link" => $top . "/index.html" , "name" => $kind_name ) ;
+			$keys	= array_keys( $arCategory1[ 0 ] ) ; 
+			$link = $top . sprintf( "/C%d/index.html" , $keys[ 0 ] ) ;
+			$arAnchor[] = array( "link" => $link , "name" => $arCategory1[ 0 ][ $keys[ 0 ] ] ) ;
+			$arAnchor[] = array( "link" => "" , "name" => $arCurrent[ $cAlias . "_name" ] ) ;
+
+			// 小項目のリンクを作成する
+			for ( $i = 2 ; $i < count( $arCategory2 ) ; $i ++ )
+			{
+				$keys	= array_keys( $arCategory2[ $i ] ) ; 
+				$link = $top . sprintf( "/C%d/index.html" , $keys[ 0 ] ) ;
+				$arSublink[] = array( "link" => $link , "name" => $arCategory2[ $i ][ $keys[ 0 ] ] ) ;
+			}
+		}
+		else if (  $category1 != 0 && $category2 != 0 && $category3 != 0 )
+		{
+			// 小項目の場合
+			if ( $kind_name != "" )
+				$arAnchor[] = array( "link" => $top . "/index.html" , "name" => $kind_name ) ;
+
+			$keys	= array_keys( $arCategory2[ 0 ] ) ; 
+			$link = $top . sprintf( "/C%d/index.html" , $keys[ 0 ] ) ;
+			$arAnchor[] = array( "link" => $link , "name" => $arCategory2[ 0 ][ $keys[ 0 ] ] ) ;
+
+			$keys	= array_keys( $arCategory2[ 1 ] ) ; 
+			$link = $top . sprintf( "/C%d/index.html" , $keys[ 0 ] ) ;
+			$arAnchor[] = array( "link" => $link , "name" => $arCategory2[ 1 ][ $keys[ 0 ] ] ) ;
+
+			$arAnchor[] = array( "link" => "" , "name" => $arCurrent[ $cAlias . "_name" ] ) ;
+		}
+	}
+	else
+	{
+		// 全域
+		if ( $kind_name != "" )
+			$arAnchor[] = array( "link" => "" , "name" => $kind_name ) ;
+		
+		// 大項目のリンクを作成する
+		for ( $i = 0 ; $i < count( $arCategory ) ; $i ++ )
+		{
+			$keys	= array_keys( $arCategory[ $i ] ) ; 
+			$link = $top . sprintf( "/C%d/index.html" , $keys[ 0 ] ) ;
+			$arSublink[] = array( "link" => $link , "name" => $arCategory[ $i ][ $keys[ 0 ] ] ) ;
+		}
+	}
+
+	$anchorCategory = "" ;
+	if ( $tmpldir != "" )
+	{
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "class"		, $class ) ;
+		$tmpl -> assign( "anchor_data"	, $arAnchor ) ;
+		$tmpl -> assign( "link_data"	, $arSublink ) ;
+		$anchorCategory = $tmpl -> fetch( $tmpldir . "anchor.tmpl" ) ;
+	}
+	unset( $tmpl ) ;
+	
+	return $anchorCategory ;
+}
+
+// 左部検索部
+function	fetchSearch( $func , $arSearch , $ca_flg = true , $ci_flg = true )
+{
+	if (	$func != DEF_PERSONAL_FUNC_PRODUCT &&
+			$func != DEF_PERSONAL_FUNC_ITEM &&
+			$func != DEF_PERSONAL_FUNC_MERCHANDISE
+		)
+	{
+		$obMerchandise = new PARTS_Merchandise() ;
+		if ( $obMerchandise -> isOpen() == true )
+			$func = DEF_PERSONAL_FUNC_MERCHANDISE ;
+		else
+			$func = DEF_PERSONAL_FUNC_PRODUCT ;
+	}
+
+	$tmpldir	= "" ;
+	$link		= "" ;
+	$kind		= "" ;
+	switch ( $func )
+	{
+	case	DEF_PERSONAL_FUNC_PRODUCT :
+		$tmpldir	= "product/" ;
+		$link		= "/product.php" ;
+		$kind		= DEF_CATEGORY_PRODUCT ;
+		break ;
+		
+	case	DEF_PERSONAL_FUNC_ITEM :
+		$tmpldir	= "item/" ;
+		$link		= "/item.php" ;
+		$kind		= DEF_CATEGORY_ITEM ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_MERCHANDISE :
+		$tmpldir	= "merchandise/" ;
+		$link		= "/merchandise.php" ;
+		$kind		= DEF_CATEGORY_ITEM ;
+		break ;
+	}
+
+	global	$arCity ;
+
+	$arCity_local = array() ;
+	$arCity_local[ -1 ] = "全て" ;
+	for ( $i = 0 ; $i < count( $arCity ) ; $i ++ )
+	{
+		$arCity_local[ $i ] = $arCity[ $i ][ 2 ] ;
+	}
+
+	$obCategory = new PARTS_Category() ;
+	$arCategory = $obCategory -> createCategoryArray( 0 , -1 , -1 , FALSE , $kind ) ;
+
+	$arCategory_local = array() ;
+	$arCategory_local[ -1 ] = "全て" ;
+	for ( $i = 0 ; $i < count( $arCategory ) ; $i ++ )
+	{
+		$key = key( $arCategory[ $i ] ) ;
+		$value = $arCategory[ $i ][ $key ] ;
+		$arCategory_local[ $key ] = $value ;
+	}
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "city_data"		, $arCity_local ) ;
+
+	$keys = array_keys( $arSearch ) ;
+	$cnt = count( $arSearch ) ;
+	for ( $i = 0 ; $i < $cnt ; $i ++ )
+		$tmpl -> assign( $keys[ $i ] , $arSearch[ $keys[ $i ] ] ) ;
+	
+	$tmpl -> assign( "category_data"	, $arCategory_local ) ;
+	$tmpl -> assign( "link"				, $link ) ;
+	$data = $tmpl -> fetch( $tmpldir . "search.tmpl" ) ;
+	unset( $tmpl ) ;
+
+
+	return $data ;
+}
+
+// カテゴリーの表示
+function	fetchCategory( $func , $kind , $categoryid = -1 )
+{
+	$category = "" ;
+
+	$obMerchandise = new PARTS_Merchandise() ;
+	$obProduct = new PARTS_Product( $obMerchandise -> conn ) ;
+	
+	if ( $kind != -1 )
+	{
+		if ( $obMerchandise -> isOpen() == true || $obProduct -> isOpen() == true )
+		{
+			$arCategory = array() ;
+			$alias = $obMerchandise -> obCategory -> alias ;
+			
+			$arWhere = array() ;
+			$arWhere[ "kind"		] = $kind ;
+			$arResult = $obMerchandise -> obCategory -> getData( $arWhere ) ;
+
+			$prev = -1 ;
+			$cnt = count( $arResult ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = $arResult[ $i ] ;
+
+				// カテゴリIDがmerchandise_dataに何件登録されているか取得
+				$category = array() ;
+				$category[] = $arData[ $alias . "_categoryid" ] ;
+				$arWhere = array() ;
+				$arWhere[ "categoryid"		] = $obMerchandise -> obCategory -> makeIDList( $category , DEF_CATEGORY_ITEM ) ;
+				$arWhere[ "edit_flg"		] = DEF_EDITSTATUS_OPENED ;
+				$arWhere[ "start_date"		] = sprintf( "<= '%s 00:00:00'" , date( "Y-m-d" ) ) ;
+				$arWhere[ "end_date"		] = sprintf( ">= '%s 23:59:59'" , date( "Y-m-d" ) ) ;
+				$arWhere[ "relationid"		] = $obMerchandise -> obCategory -> makeIDList( $category , DEF_CATEGORY_ITEM ) ;
+				$mCnt = $obMerchandise -> getCount( $arWhere ) ;
+
+				$category1	= $arData[ $alias . "_category1"	] ;
+				$category2	= $arData[ $alias . "_category2"	] ;
+				$category3	= $arData[ $alias . "_category3"	] ;
+				$id			= $arData[ $alias . "_categoryid"	] ;
+				$name		= $arData[ $alias . "_name"			] ;
+
+				if ( $category2 == 0 )
+				{
+					// 大項目の保存
+					$arCategory[ $category1 ] = array( "id" => $id , "name" => $name , "dispcnt" => $mCnt ) ;
+					$arCategory[ $category1 ][ "subcategory" ] = array() ;
+				}
+				else if ( $category3 == 0 )
+				{
+					// 中項目の保存
+					$arCategory[ $category1 ][ "subcategory" ][ $category2 ] = array( "id" => $id , "name" => $name , "dispcnt" => $mCnt ) ;
+					$arCategory[ $category1 ][ "subcategory" ][ $category2 ][ "subcategory" ] = array() ;
+				}
+				else
+				{
+					// 中項目の保存
+					$arCategory[ $category1 ][ "subcategory" ][ $category2 ][ "subcategory" ][ $category3 ] = array( "id" => $id , "name" => $name , "dispcnt" => $mCnt ) ;
+				}
+			}
+
+			global	$funcAnchor ;
+			global	$arPresonalFunction ;
+			$funcName = array_search( $func , $arPresonalFunction ) ;
+	
+			$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+			$tmpl -> assign( "func"				, $func ) ;
+			$tmpl -> assign( "funcName"			, $funcName ) ;
+			$tmpl -> assign( "anchor"			, $funcAnchor ) ;
+			$tmpl -> assign( "categoryid"		, $categoryid ) ;
+			$tmpl -> assign( "category_data"	, $arCategory ) ;
+			
+			switch( $func )
+			{
+			case	DEF_PERSONAL_FUNC_PRODUCT :
+				$category = $tmpl -> fetch( "product/category.tmpl" ) ;
+				break ;
+				
+			case	DEF_PERSONAL_FUNC_ITEM :
+				$category = $tmpl -> fetch( "item/category.tmpl" ) ;
+				break ;
+	
+			case	DEF_PERSONAL_FUNC_MERCHANDISE :
+				$category = $tmpl -> fetch( "merchandise/category.tmpl" ) ;
+				break ;
+			case	DEF_PERSONAL_FUNC_TOP :
+				if ( $obMerchandise -> isOpen() == true )
+					$category = $tmpl -> fetch( "merchandise/category.tmpl" ) ;
+				break ;
+			}
+			unset( $tmpl ) ;
+		}
+	}
+	return $category ;
+}
+
+?>

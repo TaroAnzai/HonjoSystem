@@ -1,0 +1,461 @@
+<?php
+/*
+* BLAMS
+*
+* 初期値設定ファイル<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+
+	/** Error reporting */
+	if ( defined( "DEF_ERROR_LEVEL" ) == false )
+		define(	"DEF_ERROR_LEVEL" , E_ALL ^ E_STRICT ) ;
+
+	error_reporting( DEF_ERROR_LEVEL ) ;
+
+	date_default_timezone_set( "Asia/Tokyo" ) ;
+
+	if( !isset( $DOCUMENT_ROOT ) )
+		$DOCUMENT_ROOT = $_SERVER[ "DOCUMENT_ROOT" ] ;
+
+	// 標準のINCLUDE指定
+	$root = rtrim( $DOCUMENT_ROOT , "/" ) ;
+	if ( ( $pos = strrpos( $root , "/" ) ) !== false )
+		$root = substr( $root , 0 , $pos ) ;
+
+	if ( defined( "SITE_INCLUDE_DIR" ) == false )
+		define(	"SITE_INCLUDE_DIR"		,	realpath( $root . "/conf" ) ) ;
+
+	if( realpath( $DOCUMENT_ROOT . "../lib" ) )
+		define(	"WEBAPP_INCLUDE_DIR"	,	realpath( $DOCUMENT_ROOT . "../lib" ) ) ;
+	else
+		define(	"WEBAPP_INCLUDE_DIR"	,	realpath( dirname( __FILE__ ) . "/../lib" ) ) ;
+
+	$lib_path  = "" ;
+
+	if ( defined( "EXTENSION_SITE_INCLUDE_DIR" ) == true )
+		$lib_path .= sprintf( "%s:" , EXTENSION_SITE_INCLUDE_DIR ) ;
+
+	$lib_path .= sprintf( "%s:" , SITE_INCLUDE_DIR ) ;
+	$lib_path .= sprintf( "%s:" , WEBAPP_INCLUDE_DIR ) ;
+	$lib_path .= sprintf( "%s" , ini_get( "include_path" ) ) ;
+	ini_set( "include_path" , $lib_path ) ;
+
+////////////////////////////////////////////////////////////////////
+//
+// システム全体に関わる定義
+//
+////////////////////////////////////////////////////////////////////
+
+define('PHP_INT_MIN', ~PHP_INT_MAX); 
+
+//
+// サイトタイトル関連
+//
+define( "TITLE_CORPORATION"		,	"BLAMS - Blazinghills" ) ;							// 会社名
+define( "TITLE_CORPORATION_EN"	,	"Blazinghills. Simple & Smart Work Place." ) ;		// 会社名（英語表記）
+define( "TITLE_FOUNDATION"		,	2002 ) ;											// 創設日（年）
+
+// サイト種類
+define( "DEF_SITETYPE_NORMAL"	,	1	) ;
+
+// サービス用ログイン情報
+require_once( "blams_service.ini.php" ) ;
+
+//
+// メニュー項目
+//
+global	$arMenuTitle ;
+$arMenuTitle = array(
+	"ユーザ管理" ,
+	"コンテンツ管理" ,
+	"管理者用 メニュー" ,
+	"システム管理" ,
+) ;
+
+//
+// メニュー機能番号( 一般 )
+//
+$_FUNC_NO = 1 ;
+define( "DEF_PERSONAL_FUNC_TOP"				,	$_FUNC_NO ++ ) ;	// TOPページ
+define( "DEF_PERSONAL_FUNC_TOPICS"			,	$_FUNC_NO ++ ) ;	// TOPICS
+
+$_FUNC_NO = 11 ;
+define( "DEF_PERSONAL_FUNC_PRODUCT"			,	$_FUNC_NO ++ ) ;	// 業務案内
+define( "DEF_PERSONAL_FUNC_ITEM"			,	$_FUNC_NO ++ ) ;	// 製品案内
+define( "DEF_PERSONAL_FUNC_SELF"			,	$_FUNC_NO ++ ) ;	// 組織案内
+
+$_FUNC_NO = 21 ;
+define( "DEF_PERSONAL_FUNC_OFFICER"			,	$_FUNC_NO ++ ) ;	// 役員構成
+define( "DEF_PERSONAL_FUNC_HISTORY"			,	$_FUNC_NO ++ ) ;	// 沿革
+define( "DEF_PERSONAL_FUNC_PARTNER"			,	$_FUNC_NO ++ ) ;	// 主要取引先
+define( "DEF_PERSONAL_FUNC_OCCUPATION"		,	$_FUNC_NO ++ ) ;	// 業務履歴
+define( "DEF_PERSONAL_FUNC_RECRUIT"			,	$_FUNC_NO ++ ) ;	// 採用情報
+define( "DEF_PERSONAL_FUNC_GREETINGS"		,	$_FUNC_NO ++ ) ;	// ご挨拶
+define( "DEF_PERSONAL_FUNC_SUBSIDIARY"		,	$_FUNC_NO ++ ) ;	// 子会社情報
+
+$_FUNC_NO = 31 ;
+define( "DEF_PERSONAL_FUNC_PRIVACY"			,	$_FUNC_NO ++ ) ;	// 個人情報
+define( "DEF_PERSONAL_FUNC_RULES"			,	$_FUNC_NO ++ ) ;	// ご利用規約
+define( "DEF_PERSONAL_FUNC_PROGRAM"			,	$_FUNC_NO ++ ) ;	// 活動内容
+define( "DEF_PERSONAL_FUNC_ORDERSLAW"		,	$_FUNC_NO ++ ) ;	// 通信販売の法規に基づく表記
+define( "DEF_PERSONAL_FUNC_CARRIAGE"		,	$_FUNC_NO ++ ) ;	// 送料について
+define( "DEF_PERSONAL_FUNC_EYECATCH"		,	$_FUNC_NO ++ ) ;	// EYE CATCH
+define( "DEF_PERSONAL_FUNC_SUPPORT"			,	$_FUNC_NO ++ ) ;	// サポート
+
+$_FUNC_NO = 41 ;
+define( "DEF_PERSONAL_FUNC_MERCHANDISE"		,	$_FUNC_NO ++ ) ;	// ショッピング
+define( "DEF_PERSONAL_FUNC_MEMBER"			,	$_FUNC_NO ++ ) ;	// 会員様情報
+define( "DEF_PERSONAL_FUNC_ORDER"			,	$_FUNC_NO ++ ) ;	// ご注文履歴
+define( "DEF_PERSONAL_FUNC_CART"			,	$_FUNC_NO ++ ) ;	// ショッピングカート
+define( "DEF_PERSONAL_FUNC_MEMBERID"		,	$_FUNC_NO ++ ) ;	// 会員IDの変更
+define( "DEF_PERSONAL_FUNC_MEMBERPASSWD"	,	$_FUNC_NO ++ ) ;	// 会員パスワードの変更
+define( "DEF_PERSONAL_FUNC_MEMBERLEVEL"		,	$_FUNC_NO ++ ) ;	// 会員レベルの変更
+
+$_FUNC_NO = 51 ;
+define( "DEF_PERSONAL_FUNC_INQUIRY"			,	$_FUNC_NO ++ ) ;	// お問合せ
+define( "DEF_PERSONAL_FUNC_SITEMAP"			,	$_FUNC_NO ++ ) ;	// サイトマップ
+define( "DEF_PERSONAL_FUNC_LINK"			,	$_FUNC_NO ++ ) ;	// リンク
+
+// ファンクションテーブル
+global	$arPresonalFunction ;
+$arPresonalFunction = array(
+	"DEF_PERSONAL_FUNC_TOP"				=> DEF_PERSONAL_FUNC_TOP				,
+	"DEF_PERSONAL_FUNC_TOPICS"			=> DEF_PERSONAL_FUNC_TOPICS				,
+
+	"DEF_PERSONAL_FUNC_PRODUCT"			=> DEF_PERSONAL_FUNC_PRODUCT			,
+	"DEF_PERSONAL_FUNC_ITEM"			=> DEF_PERSONAL_FUNC_ITEM				,
+
+	"DEF_PERSONAL_FUNC_SELF"			=> DEF_PERSONAL_FUNC_SELF				,
+	"DEF_PERSONAL_FUNC_OFFICER"			=> DEF_PERSONAL_FUNC_OFFICER			,
+	"DEF_PERSONAL_FUNC_HISTORY"			=> DEF_PERSONAL_FUNC_HISTORY			,
+	"DEF_PERSONAL_FUNC_PARTNER"			=> DEF_PERSONAL_FUNC_PARTNER			,
+	"DEF_PERSONAL_FUNC_OCCUPATION"		=> DEF_PERSONAL_FUNC_OCCUPATION			,
+	"DEF_PERSONAL_FUNC_GREETINGS"		=> DEF_PERSONAL_FUNC_GREETINGS			,
+	"DEF_PERSONAL_FUNC_SUBSIDIARY"		=> DEF_PERSONAL_FUNC_SUBSIDIARY			,
+
+	"DEF_PERSONAL_FUNC_RECRUIT"			=> DEF_PERSONAL_FUNC_RECRUIT			,
+	"DEF_PERSONAL_FUNC_PRIVACY"			=> DEF_PERSONAL_FUNC_PRIVACY			,
+	"DEF_PERSONAL_FUNC_RULES"			=> DEF_PERSONAL_FUNC_RULES				,
+	"DEF_PERSONAL_FUNC_PROGRAM"			=> DEF_PERSONAL_FUNC_PROGRAM			,
+	"DEF_PERSONAL_FUNC_ORDERSLAW"		=> DEF_PERSONAL_FUNC_ORDERSLAW			,
+	"DEF_PERSONAL_FUNC_CARRIAGE"		=> DEF_PERSONAL_FUNC_CARRIAGE			,
+	"DEF_PERSONAL_FUNC_EYECATCH"		=> DEF_PERSONAL_FUNC_EYECATCH			,
+	"DEF_PERSONAL_FUNC_SUPPORT"			=> DEF_PERSONAL_FUNC_SUPPORT			,
+	
+	"DEF_PERSONAL_FUNC_MERCHANDISE"		=> DEF_PERSONAL_FUNC_MERCHANDISE		,
+	"DEF_PERSONAL_FUNC_MEMBER"			=> DEF_PERSONAL_FUNC_MEMBER				,
+	"DEF_PERSONAL_FUNC_MEMBERID"		=> DEF_PERSONAL_FUNC_MEMBERID			,
+	"DEF_PERSONAL_FUNC_MEMBERPASSWD"	=> DEF_PERSONAL_FUNC_MEMBERPASSWD		,
+	"DEF_PERSONAL_FUNC_MEMBERLEVEL"		=> DEF_PERSONAL_FUNC_MEMBERLEVEL		,
+
+	"DEF_PERSONAL_FUNC_ORDER"			=> DEF_PERSONAL_FUNC_ORDER				,
+	"DEF_PERSONAL_FUNC_CART"			=> DEF_PERSONAL_FUNC_CART				,
+	"DEF_PERSONAL_FUNC_INQUIRY"			=> DEF_PERSONAL_FUNC_INQUIRY			,
+	"DEF_PERSONAL_FUNC_SITEMAP"			=> DEF_PERSONAL_FUNC_SITEMAP			,
+	"DEF_PERSONAL_FUNC_LINK"			=> DEF_PERSONAL_FUNC_LINK				,
+	
+) ;
+
+// 標準メニュー
+global	$arPresonalNavi ;
+$arPresonalNavi = array(
+	DEF_PERSONAL_FUNC_TOP				=>	array( "class" => "Top"				,	"anchor" => "TOP"							, "url" => "/"						, 	"subject" => "TOP" ) ,
+	DEF_PERSONAL_FUNC_TOPICS			=>	array( "class" => "Topics"			,	"anchor" => "TOPICS"						, "url" => "/topics/"				, 	"subject" => "TOPICS" ) ,
+
+	DEF_PERSONAL_FUNC_PRODUCT			=>	array( "class" => "Product"			,	"anchor" => "業務案内"						, "url" => "/product/"				, 	"subject" => "取扱い業務について" ) ,
+	DEF_PERSONAL_FUNC_ITEM				=>	array( "class" => "Item"			,	"anchor" => "商品案内"						, "url" => "/item/"					, 	"subject" => "取扱い商品について" ) ,
+
+	DEF_PERSONAL_FUNC_SELF				=>	array( "class" => "Self"			,	"anchor" => "会社案内"						, "url" => "/profile.html"			, 	"subject" => "会社案内" ) ,
+	DEF_PERSONAL_FUNC_OFFICER			=>	array( "class" => "Officer"			,	"anchor" => "役員構成"						, "url" => "/officer.html"			, 	"subject" => "役員について" ) ,
+	DEF_PERSONAL_FUNC_HISTORY			=>	array( "class" => "History"			,	"anchor" => "沿革"							, "url" => "/history.html"			, 	"subject" => "沿革について" ) ,
+	DEF_PERSONAL_FUNC_PARTNER			=>	array( "class" => "Partner"			,	"anchor" => "主要取引先"					, "url" => "/partner.html"			, 	"subject" => "主要取引先について" ) ,
+	DEF_PERSONAL_FUNC_OCCUPATION		=>	array( "class" => "Occupation"		,	"anchor" => "業務履歴"						, "url" => "/occupation/"			, 	"subject" => "業務履歴について" ) ,
+	DEF_PERSONAL_FUNC_GREETINGS			=>	array( "class" => "Greetings"		,	"anchor" => "ご挨拶"						, "url" => "/greetings.html"		, 	"subject" => "ご挨拶" ) ,
+	DEF_PERSONAL_FUNC_SUBSIDIARY		=>	array( "class" => "Subsidiary"		,	"anchor" => "子会社情報"					, "url" => "/subsidiary.html"		, 	"subject" => "子会社情報について" ) ,
+
+	DEF_PERSONAL_FUNC_RECRUIT			=>	array( "class" => "Recruit"			,	"anchor" => "採用情報"						, "url" => "/recruit.html"			, 	"subject" => "採用情報について" ) ,
+	DEF_PERSONAL_FUNC_PRIVACY			=>	array( "class" => "Privacy"			,	"anchor" => "個人情報"						, "url" => "/privacy.html"			, 	"subject" => "個人情報の取扱いについて" ) ,
+	DEF_PERSONAL_FUNC_RULES				=>	array( "class" => "Rules"			,	"anchor" => "ご利用規約"					, "url" => "/rules.html"			, 	"subject" => "ご利用規約について" ) ,
+	DEF_PERSONAL_FUNC_PROGRAM			=>	array( "class" => "Program"			,	"anchor" => "活動内容"						, "url" => "/program.html"			, 	"subject" => "活動内容について" ) ,
+	DEF_PERSONAL_FUNC_ORDERSLAW			=>	array( "class" => "Orderslaw"		,	"anchor" => "通信販売の法規に基づく表記"	, "url" => "/orderslaw.html"		, 	"subject" => "通信販売の法規に基づく表記" ) ,
+	DEF_PERSONAL_FUNC_CARRIAGE			=>	array( "class" => "Carriage"		,	"anchor" => "送料について"					, "url" => "/carriage.html"			, 	"subject" => "送料について" ) ,
+	DEF_PERSONAL_FUNC_SUPPORT			=>	array( "class" => "Support"			,	"anchor" => "サポート"						, "url" => "/support.html"			, 	"subject" => "ユーザサポート" ) ,
+
+	DEF_PERSONAL_FUNC_MERCHANDISE		=>	array( "class" => "Merchandise"		,	"anchor" => "ショッピング"					, "url" => "/merchandise/"			, 	"subject" => "オンライン・ショッピング" ) ,
+	DEF_PERSONAL_FUNC_MEMBER			=>	array( "class" => "Member"			,	"anchor" => "会員様情報"					, "url" => "/member/"				, 	"subject" => "会員様情報" ) ,
+	DEF_PERSONAL_FUNC_MEMBERID			=>	array( "class" => "MemberID"		,	"anchor" => "会員様ID変更"					, "url" => "/member/edit_id.php"	, 	"subject" => "会員様ID変更" ) ,
+	DEF_PERSONAL_FUNC_MEMBERPASSWD		=>	array( "class" => "MemberPasswd"	,	"anchor" => "会員様パスワード変更"			, "url" => "/member/edit_pswd.php"	, 	"subject" => "会員様パスワード変更" ) ,
+	DEF_PERSONAL_FUNC_MEMBERLEVEL		=>	array( "class" => "MemberLevel"		,	"anchor" => "会員様レベル変更"				, "url" => "/member/edit_level.php"	, 	"subject" => "会員様レベル変更" ) ,
+
+	DEF_PERSONAL_FUNC_ORDER				=>	array( "class" => "Order"			,	"anchor" => "注文情報"						, "url" => "/member/status/"		, 	"subject" => "注文情報" ) ,
+	DEF_PERSONAL_FUNC_CART				=>	array( "class" => "Cart"			,	"anchor" => "ショッピングカート"			, "url" => "/member/cart/"			, 	"subject" => "ショッピングカート" ) ,
+	DEF_PERSONAL_FUNC_INQUIRY			=>	array( "class" => "Inquiry"			,	"anchor" => "お問合せ"						, "url" => "/inquiry.php"			, 	"subject" => "お問合せ" ) ,
+	DEF_PERSONAL_FUNC_SITEMAP			=>	array( "class" => "Sitemap"			,	"anchor" => "サイトマップ"					, "url" => "/sitemap.html"			, 	"subject" => "サイトマップ" ) ,
+	DEF_PERSONAL_FUNC_LINK				=>	array( "class" => "Link"			,	"anchor" => "リンク"						, "url" => "/link.html"				, 	"subject" => "リンク情報" ) ,
+) ;
+
+//
+// メールアドレス
+//
+//global	$_SERVER ;
+//$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+
+////////////////////////////////////////////////////////////////////
+//
+// 画面表示方法に関わる定義
+//
+////////////////////////////////////////////////////////////////////
+
+//
+// 入力文字数抑制
+//
+define( "MAX_USERNAME"			,	20	) ;		// ユーザー名
+define( "MAX_USERNO"			,	11	) ;		// 会員番号
+define( "MAX_LOGINID"			,	16	) ;		// ログインID
+define( "MAX_PASSWD"			,	16	) ;		// パスワード
+define( "MAX_LAST_NAME"			, 	5	) ;
+define( "MAX_FIRST_NAME"		,	5	) ;
+define( "MAX_LAST_KANA"			,	10	) ;
+define( "MAX_FIRST_KANA"		,	10	) ;
+define( "MAX_EMAIL"				,	60	) ;		// ｅメールアドレス
+define( "MAX_YEAR"				,	4	) ;		// 年
+define( "MAX_MONTH"				,	2	) ;		// 月
+define( "MAX_DAY"				,	2	) ;		// 日
+define( "MAX_ZIP1"				,	3	) ;		// 郵便番号１
+define( "MAX_ZIP2"				,	4	) ;		// 郵便番号２
+define( "MAX_CITY"				,	6	) ;		// 市町村
+define( "MAX_COUNTRY"			,	12	) ;
+define( "MAX_ADDR1"				,	40	) ;
+define( "MAX_ADDR2"				,	40	) ;
+define( "MAX_TEL1"				,	6	) ;
+define( "MAX_TEL2"				,	4	) ;
+define( "MAX_TEL3"				,	4	) ;
+define( "MAX_TEXTCOL"			,	40	) ;
+define( "MAX_TEXTROW"			,	5	) ;
+define( "MAX_INFO"				,	128	) ;
+define( "MAX_SPECIAL"			,	128	) ;
+define( "MAX_MISC"				,	128	) ;
+define( "MAX_INFO_CATCH"		,	128	) ;
+define( "MAX_JOB"				,	15	) ;
+define( "MAX_COMPANY"			,	20	) ;
+define( "MAX_TITLE"				,	10	) ;
+define( "MAX_CATEGORY"			,	10	) ;
+define( "MAX_SCHOOL"			,	20	) ;
+define( "MAX_MHIST_INFO"		,	20	) ;
+define( "MAX_LICENSE"			,	40	) ;
+define( "MAX_HOBBY"				,	40	) ;
+define( "MAX_ASSET_MISC"		,	40	) ;
+define( "MAX_TASTES"			,	40	) ;
+define( "MAX_RELIGION"			,	40	) ;
+define( "MAX_AGE"				,	3	) ;
+define( "MAX_HEIGHT"			,	3	) ;
+define( "MAX_INCOME"			,	5	) ;
+define( "MAX_URL"				,	60	) ;
+define( "MAX_POINT"				,	15	) ;		// ポイント系桁数
+
+define( "MAX_CATEGORYNAME"		,	40	) ;		// カテゴリ名
+define( "MAX_CORPNAME"			,	40	) ;		// 社名
+define( "MAX_ADDR"				,	50	) ;		// 住所１・２
+define( "MAX_TEL"				,	5	) ;		// 電話番号
+
+define( "MAX_ACTIVITIES"		,	50	) ;		// 事業内容
+define( "MAX_CAPITAL"			,	6	) ;		// 資本金
+
+define( "MAX_MONEY"				,	20	) ;		// 金銭共通
+
+
+define( "MAX_TOPICS_SUBJECT"	,	50	) ;		// トピックスタイトル
+define( "MAX_EVENT_SUBJECT"		,	30	) ;
+define( "MAX_EVENT_BODY"		,	100	) ;
+define( "MAX_EVENT_URL"			,	60	) ;
+
+define( "MAX_MAIL_SUBJECT"		,	50	) ;
+
+//
+// リスト表示関連
+//
+define( "NUMBER_PER_REPORT"		,	1	) ;		// 行数／ページ
+define( "NUMBER_PER_VOICE"		,	5	) ;		// 行数／ページ
+
+//
+// 画像表示関連
+//
+define( "DEF_TOPIMAGE_WID"				,	144	) ;
+define( "DEF_TOPIMAGE_HGT"				,	105	) ;
+
+define( "DEF_MEMBERPHOTO_WID"			,	144	) ;
+define( "DEF_MEMBERPHOTO_HGT"			,	105	) ;
+
+define( "DEF_PROVIDEPHOTO_WID"			,	256	) ;
+define( "DEF_PROVIDEPHOTO_HGT"			,	320	) ;
+
+define( "DEF_CORP_PHOTO_WID"			,	144	) ;
+define( "DEF_CORP_PHOTO_HGT"			,	105	) ;
+
+define( "DEF_TOP_MAINPRODUCT_PHOTO_WID"	,	50	) ;
+define( "DEF_TOP_MAINPRODUCT_PHOTO_HGT"	,	50	) ;
+
+define( "DEF_LIST_PRODUCT_PHOTO_WID"	,	135	) ;
+define( "DEF_LIST_PRODUCT_PHOTO_HGT"	,	115	) ;
+
+define( "SELF_PHOTO_WID"				,	200	) ;
+define( "SELF_PHOTO_HGT"				,	150	) ;
+
+define( "MAP_PHOTO_WID"					,	180	) ;
+define( "MAP_PHOTO_HGT"					,	130	) ;
+
+define( "DEF_FACE_PHOTO_WID"			,	90	) ;
+define( "DEF_FACE_PHOTO_HGT"			,	120	) ;
+
+define( "DEF_ITEM_PHOTO_WID"			,	192	) ;
+define( "DEF_ITEM_PHOTO_HGT"			,	144	) ;
+define( "DEF_ITEM_TOP_WID"				,	50	) ;
+define( "DEF_ITEM_TOP_HGT"				,	50	) ;
+
+define( "DEF_BANNER_L_WID"				,	468	) ;
+define( "DEF_BANNER_L_HGT"				,	60	) ;
+
+define( "DEF_BANNER_M_WID"				,	234	) ;
+define( "DEF_BANNER_M_HGT"				,	60	) ;
+
+define( "DEF_BANNER_S_WID"				,	125	) ;
+define( "DEF_BANNER_S_HGT"				,	125	) ;
+
+define( "DEF_BANNER_U_WID"				,	120	) ;
+define( "DEF_BANNER_U_HGT"				,	60	) ;
+
+define( "DEF_ICON_WID"					,	80	) ;
+define( "DEF_ICON_HGT"					,	80	) ;
+
+////////////////////////////////////////////////////////////////////
+//
+// その他の定数定義
+//
+////////////////////////////////////////////////////////////////////
+
+////////////////////////////////////////////////////////////////////
+//
+// 文字列を伴う配列定義
+//
+////////////////////////////////////////////////////////////////////
+
+// イベント
+define( "DEF_EVENT_PRIORITY_NONE"	,	0 ) ;		// 指定なし
+define( "DEF_EVENT_PRIORITY_EVER"	,	1 ) ;		// 常時
+
+global	$arEventPriority ;
+$arEventPriority = array(
+	DEF_EVENT_PRIORITY_NONE	=>	"指定なし" ,
+	DEF_EVENT_PRIORITY_EVER	=>	"常時" ,
+) ;
+
+global	$arCheck ;
+$arCheck = array( "なし" , "有り" ) ;
+
+global	$arAnswer ;
+$arAnswer = array( "不可" , "可" ) ;
+
+global	$arJob ;
+$arJob = array() ;
+
+//
+// メール種類
+//
+define( "DEF_MAILTYPE_NORMAL"		,	0	) ;		// 編集中
+define( "DEF_MAILTYPE_INQUIRY"		,	1	) ;		// お問合せ
+define( "DEF_MAILTYPE_INTRODUCE"	,	2	) ;		// 紹介依頼
+define( "DEF_MAILTYPE_EVENT"		,	3	) ;		// イベント申込み
+
+global	$arMailType ;
+$arMailType = array(
+	DEF_MAILTYPE_NORMAL			=> "編集中" ,
+	DEF_MAILTYPE_INQUIRY		=> "お問合せ" ,
+	DEF_MAILTYPE_INTRODUCE		=> "紹介依頼" ,
+	DEF_MAILTYPE_EVENT			=> "イベント申込み" ,
+) ;
+
+// バナー種類
+$_FUNC_NO = 1 ;
+define( "DEF_BANNER_IMAGE"		,	$_FUNC_NO ++ ) ;
+define( "DEF_BANNER_TEXT"		,	$_FUNC_NO ++ ) ;
+define( "DEF_BANNER_IMAGE_MINI"	,	$_FUNC_NO ++ ) ;
+define( "DEF_BANNER_TEXT_MINI"	,	$_FUNC_NO ++ ) ;
+
+$arBanner = array(
+	DEF_BANNER_IMAGE		=>	"画像" ,
+	DEF_BANNER_TEXT			=>	"テキスト" ,
+	DEF_BANNER_IMAGE_MINI	=>	"画像（mini）" ,
+	DEF_BANNER_TEXT_MINI	=>	"テキスト（mini）" ,
+) ;
+
+// 固定文章用
+$_FUNC = 100 ;
+define( "DEF_PAGE_PRIVACY"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_RULES"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_PROGRAM"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_ORDERSLAW"	,	$_FUNC ++ ) ;
+define( "DEF_PAGE_EYECATCH"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_SUPPORT"		,	$_FUNC ++ ) ;
+
+global $arStyle ;
+$arStyle = array() ;
+
+//
+// メルマガフラグ
+//
+define( "DEF_MAILTOHOME"			,	1	) ;		// 自宅メールアドレスへ
+define( "DEF_MAILTOPORT"			,	2	) ;		// 携帯メールアドレスへ
+
+global	$arMailTo ;
+$arMailTo = array(
+	DEF_MAILTOHOME => "自宅メールアドレスへ" ,
+	DEF_MAILTOPORT => "携帯メールアドレスへ" ,
+) ;
+
+////////////////////////////////////////////////////////////////////
+//
+// 商品に関する定義
+//
+////////////////////////////////////////////////////////////////////
+
+define( "MAX_JANCODE"			,	13	) ;		// ＪＡＮコード
+define( "MAX_PRODUCTNAME"		,	40	) ;		// 商品名
+define( "MAX_PRICE"				,	8	) ;		// 価格
+define( "MAX_STANDARD"			,	40	) ;		// 規格(サイズ)
+define( "MAX_NET"				,	5	) ;		// 容量
+define( "MAX_TAG"				,	8	) ;		// 単位
+define( "MAX_UNIT"				,	5	) ;		// 内容数
+
+define( "DEF_ITEM_ICON_S_WID"	,	80	) ;
+define( "DEF_ITEM_ICON_S_HGT"	,	80	) ;
+define( "DEF_ITEM_ICON_M_WID"	,	270	) ;
+define( "DEF_ITEM_ICON_M_HGT"	,	180	) ;
+define( "DEF_ITEM_ICON_L_WID"	,	360	) ;
+define( "DEF_ITEM_ICON_L_HGT"	,	240	) ;
+define( "DEF_ITEM_BANNER_S_WID"	,	176	) ;
+define( "DEF_ITEM_BANNER_S_HGT"	,	88	) ;
+define( "DEF_ITEM_BANNER_L_WID"	,	432	) ;
+define( "DEF_ITEM_BANNER_L_HGT"	,	64	) ;
+define( "DEF_ITEM_PORTRAIT_WID"	,	90	) ;
+define( "DEF_ITEM_PORTRAIT_HGT"	,	120	) ;
+
+//
+// 優先度
+global $arPriority ;
+$arPriority = array(
+	1 => "１" ,
+	2 => "２" ,
+	3 => "３" ,
+	4 => "４" ,
+	5 => "５" ,
+) ;
+
+define( "DEF_DELIVERY_SHEET_ORDER"	, 1		) ; // 注文書
+define( "DEF_DELIVERY_SHEET_BILL"	, 2		) ; // 納品書
+define( "DEF_DELIVERY_SHEET_CHECK"	, 4		) ; // チェックシート
+
+?>

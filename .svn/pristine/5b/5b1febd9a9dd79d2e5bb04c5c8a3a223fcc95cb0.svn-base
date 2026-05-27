@@ -1,0 +1,127 @@
+<?php
+	require_once( "../../lib/system.php") ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションから自分のIDを取得する。
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_level = $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	global	$arNavi ;
+
+	// 自社情報が登録されていない場合、編集画面へ移動する
+	$obCorp = new PARTS_Corp() ;
+	$arCorp = $obCorp -> getOwner() ;
+
+	$bConfig = true ;
+	if ( count( $arCorp ) == 0 )
+	{
+		$bConfig = false ;
+		$location = sprintf( "Location: %s" , $arNavi[ FUNC_SELF ][ "url" ] ) ;
+		header( $location ) ;
+	}
+	
+	if ( $bConfig == true )
+	{
+		$menu = FUNC_TOPMENU ;
+	
+		$blams = new BLAMS() ;
+	
+		$screentype = "menu" ;
+		$funcname = $blams -> GetFuncName( $menu ) ;
+		$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+		$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+		$data = FetchMenu( $blams , $login_level ) ;
+	
+		$contents = $blams -> fetchContents( $data ) ;
+	
+		$blams -> PrintBody( $header , $footer , $contents ) ;
+	}
+	exit ;
+
+// 
+// メニュー
+// 
+function	FetchMenu( $blams , $login_level )
+{
+	global $arPermission ;
+	global $arMenuTitle ;
+	global $arFunction ;
+	global $arFunctionTitle ;
+	global $arNavi ;
+
+	$arMenu = array() ;
+
+	$menucnt = 0 ;
+	for( $menu = 0 ; $menu < count( $arMenuTitle ) ; $menu ++ )
+	{
+		// メニューの項目を計算する。
+		$cnt = 0 ;
+		$keys = array_keys( $arNavi ) ;
+		for ( $i = 0 ; $i < count( $arNavi ) ; $i ++ )
+		{
+			// メニュー項目の番号が同じものを検索
+			if ( $arNavi[ $keys[ $i ] ][ 0 ] == $menu )
+			{
+				// メニューの表示が許可されているか
+				if ( empty( $arPermission[ $keys[ $i ] ] ) == false &&
+					empty( $arPermission[ $keys[ $i ] ][ $login_level ] ) == false )
+				{
+					if ( $arPermission[ $keys[ $i ] ][ $login_level ] > 0 )
+					{
+						$cnt ++ ;
+					}
+				}
+			}
+		}
+
+		if ( $cnt > 0 )
+		{
+			$arData = array() ;
+			
+			// メニュー項目を表示
+			if ( $arMenuTitle[ $menu ] != "" )
+			{
+				$arData[ "title" ] = $arMenuTitle[ $menu ] ;
+			}
+
+			// メニューリストの表示
+			$keys = array_keys( $arNavi ) ;
+			$vals = array_values( $arNavi ) ;
+			for ( $list = 0 ; $list < count( $arNavi ) ; $list ++ )
+			{
+				$funcno   = $keys[ $list ] ;
+				$menuid   = $vals[ $list ][ 0			] ;
+
+				// メニュー項目の番号が同じものを検索
+				if ( $menuid == $menu )
+				{
+					// メニューの表示が許可されているか
+					if ( empty( $arPermission[ $funcno ] ) == false &&
+						empty( $arPermission[ $funcno ][ $login_level ] ) == false )
+					{
+						if ( $arPermission[ $funcno ][ $login_level ] > 0 )
+						{
+							// URLがある場合、リンクを表示する
+							$arData[ "item" ][] = $vals[ $list ] ;
+						}
+					}
+				}
+			}
+			
+			$arMenu[] = $arData ;
+			$menucnt ++ ;
+		}
+	}
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "menu_data" , $arMenu ) ;
+	$data = $tmpl -> fetch( "menu.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+?>

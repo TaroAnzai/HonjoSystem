@@ -1,0 +1,18 @@
+--//
+--// 通信情報
+--//
+DROP TABLE terminal_data ;
+CREATE TABLE terminal_data(
+	terminalid			serial primary key ,								--// index
+	command				text not null ,										--// コマンド名
+	filename			text not null ,										--// ファイル名
+	data				text not null ,										--// 電文
+	create_date			timestamp not null default( LOCALTIMESTAMP(0) ) ,	--// 作成日付
+	update_date			timestamp not null default( LOCALTIMESTAMP(0) )		--// 更新日付
+) ;
+
+DROP INDEX idx_terminal_data_command ;
+CREATE INDEX idx_terminal_data_command ON terminal_data USING btree (	command	) ;
+
+DROP INDEX idx_terminal_create_date_d ;
+CREATE INDEX idx_terminal_create_date_d ON terminal_data USING btree ( date_trunc( 'day' , create_date ) ) ;

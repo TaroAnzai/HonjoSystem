@@ -1,0 +1,220 @@
+// 初期プルダウンの表示
+function	SelectCategoryList( category1 , category2 , category3 , form , alias )
+{
+	var objDest ;
+
+	objDest = document.getElementById( form ).elements[ alias + '_category1' ] ;
+
+	if ( category1 == -1 )
+	{
+		objDest.selectedIndex = 0 ;
+	}
+	else
+	{
+		objDest.selectedIndex = 0 ;
+		cnt = objDest.length ;
+		for ( i = 1 ; i < cnt ; i ++ )
+		{
+			if ( objDest.options[ i ].value == category1 )
+			{
+				objDest.selectedIndex = i ;
+				break ;
+			}
+		}
+	}
+	ChangeCategory2( category2 , form , '' , alias ) ;
+	ChangeCategory3( category3 , form , '' , alias ) ;
+	
+	if ( category1 != -1 )
+	{
+		displayList( "id" + category1 + "c" , true ) ;
+
+		if ( category2 != -1 )
+		{
+			displayList( "id" + category1 + "-" + category2 + "c" , true ) ;
+		}
+	}
+}
+
+// カテゴリーの切り替え
+function	ChangeCategory2( category2 , form , items , alias )
+{
+	var objSrc ;
+	var objDest1 ;
+	var objDest2 ;
+	var objDest3 ;
+
+	var	cnt ;
+	var	category1 ;
+	
+	objDest1 = document.getElementById( form ).elements[ alias + '_' + items + 'category1' ] ;
+	objDest2 = document.getElementById( form ).elements[ alias + '_' + items + 'category2' ] ;
+
+	if ( !objDest2 )
+		return false ;
+	
+	cnt = objDest2.length ;
+	objDest2.selectedIndex = -1 ;
+	for ( i = 0 ; i  < cnt ; i ++ )
+	{
+		objDest2.options[ 0 ] = null ;
+	}
+	
+	if ( form != "copy_form" )
+	{
+		objDest3 = document.getElementById( form ).elements[ alias + "_" + items + 'category3' ] ;
+		if ( objDest3 )
+		{
+			cnt = objDest3.length ;
+			objDest3.selectedIndex = -1 ;
+			for ( i = 0 ; i  < cnt ; i ++ )
+			{
+				objDest3.options[ 0 ] = null   ;
+			}
+		}
+	}
+
+	var	caption = "" ;
+	if ( form == "edit_form" )
+	{
+		caption = "新規作成" ;
+	}
+	else
+	{
+		caption = "---" ;
+	}
+	
+	if ( objDest1 )
+	{
+		i = objDest1.selectedIndex ;
+		if ( i != -1 )
+		{
+			category1 = objDest1.options[ i ].value ;
+
+			objSrc = document.getElementById( "category" + category1 ) ;
+			
+			objDest2.options[ 0 ] = new Option( caption , -1 ) ;
+
+			if ( form != "copy_form" )
+			{
+				objDest3.options[ 0 ] = new Option( caption , -1 ) ;
+			}
+			
+			if ( objSrc )
+			{
+				cnt = objSrc.elements.length ;
+				for ( i = 0 ; i < cnt ; i ++ )
+				{
+					objDest2.options[ i + 1 ] = new Option( objSrc.elements[ i ].value , objSrc.elements[ i ].name ) ;
+					
+					if ( objDest2.options[ i + 1 ].value == category2 )
+					{
+						objDest2.selectedIndex = i + 1 ;
+					}
+				}
+				if ( category2 == -1 )
+				{
+					objDest2.selectedIndex = 0 ;
+				}
+			}
+		}
+	}
+}
+
+// カテゴリーの切り替え
+function	ChangeCategory3( category3 , form , items , alias )
+{
+	var objSrc ;
+	var objDest2 ;
+	var objDest3 ;
+
+	var	cnt ;
+	var	category1 ;
+	var	category2 ;
+
+	objDest1 = document.getElementById( form ).elements[ alias + "_" + items + 'category1' ] ;
+	objDest2 = document.getElementById( form ).elements[ alias + "_" + items + 'category2' ] ;
+	objDest3 = document.getElementById( form ).elements[ alias + "_" + items + 'category3' ] ;
+
+	if ( !objDest3 )
+		return false ;
+
+	cnt = objDest3.length ;
+	objDest3.selectedIndex = -1 ;
+	for ( i = 0 ; i  < cnt ; i ++ )
+	{
+		objDest3.options[ 0 ] = null   ;
+	}
+
+	var	caption = "" ;
+	if ( form == "edit_form" )
+	{
+		caption = "新規作成" ;
+	}
+	else
+	{
+		caption = "---" ;
+	}
+
+	if ( objDest2 )
+	{
+		i = objDest1.selectedIndex ;
+		j = objDest2.selectedIndex ;
+		if ( i != -1 && j != -1 )
+		{
+			category1 = objDest1.options[ i ].value ;
+			category2 = objDest2.options[ j ].value ;
+
+			objSrc = document.getElementById( "category" + category1 + "-" + category2 ) ;
+
+			objDest3.options[ 0 ] = new Option( caption , -1 ) ;
+	
+			if ( objSrc )
+			{
+				cnt = objSrc.elements.length ;
+				for ( i = 0 ; i < cnt ; i ++ )
+				{
+					objDest3.options[ i + 1 ] = new Option( objSrc.elements[ i ].value , objSrc.elements[ i ].name ) ;
+					if ( objDest3.options[ i + 1 ].value == category3 )
+					{
+						objDest3.selectedIndex = i + 1 ;
+					}
+				}
+				
+				if ( category3 == -1 )
+				{
+					objDest3.selectedIndex = 0 ;
+				}
+			}
+		}
+	}
+}
+
+function	displayList( id , display )
+{
+	var value = "none" ;
+	var objList			= document.getElementById( id ) ;
+	var objListOpen		= document.getElementById( id + "o" ) ;
+	var objListClose	= document.getElementById( id + "c" ) ;
+	
+	if ( display == true )
+	{
+		value = "block" ;
+		if ( objListOpen )
+			objListOpen.style.display = "none" ;
+			
+		if ( objListClose )
+			objListClose.style.display = "block" ;
+	}
+	else
+	{
+		if ( objListOpen )
+			objListOpen.style.display = "block" ;
+
+		if ( objListClose )
+			objListClose.style.display = "none" ;
+	}
+
+	if ( objList )
+		objList.style.display = value ;
+}

@@ -1,0 +1,31 @@
+function PrintPagePopup( cartid , time )
+{
+	var url ;
+	url = "./pdf_list.php?cartid=" + cartid + "&sn=" + time ;
+	window.open( url , 'printpdf' , 'location=No,directories=No,status=No,menubar=No,titlebar=No' ) ;
+}
+
+// 指定のフォームを転送する。
+function	SubmitForm( id , action , obj , target )
+{
+	target = target || "" ;
+
+	// id から フォームのオブジェクトを取得する
+	var objForm = document.getElementById( id ) ;
+	if ( objForm )
+	{
+		var newEle = document.createElement( "input" ) ;
+		newEle.name = obj.name ;
+		newEle.value = obj.value ;
+		newEle.type = "hidden" ; 
+		
+		objForm.appendChild( newEle ) ;
+		
+		objForm.action = action ;
+		if( target != "" )
+		{
+			objForm.target = target ;
+		}
+		objForm.submit() ;
+	}
+}

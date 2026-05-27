@@ -1,0 +1,485 @@
+<?php
+ini_set( "display_errors" , 1 ) ;
+
+require_once( "class/mpdf/mpdf.php" ) ;
+require_once( "class/corp.class.php" ) ;
+require_once( "class/template.class.php" ) ;
+
+define( "GOTHIC"	, "kozgopromedium" ) ;
+define( "PGOTHIC"	, "kozgopromedium" ) ;
+define( "MINCHO"	, "kozminproregular" ) ;
+define( "PMINCHO"	, "kozminproregular" ) ;
+
+// テンプレートエンコードが未定義の場合、初期値を設定する
+if ( defined( "DEF_TEMPLATE_ENCODE" ) != TRUE )
+	define( "DEF_TEMPLATE_ENCODE" , "utf8" ) ;
+
+// 内部エンコードが未定義の場合、初期値を設定する
+if ( defined( "DEF_INTERNAL_ENCODE" ) != TRUE )
+	define( "DEF_INTERNAL_ENCODE" , "sjis-win" ) ;
+
+class PDF_template extends mPDF
+{
+	var	$layout			= array(
+							"size"			=> array( 210 , 297 ) ,			// width height ( mm )
+							"margin"		=> array( 5 , 10 , 0 , 10 ) ,	// top right bottom left ( mm )
+							"font_size"		=> 9 ,							// font size ( pixcel )
+							"font_family"	=> "kozgopromedium" ,			// font name
+						) ;
+
+	var	$inner			= array(
+							"size"			=> array( 0 , 0 ) ,				// width height ( mm )
+							"margin"		=> array( 0 , 0 , 0 , 0 ) ,		// top right bottom left ( mm )
+							"font_size"		=> 9 ,							// font size ( pixcel )
+							"font_family"	=> "kozgopromedium" ,			// font name
+						) ;
+
+	var $header			= array(
+							"size"			=> array( 0 , 0 ) ,				// width height ( mm )
+							"margin"		=> array( 10 , 0 , 0 , 0 ) ,	// top right bottom left ( mm )
+							"font_size"		=> 9 ,							// font size ( pixcel )
+							"font_family"	=> "kozgopromedium" ,			// font name
+						) ;
+
+	var $footer			= array(
+							"size"			=> array( 0 , 0 ) ,				// width height ( mm )
+							"margin"		=> array( 15 , 0 , 0 , 0 ) ,	// top right bottom left ( mm )
+							"font_size"		=> 9 ,							// font size ( pixcel )
+							"font_family"	=> "kozgopromedium" ,			// font name
+						) ;
+
+	var $top			= array(
+							"size"			=> array( 0 , 0 ) ,				// width height ( mm )
+							"margin"		=> array( 0 , 0 , 0 , 0 ) ,		// top right bottom left ( mm )
+							"font_size"		=> 18 ,							// font size ( pixcel )
+							"font_family"	=> "kozgopromedium" ,			// font name
+						) ;
+
+	var	$tmpl			= DEF_DEFAULT_TEMPLATENAME ;
+	var	$tmplDir		= "" ;
+
+	var	$tmplHeader		= "pdf_header.tmpl" ;
+	var	$tmplFooter		= "pdf_footer.tmpl" ;
+
+	var	$mb_creator		= "" ;	// non-encode string ( internal encoding )
+
+	var	$header_align	= "C" ;
+	var	$footer_align	= "C" ;
+	
+	var	$arCorp			= array() ;
+	var $headerImage	= "" ;
+	var $footerImage	= "" ;
+
+	var $headerSubject	= "" ;
+	var $footerSubject	= "" ;
+
+	function __construct( $orientation = 'P', $format = 'A4' , $tmpl = DEF_DEFAULT_TEMPLATENAME , $tmplDir = "" )
+	{
+		parent::__construct(	DEF_INTERNAL_ENCODE ,				// character code
+								$format ,							// page layout
+								$this -> layout[ "font_size" ] ,	// default font size
+								$this -> layout[ "font_family" ] ,	// default font
+								$this -> layout[ "margin" ][ 3 ] ,	// left margin
+								$this -> layout[ "margin" ][ 1 ] ,	// right margin
+								$this -> layout[ "margin" ][ 0 ] ,	// top margin
+								$this -> layout[ "margin" ][ 2 ] ,	// bottom margin
+								10 ,	// header margin
+								$this -> footer[ "size" ][ 1 ] ,	// footer margin
+								$orientation
+							) ;
+
+		$this -> layout[ "size" ][ 0 ] = $this -> w ;
+		$this -> layout[ "size" ][ 1 ] = $this -> h ;
+
+		$this -> tmpl		= $tmpl ;
+		$this -> tmplDir	= $tmplDir ;
+	}
+
+	function init( $header = true , $footer = true )
+	{
+		$this -> inner[ "size" ][ 0 ] = $this -> layout[ "size" ][ 0 ] - $this -> layout[ "margin" ][ 1 ] - $this -> layout[ "margin" ][ 3 ] ;
+		$this -> inner[ "size" ][ 1 ] = $this -> layout[ "size" ][ 1 ] - $this -> layout[ "margin" ][ 0 ] - $this -> layout[ "margin" ][ 2 ] ;
+
+		$this -> header[ "size" ][ 0 ] = $this -> inner[ "size" ][ 0 ] ;
+		$this -> footer[ "size" ][ 0 ] = $this -> inner[ "size" ][ 0 ] ;
+
+		$this -> setHeaderMargin( $this -> header[ "margin" ][ 0 ] ) ;
+		$this -> setFooterMargin( $this -> footer[ "margin" ][ 0 ] ) ;
+		$this -> setMargins( $this -> layout[ "margin" ][ 3 ] , $this -> layout[ "margin" ][ 0 ] , $this -> layout[ "margin" ][ 1 ] ) ;
+		$this -> setPrintHeader( $header ) ;
+		$this -> setPrintFooter( $footer ) ;
+	}
+
+	// ヘッダー(元からあるHeader関数は中身が空なので上書きして使用する仕組み)
+	function	Header()
+	{
+		$file = sprintf( "%s/%s" , $this -> tmplDir , $this -> tmplHeader ) ;
+
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+		$img = sprintf( "%s/pdf/%s" , $tmpl -> template_dir , $this -> headerImage ) ;
+
+		$tmpl -> assign( "inner"		, $this -> header[ "size" ][ 0 ] ) ;
+		$tmpl -> assign( "username"		, $this -> creator  ) ;
+		$tmpl -> assign( "subject"		, $this -> headerSubject  ) ;
+		$header = $tmpl -> fetch( $file ) ;
+		unset( $tmpl ) ;
+
+		if ( empty( $this -> headerImage ) == false )
+		{
+			$auto_page_break = $this->AutoPageBreak;
+			$this -> SetAutoPageBreak( false , 0 ) ;
+			$this -> Image( $img , 0 , 0 , $page_width , $page_height , '' , '' , '', false , 300 , '' , false , false , 0 ) ;
+			$this -> SetAutoPageBreak( $auto_page_break , PDF_MARGIN_BOTTOM ) ;
+		}
+		
+		$x = $this -> header[ "margin" ][ 1 ] ;
+		$y = $this -> header[ "margin" ][ 0 ] ;
+
+		$this -> setXY( $x , $y ) ;
+
+		$this -> writeHTMLEncoding( $header , false , false , false , false , $this -> header_align ) ;
+	}
+
+	function	Footer()
+	{
+		$file = sprintf( "%s/%s" , $this -> tmplDir , $this -> tmplFooter ) ;
+
+		$page		= $this -> page ;
+		$all_page	= "{pagetotal}" ;
+		$this -> AliasNbPages('{pagetotal}');
+
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+		$tmpl -> assign( "inner"		, $this -> footer[ "size" ][ 0 ] ) ;
+		$tmpl -> assign( "year"			, date( "Y" ) ) ;
+		$tmpl -> assign( "subject"		, $this -> footerSubject ) ;
+		$tmpl -> assign( "page"			, $page ) ;
+		$tmpl -> assign( "all_page"		, $all_page ) ;
+		$tmpl -> assign( "corp_data"	, $this -> arCorp ) ;
+		$footer = $tmpl -> fetch( $file ) ;
+		unset( $tmpl ) ;
+
+		$this -> setXY( 0 , $this -> layout[ "size" ][ 1 ] - $this -> footer[ "size" ][ 1 ] ) ;
+		$this -> writeHTMLEncoding( $footer , false , false , false , false , $this -> footer_align ) ;
+	}
+
+	// エンコード付き HTML出力
+	function writeHTMLEncoding( $html , $mode = 0 , $initialise = true , $close = true )
+	{
+		$html = mb_convert_encoding( $html , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+		parent::writeHTML( $html , $mode , $initialise , $close ) ;
+	}
+	
+	// タイトル行の出力
+	function setTitleLine( $title , $x , $y , $font_size , $tmplFile )
+	{
+		$file = sprintf( "%s/%s" , $this -> tmplDir , $tmplFile ) ;
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+		$tmpl -> assign( "inner"		, $this -> header[ "size" ][ 0 ] ) ;
+		$tmpl -> assign( "title"		, $title ) ;
+		$tmpl -> assign( "font_size"	, $font_size ) ;
+		$data = $tmpl -> fetch( $file ) ;
+		unset( $tmpl ) ;
+		
+		$x = $x + $this -> layout[ "margin" ][ 1 ] ;
+		$y = $y + $this -> layout[ "margin" ][ 0 ] ;
+
+		$this -> setXY( $x , $y , false ) ;
+		$this -> writeHTMLEncoding( $data , false , false , true , false ) ;
+	}
+
+	// リストの表示
+	function	putList( $arHeader , $arList , $start , $page , $max , $x , $y , $tmplFile = "pdf_list.tmpl" , $tmplDir = "common" , $disable_no = false , $fetch = false )
+	{
+		$file = sprintf( "%s/%s" , $tmplDir , $tmplFile ) ;
+
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+		$tmpl -> assign( "start"		, $start ) ;
+		$tmpl -> assign( "page"			, $page ) ;
+		$tmpl -> assign( "max"			, $max ) ;
+		$tmpl -> assign( "header_data"	, $arHeader ) ;
+		$tmpl -> assign( "list_data"	, $arList ) ;
+		$tmpl -> assign( "disable_no"	, $disable_no ) ;
+		$data = $tmpl -> fetch( $file ) ;
+		unset( $tmpl ) ;
+
+		if( $fetch == false )
+		{
+			$x = $x + $this -> layout[ "margin" ][ 1 ] ;
+			$y = $y + $this -> layout[ "margin" ][ 0 ] ;
+	
+			$this -> setXY( $x , $y , false ) ;
+			$this -> writeHTMLEncoding( $data ) ;
+		}
+		else
+		{
+			return $data ;
+		}
+	}
+	
+	// PDFの編集情報を登録する
+	function	setTitle( $title )
+	{
+		$title = mb_convert_encoding( $title , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+		parent::setTitle( $title ) ;
+	}
+
+	function	setSubject( $subject )
+	{
+		$subject = mb_convert_encoding( $subject , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+		parent::SetSubject( $author ) ;
+	}
+
+	function	setAuthor( $author )
+	{
+		$author = mb_convert_encoding( $author , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+		parent::setAuthor( $author ) ;
+	}
+
+	public function SetCreator($creator)
+	{
+		$this -> creator = $creator;
+
+		$creator = mb_convert_encoding( $creator , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+		$this -> mb_creator = $creator;
+	}
+
+	function putToppage( $x = 0 , $y = 0 , $topimg = "top.png" , $logoimg = "logo.png" , $tmplFile = "pdf_top.tmpl" )
+	{
+		$page_width = floor( $this -> getPageWidth() ) ;
+		$page_height = floor( $this -> getPageHeight() ) ;
+		
+		$file = sprintf( "%s/%s" , $this -> tmplDir , $tmplFile ) ;
+
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+
+		$img = sprintf( "%s/pdf/%s" , $tmpl -> template_dir , $topimg ) ;
+
+		$tmpl -> assign( "corp_data"	, $this -> arCorp ) ;
+		$tmpl -> assign( "width"		, $page_width ) ;
+		$tmpl -> assign( "height"		, $page_height ) ;
+		$data = $tmpl -> fetch( $file ) ;
+
+		unset( $tmpl ) ;
+
+		$this -> setPrintHeader( false ) ;
+		$this -> setPrintFooter( false ) ;
+
+		$this -> SetHeaderMargin( 0 ) ;
+		$this -> SetFooterMargin( 0 ) ;
+		
+		$this -> AddPage() ;
+
+		$auto_page_break = $this -> AutoPageBreak ;
+		$this -> SetAutoPageBreak( false , 0 ) ;
+		$this -> Image( $img , 0 , 0 , $page_width , $page_height , '' , '' , '', false , 300 , '' , false , false , 0 ) ;
+		$this -> SetAutoPageBreak( $auto_page_break ) ;
+
+		$this -> setXY( 0 , 0 ) ;
+
+		// title
+		$this -> writeHTMLEncoding( $data ) ;
+
+		$this -> endPage() ;
+	}
+
+	function putBottom( $x = 0 , $y = 0 , $bottomimg = "bottom.png" , $tmplFile = "pdf_bottom.tmpl" )
+	{
+		$page_width = floor( $this -> getPageWidth() ) ;
+		$page_height = floor( $this -> getPageHeight() ) ;
+		
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+		$img = sprintf( "%s/pdf/%s" , $tmpl -> template_dir , $bottomimg ) ;
+		unset( $tmpl ) ;
+
+		$this -> setPrintHeader( false ) ;
+		$this -> setPrintFooter( false ) ;
+
+		$this -> SetHeaderMargin( 0 ) ;
+		$this -> SetFooterMargin( 0 ) ;
+		
+		$this -> AddPage() ;
+
+		$auto_page_break = $this->AutoPageBreak;
+		$this -> SetAutoPageBreak( false , 0 ) ;
+		$this -> Image( $img , 0 , 0 , $page_width , $page_height , '' , '' , '', false , 300 , '' , false , false , 0 ) ;
+		$this -> SetAutoPageBreak( $auto_page_break ) ;
+
+		$this -> endPage() ;
+	}
+
+	function	putBody( $data , $bHeader = true , $strHeader = "" , $bFooter = true , $strFooter = true )
+	{
+		if ( empty( $data ) == false )
+		{
+			$this -> setPrintHeader( $bHeader ) ;
+			$this -> setPrintFooter( $bFooter ) ;
+		
+			$this -> headerSubject = $strHeader ;
+			$this -> footerSubject = $strFooter ;
+		
+			$this -> AddPage() ;
+		
+			$x = PDF_MARGIN_LEFT ;
+			$y = PDF_MARGIN_TOP ;
+	
+			$this -> setXY( $x , $y , false ) ;
+	
+			$this -> writeHTMLEncoding( $data ) ;
+
+			$this -> endPage() ;
+		}
+	}
+	
+	function	putProfile( $arData , $bHeader = true , $strHeader = "" , $bFooter = true , $strFooter = true , $tmplFile = "pdf_profile.tmpl" )
+	{
+		$file = sprintf( "%s/%s" , $this -> tmplDir , $tmplFile ) ;
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+		$tmpl -> assign( "corp_data"	, $arData ) ;
+		$data = $tmpl -> fetch( $file ) ;
+		unset( $tmpl ) ;
+
+		$this -> putBody( $data , $bHeader , $strHeader , $bFooter , $strFooter ) ;
+	}
+
+	function	putProduct( $arData , $bHeader = true , $strHeader = "" , $bFooter = true , $strFooter = true , $tmplFile = "pdf_product.tmpl" )
+	{
+		$file = sprintf( "%s/%s" , $this -> tmplDir , $tmplFile ) ;
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+		$tmpl -> assign( "product_data"	, $arData ) ;
+		$data = $tmpl -> fetch( $file ) ;
+		unset( $tmpl ) ;
+
+		$this -> putBody( $data , $bHeader , $strHeader , $bFooter , $strFooter ) ;
+	}
+
+	function	putOfficer( $arData , $bHeader = true , $strHeader = "" , $bFooter = true , $strFooter = true , $tmplFile = "pdf_officer.tmpl" )
+	{
+		$file = sprintf( "%s/%s" , $this -> tmplDir , $tmplFile ) ;
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+		$tmpl -> assign( "officer_data"	, $arData ) ;
+		$data = $tmpl -> fetch( $file ) ;
+		unset( $tmpl ) ;
+
+		$this -> putBody( $data , $bHeader , $strHeader , $bFooter , $strFooter ) ;
+	}
+
+	function	putHistory( $arData , $bHeader = true , $strHeader = "" , $bFooter = true , $strFooter = true , $tmplFile = "pdf_history.tmpl" )
+	{
+		$file = sprintf( "%s/%s" , $this -> tmplDir , $tmplFile ) ;
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+		$tmpl -> assign( "history_data"	, $arData ) ;
+		$data = $tmpl -> fetch( $file ) ;
+		unset( $tmpl ) ;
+
+		$this -> putBody( $data , $bHeader , $strHeader , $bFooter , $strFooter ) ;
+	}
+
+	function	putPartner( $arData , $bHeader = true , $strHeader = "" , $bFooter = true , $strFooter = true , $tmplFile = "pdf_partner.tmpl" )
+	{
+		$file = sprintf( "%s/%s" , $this -> tmplDir , $tmplFile ) ;
+		$tmpl = new HTML_template( $this -> tmpl ) ;
+		$tmpl -> assign( "partner_data"	, $arData ) ;
+		$data = $tmpl -> fetch( $file ) ;
+		unset( $tmpl ) ;
+
+		$this -> putBody( $data , $bHeader , $strHeader , $bFooter , $strFooter ) ;
+	}
+
+	function	SetHeaderMargin()
+	{
+	}
+
+	function	SetFooterMargin()
+	{
+	}
+
+	function	SetPrintHeader()
+	{
+	}
+
+	function	SetPrintFooter()
+	{
+	}
+
+	function GetX()
+	{
+		return $this -> x ;
+	}
+	
+	function GetY()
+	{
+		return $this -> y ;
+	}
+
+	/**
+	* Returns the page width in units.
+	* @param int $pagenum page number (empty = current page)
+	* @return int page width.
+	* @author Nicola Asuni
+	* @access public
+	* @since 1.5.2
+	* @see getPageDimensions()
+	*/
+	public function getPageWidth($pagenum='') {
+		if (empty($pagenum)) {
+			return $this->w;
+		}
+		return $this->pagedim[$pagenum]['w'];
+	}
+
+	/**
+	* Returns the page height in units.
+	* @param int $pagenum page number (empty = current page)
+	* @return int page height.
+	* @author Nicola Asuni
+	* @access public
+	* @since 1.5.2
+	* @see getPageDimensions()
+	*/
+	public function getPageHeight($pagenum='') {
+		if (empty($pagenum)) {
+			return $this->h;
+		}
+		return $this->pagedim[$pagenum]['h'];
+	}
+
+	function	EndPage()
+	{
+	}
+
+	// 出力後の高さを得る
+	function	getHeight( $html , $orientation = "" )
+	{
+		$pdf = clone $this ;
+
+		$pdf -> autoPageBreak = true ;
+		$pdf -> restoreBlockPageBreaks = false ;
+
+		if ( $pdf -> page != 0 )
+		{
+			$pdf -> page = 0 ;
+			$pdf -> pages = array() ;
+		}
+		
+		if( $orientation != "" )
+			$pdf -> addPage( $orientation ) ;
+		else
+			$pdf -> addPage() ;
+
+		$currentY = 0 ;
+		$currentPage = $pdf -> page ;
+		$pdf -> setY( $currentY ) ;
+
+		$pdf -> writeHTMLEncoding( $html ) ;
+
+		if ( $currentPage < $pdf -> page )
+			$y = -1 ;
+		else
+			$y = $pdf -> getY() - $currentY ;
+
+		unset( $pdf ) ;
+		return $y ;
+	}
+}
+
+?>

@@ -1,0 +1,259 @@
+<?php
+/**
+* BLAMS 基本関数郡 取引先情報用クラス
+*
+* 業務履歴情報用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Occupation extends DB_Common
+{
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "occupation_data" ;
+		$alias		= "ocp" ;
+		$primarykey	= "occupationid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_CORP ;
+
+		$this -> searchkey = array(
+				"S_CORPID"		,
+				"S_YEAR"		,
+				"S_MON"			,
+			) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$alias = $this -> alias ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "not_occupationid" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+		
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+		
+		// occupationidによる検索（否定）
+		if ( $not_occupationid != -1 && $not_occupationid != "" )
+			$sql .= sprintf( "AND %s.occupationid != %d " , $this -> alias , $this -> mb_addslashes( $not_occupationid ) ) ;
+
+		// 会社ID
+		if ( $corpid != -1 && $corpid != "" )
+			$sql .= sprintf( "AND %s.corpid = '%s' " , $this -> alias , $this -> mb_addslashes( $corpid ) ) ;
+		
+		// 年
+		if ( $year != -1 && $year != "" )
+			$sql .= sprintf( "AND %s.year = '%s' " , $this -> alias , $this -> mb_addslashes( $year ) ) ;
+		
+		// 月
+		if ( $month != -1 && $month != "" )
+			$sql .= sprintf( "AND %s.month = '%s' " , $this -> alias , $this -> mb_addslashes( $month ) ) ;
+		
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.year , " , $this -> alias ) ;
+				$sql .= sprintf( "%s.month , " , $this -> alias ) ;
+				$sql .= sprintf( "%s.corpid " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+	
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+				
+			if( ${ $alias . "_corpid" } == -1 )
+				$error .= "・会社を選択してください。\n" ;
+			
+			// 年月
+			if( ${ $alias . "_year" } == "0" && ${ $alias . "_month" } == "0" )
+			{
+				$arWhere = array() ;
+				$arWhere[ "corpid"	] = ${ $alias . "_corpid"	} ;
+				$arWhere[ "year"	] = ${ $alias . "_year"		} ;
+				$arWhere[ "month"	] = ${ $alias . "_month"	} ;
+				
+				if ( $mode == "update" )
+					$arWhere[ "not_occupationid"	] = ${ $alias . "_occupationid"	} ;
+				
+				$arResults = array() ;
+				$arResults = $this -> getData( $arWhere ) ;
+				
+				foreach( $arResults as $arResult )
+				{
+					$message_flg = false ;
+					for( $i = 0 ; $i < 5 ; $i ++ )
+					{
+						$key = sprintf( $alias . "_message%d" , $i + 1 ) ;
+						if( $arResult[ $key ] != "" )
+							$message_flg = true ;
+					}
+					if( $message_flg )
+						$error .= sprintf( "・備考タイトルが既に設定されています。\n" ) ;
+				}
+			}
+			else
+			{
+				if( ${ $alias . "_year" } == "" || ${ $alias . "_month" } == "" )
+				{
+					$error .= "・年月を入力してください。\n" ;
+				}
+				else if( !(preg_match( "/[0-9]/" , ${ $alias . "_year" } ) && preg_match( "/[0-9]/" , ${ $alias . "_month" } ) ) )
+				{
+					$error .= "・年月は半角数字で入力してください。\n" ;
+				}
+				else
+				{
+					if( !checkdate( ${ $alias . "_month" } , 1 , ${ $alias . "_year" } ) )
+					{
+						$error .= "・指定された年月は正しくありません。\n" ;
+					}
+				}
+			}
+			
+			// 内容
+			if( !( ${ $alias . "_year" } == "0" && ${ $alias . "_month" } == "0" ) )
+			{
+				if ( ${ $alias . "_body" } == "" )
+					$error .= "・内容が入力されていません。\n" ;
+			}
+
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+//		$now = date( "Y-m-d H:i:s" ) ;
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ $alias . "_occupationid"	] = -1	;
+		$arParam[ $alias . "_corpid"		] = -1	;
+		$arParam[ $alias . "_body"			] = ""	;
+		$arParam[ $alias . "_year"			] = ""	;
+		$arParam[ $alias . "_month"			] = ""	;
+		$arParam[ $alias . "_message1"		] = ""	;
+		$arParam[ $alias . "_message2"		] = ""	;
+		$arParam[ $alias . "_message3"		] = ""	;
+		$arParam[ $alias . "_message4"		] = ""	;
+		$arParam[ $alias . "_message5"		] = ""	;
+		$arParam[ $alias . "_create_date"	] = $now ;
+		$arParam[ $alias . "_update_date"	] = $now ;
+	}
+	
+	//
+	// 新規データ登録
+	//
+	function insertData( &$arParam )
+	{
+		$result = false ;
+
+		$result = parent::insertData( $arParam , -1 , "" ) ;
+		
+		return $result ;
+	}
+
+	//
+	// 新規データ登録
+	//
+	function updateData( $arParam )
+	{
+		$result = false ;
+	
+		$result = parent::updateData( $arParam , -1 , "" ) ;
+
+		return $result ;
+	}
+
+}
+?>

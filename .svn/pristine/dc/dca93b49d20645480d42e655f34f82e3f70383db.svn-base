@@ -1,0 +1,6 @@
+function PrintPagePopup( cartid , time )
+{
+	var url ;
+	url = "./pdf_list.php?cartid=" + cartid + "&sn=" + time ;
+	window.open( url , 'printpdf' , 'location=No,directories=No,status=No,menubar=No,titlebar=No' ) ;
+}

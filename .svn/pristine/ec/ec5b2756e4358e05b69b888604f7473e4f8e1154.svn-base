@@ -1,0 +1,59 @@
+<?php
+
+// ƒƒjƒ…[‚Ì•\Ž¦
+function	fetchMenu( $func , $menu_top , $menu_middle , $menu_bottom , $category = -1 , $current = -1 )
+{
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	global	$arPresonalFunction ;
+	$funcName = array_search( $func , $arPresonalFunction ) ;
+
+	$arSearch = array() ;
+	$arSearch += $_GET ;
+	$arSearch += $_POST ;
+
+	$menu_cart		= fetchCart( $func , "menu" ) ;
+	$menu_link		= fetchLink( "menu" ) ;
+	$menu_search	= fetchSearch( $func , $arSearch , true , true ) ;
+	$menu_category	= fetchCategory( $func , $category , $current ) ;
+	$menu_profile	= fetchProfile( $func ) ;
+	$navi			= fetchNavi( $func , $menu_category ) ;
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "funcName"			, $funcName ) ;
+	$tmpl -> assign( "corp_data"		, $arCorp ) ;
+	$tmpl -> assign( "navi"				, $navi ) ;
+	$tmpl -> assign( "menu_cart"		, $menu_cart ) ;
+	$tmpl -> assign( "menu_search"		, $menu_search ) ;
+	$tmpl -> assign( "menu_category"	, $menu_category ) ;
+	$tmpl -> assign( "menu_link"		, $menu_link ) ;
+	$tmpl -> assign( "menu_top"			, $menu_top ) ;
+	$tmpl -> assign( "menu_middle"		, $menu_middle ) ;
+	$tmpl -> assign( "menu_bottom"		, $menu_bottom ) ;
+	$tmpl -> assign( "menu_profile"		, $menu_profile ) ;
+	$menu = $tmpl -> fetch( "menu/menu.tmpl" ) ;
+	unset( $tmpl ) ;
+
+	return $menu ;
+}
+
+function	fetchMenuSub( $func )
+{
+	global	$arMenu ;
+	global	$arSubMenu ;
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "func"			, $func ) ;
+	$tmpl -> assign( "menu_data"	, $arMenu ) ;
+	$tmpl -> assign( "submenu_data"	, $arSubMenu ) ;
+	$menu = $tmpl -> fetch( "menu/menu_sub.tmpl" ) ;
+	unset( $tmpl ) ;
+
+	return $menu ;
+}
+
+?>

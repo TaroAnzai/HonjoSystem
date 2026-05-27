@@ -1,0 +1,16 @@
+<?php
+//ini_set( "display_errors" , 1 ) ;
+	require_once( "../../../lib/system.php") ;
+	require_once( "class/member_corp.class" )  ;
+
+	ChkLogin() ;
+	$obMember	= new PARTS_Member() ;
+	$mb_alias	= $obMember -> alias ;
+
+	$arWhere[ "where" ] = sprintf( "AND level <> %d " , DEF_MEMBER_LEVEL_NON ) ;
+	$arMemberList = $obMember -> getListForJSON( $arWhere , 0 , false ) ;
+
+	print json_encode( $arMemberList ) ;
+
+	exit ;
+?>

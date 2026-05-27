@@ -1,0 +1,69 @@
+$(document).ready( function() {
+	$(".single").colorbox();
+});
+
+function ZipcodeSelectPopup( self , target )
+{
+	var formid = self.form.id ;
+	var item = self.name ;
+
+	if ( formid != "" && item != "" )
+	{
+		var objForm = document.getElementById( formid ) ;
+	
+		if ( objForm )
+		{
+			zip1 = objForm.elements[ item + "1" ].value ;
+			zip2 = objForm.elements[ item + "2" ].value ;
+	
+			if ( zip1 != "" )
+			{
+				var url ;
+				url  = "/utility/zipcode/list.php?S_FORMID=" + formid ;
+				url += "&S_ZIP1=" + zip1 ;
+				url += "&S_ZIP2=" + zip2 ;
+				url += "&S_TARGET=" + target ;
+
+				var colorbox		= item + "Colorbox" ;
+				var colorboxClass	= "." + colorbox ;
+				var objHref			= document.getElementById( colorbox ) ;
+				if ( objHref )
+				{
+					$(colorboxClass).colorbox( {href:url , width:"70%", height:"70%", iframe:true} ) ;
+					$(colorboxClass).click() ;
+				}
+			}
+			else
+			{
+				alert( "óXï÷î‘çÜÇ™ì¸óÕÇ≥ÇÍÇƒÇ¢Ç‹ÇπÇÒÅBÅiïîï™ì¸óÕâ¬Åj" ) ;
+			}
+		}
+	}
+}
+
+function downloadPopup( self , cid , target )
+{
+	var formid = self.form.id ;
+	var item = self.name ;
+
+	if ( formid != "" && item != "" )
+	{
+		var objForm = document.getElementById( formid ) ;
+
+		if ( objForm )
+		{
+			var url ;
+			url  = "/member/status_check.php?cid=" + cid ;
+			url += "&target=" + target ;
+
+			var colorbox		= item + "Colorbox-" + cid ;
+			var colorboxClass	= "." + colorbox ;
+			var objHref			= document.getElementById( colorbox ) ;
+			if ( objHref )
+			{
+				$(colorboxClass).colorbox( {href:url , width:"512px", height:"128px", iframe:true} ) ;
+				$(colorboxClass).click() ;
+			}
+		}
+	}
+}

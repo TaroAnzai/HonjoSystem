@@ -1,0 +1,455 @@
+<?php
+/**
+* BLAMS 基本関数郡 諸設定用クラス
+*
+* セッション管理用クラス
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+define( "DEF_SESSIONID_MEMBER"		, "S_ID_MEMBER" ) ;
+define( "DEF_SESSIONID_ADMIN"		, "S_ID_ADMIN" ) ;
+
+//
+// セッションレベル
+$_FUNC = 1 ;
+define( "SESSION_ADMIN"			,	$_FUNC ++	) ;		// サイト管理者
+define( "SESSION_MEMBER"		,	$_FUNC ++	) ;		// 一般会員
+
+require_once( 'class/db.class.php' ) ;
+require_once( 'class/admin.class.php' ) ;
+require_once( 'class/member.class.php' ) ;
+
+class PARTS_Session extends DB_Common
+{
+	var	$obAdmin ;
+	var	$obMember ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "session_data" ;
+		$alias		= "ssn" ;
+		$primarykey	= "sessionid" ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+		
+		
+		if ( $this -> isOpen() == true )
+		{
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+
+			$this -> obAdmin		= new PARTS_Admin( $this -> conn ) ;
+			$this -> obMember		= new PARTS_Member( $this -> conn ) ;
+		}
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = NUMBER_PER_PAGE )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = NUMBER_PER_PAGE )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$arParamList = $this -> fields ;
+		$arParamList[] = "not_sid" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		foreach ( $arParam as $key => $value )
+			${ $key } = $value ;
+		
+		// 指定レベルによってJOIN先を変える
+		$join = "" ;
+		switch ( $level )
+		{
+		case SESSION_ADMIN :
+			$obAdmin = $this -> obAdmin ;
+			if ( $obAdmin -> isOpen() )
+			{
+				$fields .= sprintf( ", %s " , $obAdmin -> makeAliaseFields() ) ;
+				$join .= sprintf( "LEFT JOIN %s %s ON %s.userid = %s.adminid " , $obAdmin -> tname , $obAdmin -> alias , $alias , $obAdmin -> alias ) ;
+			}
+			break ;
+			
+		case SESSION_MEMBER :
+			$obMember = $this -> obMember ;
+			if ( $obMember -> isOpen() )
+			{
+				$fields .= sprintf( ", %s " , $obMember -> makeAliaseFields() ) ;
+				$join .= sprintf( "LEFT JOIN %s %s ON %s.userid = %s.memberid " , $obMember -> tname , $obMember -> alias , $alias , $obMember -> alias ) ;
+			}
+			break ;
+		}
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $alias ) ;
+		$sql .= $join ;
+		$sql .= sprintf( "WHERE %s.%s is not null " , $alias , $primarykey ) ;
+
+		$limit = "" ;
+		if ( ${ $primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $alias , $primarykey , ${ $primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		// sid による検索
+		if ( $sid != -1 )
+			$sql .= sprintf( "AND %s.sid = '%s' " , $alias , $sid ) ;
+
+		if ( $not_sid != -1 )
+			$sql .= sprintf( "AND %s.sid != '%s' " , $alias , $not_sid ) ;
+
+		// userid による検索
+		if ( $userid != -1 )
+			$sql .= sprintf( "AND %s.userid = %d " , $alias , $userid ) ;
+
+		// levelによる検索
+		if ( $level != -1 )
+			$sql .= sprintf( "AND %s.level = %d " , $alias , $level ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY   " ) ;
+				$sql .= sprintf( "%s.active_date    , " , $alias ) ;
+				$sql .= sprintf( "%s.login_date     , " , $alias ) ;
+				$sql .= sprintf( "%s.logout_date    , " , $alias ) ;
+				$sql .= sprintf( "%s.userid         , " , $alias ) ;
+				$sql .= sprintf( "%s.level            " , $alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		return $sql ;
+	}
+
+	function getID()
+	{
+		$SSID = "" ;
+		
+		$sname = session_name() ;
+
+		if ( empty( $_COOKIE[ $sname ] ) != false )
+		{
+			session_start() ;
+			$SSID = session_id() ;
+			$_COOKIE[ $sname ] = $SSID ;
+		}
+		else
+		{
+			$SSID = $_COOKIE[ $sname ] ;
+		}
+		
+		return $SSID ;
+	}
+
+	function getSessionID( $sid , $level )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$sessionid = -1 ;
+		$arSession = $this -> getSessionData( $sid , $level ) ;
+		if ( count( $arSession ) > 0 )
+			$sessionid = $arSession[ $keyname ] ;
+
+		return $sessionid ;
+	}
+
+	function getSessionData( $sid , $level )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$arSession = array() ;
+
+		$arWhere = array() ;
+		$arWhere[ "sid"		]  = $sid ;
+		$arWhere[ "level"	]  = $level ;
+		$arWhere[ "where"	]  = "" ;
+		$arWhere[ "where"	] .= sprintf( "AND %s.active_date >= ( LOCALTIMESTAMP(0) + '-12 hours' ) " , $alias ) ;
+		$arWhere[ "where"	] .= sprintf( "AND %s.logout_date IS NULL " , $alias ) ;
+		$arWhere[ "order"	]  = sprintf( "%s.active_date DESC" , $alias ) ;
+
+		$arSession = $this -> getData( $arWhere ) ;
+		if ( count( $arSession ) > 0 )
+		{
+			$arSession = $arSession[ 0 ] ;
+
+			$arSession[ $alias . "_active_date" ] = "LOCALTIMESTAMP(0)" ;
+			$this -> updateData( $arSession ) ;
+		}
+
+		return $arSession ;
+	}
+
+	function getLastLogin( $userid , $sid )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$result = FALSE ;
+		
+		$login_date = "" ;
+
+		$arWhere = array() ;
+		$arWhere[ "not_sid"	]  = $sid ;
+		$arWhere[ "userid"	]  = $userid ;
+		$arWhere[ "order"	]  = sprintf( "%s.login_date DESC" , $alias ) ;
+
+		$arData = $this -> getData( $arWhere ) ;
+		if ( count( $arData ) > 0 )
+		{
+			$arData = $arData[ 0 ] ;
+			$login_date = $arData[ $alias . "_login_date" ] ;
+		}
+		return $login_date ;
+	}
+
+	function getUserData( $level )
+	{
+		global	$_SESSION ;
+
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+		
+		${ $primarykey } = -1 ;
+		
+		switch ( $level )
+		{
+		case	SESSION_ADMIN :
+			if ( empty( $_SESSION[ DEF_SESSIONID_ADMIN ] ) == false )
+				${ $primarykey } = $_SESSION[ DEF_SESSIONID_ADMIN ] ;
+			break ;
+		case	SESSION_MEMBER :
+			if ( empty( $_SESSION[ DEF_SESSIONID_MEMBER ] ) == false )
+				${ $primarykey } = $_SESSION[ DEF_SESSIONID_MEMBER ] ;
+			break ;
+		}
+		
+		$arResult = array() ;
+		if ( ${ $primarykey } != -1 )
+		{
+			$arWhere = array() ;
+			$arWhere[ $primarykey	] = ${ $primarykey } ;
+			$arWhere[ "level"		] = $level ;
+
+			$arResult = $this -> getData( $arWhere ) ;
+			if ( count( $arResult ) > 0 )
+			{
+				$arResult = $arResult[ 0 ] ;
+			}
+		}
+		
+		return $arResult ;
+	}
+
+	function writeLogin( $userid , $level )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$result = false ;
+		
+		// 30分以内にログアウトしていない同じユーザが存在をする場合はエラー
+		$arData = array() ;
+		$arWhere = array() ;
+		$arWhere[ "userid"	]  = $userid ;
+		$arWhere[ "level"	]  = $level ;
+		$arWhere[ "where"	]  = sprintf( "AND %s.active_date > ( LOCALTIMESTAMP(0) + '-1 minutes' ) " , $this -> alias ) ;
+		$arWhere[ "where"	] .= sprintf( "AND %s.logout_date is null " , $this -> alias  ) ;
+		$arData	= $this -> getData( $arWhere ) ;
+
+		if ( count( $arData ) == 0 )
+		{
+			$sid	= $this -> getID() ;
+			
+			$arSession = array() ;
+			$arSession[ $alias . "_sid"			] = $sid ;
+			$arSession[ $alias . "_userid"		] = $userid ;
+			$arSession[ $alias . "_level"		] = $level ;
+			$arSession[ $alias . "_remote_host"	] = gethostbyaddr( $_SERVER[ 'REMOTE_ADDR' ] ) ;
+			$arSession[ $alias . "_login_date"	] = "LOCALTIMESTAMP(0)" ;
+			$arSession[ $alias . "_logout_date"	] = "NULL" ;
+			$arSession[ $alias . "_active_date"	] = "LOCALTIMESTAMP(0)" ;
+
+			$result = $this -> insertData( $arSession ) ;
+			
+			$sid = "S_ID" ;
+			switch ( $level )
+			{
+			case	SESSION_ADMIN :
+				$sid = DEF_SESSIONID_ADMIN ;
+				break ;
+			case	SESSION_MEMBER :
+				$sid = DEF_SESSIONID_MEMBER ;
+				break ;
+			}
+			
+			global $_SESSION ;
+			if ( isset( $_SESSION[ $sid ] ) == true )
+				unset( $_SESSION[ $sid ] ) ;
+			$_SESSION[ $sid ] = $userid ;
+		}
+		
+		return $result ;
+	}
+	
+	function writeLogout( $level )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$sid = $this -> getID() ;
+
+		$arSession = array() ;
+		$arSession[ $alias . "_logout_date"	] = "LOCALTIMESTAMP(0)" ;
+
+		$arWhere = array() ;
+		$arWhere[ "sid"		]  = $sid ;
+		$arWhere[ "level"	]  = $level ;
+
+		$result = $this -> updateData( $arSession , $arWhere ) ;
+		if ( $result )
+		{
+			session_start() ;
+			$_SESSION = array() ;
+			if ( isset( $_COOKIE[ session_name() ] ) == true )
+				setcookie( session_name() , '' , time() - 86400 , '/' ) ;
+			session_destroy() ;
+			global	$SSID ;
+			if ( isset( $SSID ) == true )
+				unset( $SSID ) ;
+
+			$userid = -1 ;
+			switch ( $level )
+			{
+			case	SESSION_ADMIN :
+				$_SESSION[ DEF_SESSIONID_ADMIN ] = $userid ;
+				break ;
+
+			case	SESSION_MEMBER :
+				$_SESSION[ DEF_SESSION_MEMBER ] = $userid ;
+				break ;
+
+			default :
+				$_SESSION[ 'S_ID' ] = $userid ;
+			}
+		}
+	}
+
+	// ログインのチェック
+	function	checkLogin( $level , $to_url = "" )
+	{
+		$sid		= $this -> getID() ;
+		$sessionid	= $this -> getSessionID( $sid , $level ) ;
+
+		if ( $sessionid == -1 )
+		{
+			global	$_SERVER ;
+			$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+			$NRML = sprintf( "http://%s" , $SERVER_NAME ) ;
+			$SSL = sprintf( "https://%s" , $SERVER_NAME ) ;
+	
+			$url = "" ;
+			switch ( $level )
+			{
+			case	SESSION_ADMIN :
+				if( $to_url == "" )
+					$url = sprintf( "Location: %s/%s/index.php" , $NRML , DEF_SITE_ROOTPATH ) ;
+				else
+					$url = sprintf( "Location: %s/%s/%s" , $NRML , DEF_SITE_ROOTPATH , $to_url ) ;
+				break ;
+
+			default :
+				if( $to_url == "" )
+					$url = sprintf( "Location: %s/" , $NRML ) ;
+				else
+					$url = sprintf( "Location: %s/%s" , $NRML , $to_url ) ;
+			}
+
+			if( $to_url != "no" )
+			{
+				header( $url ) ;
+				exit ;
+			}
+		}
+		else
+		{
+			$sid = "S_ID" ;
+			switch ( $level )
+			{
+			case	SESSION_ADMIN :
+				$sid = DEF_SESSIONID_ADMIN ;
+				break ;
+			case	SESSION_MEMBER :
+				$sid = DEF_SESSIONID_MEMBER ;
+				break ;
+			}
+			$_SESSION[ $sid ] = $sessionid ;
+		}
+	}
+	
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		return $error ;
+	}
+}
+?>

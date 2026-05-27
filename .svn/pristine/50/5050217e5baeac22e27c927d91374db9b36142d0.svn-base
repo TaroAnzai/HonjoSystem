@@ -1,0 +1,103 @@
+<?php
+/**
+* BLAMS 基本関数郡 Social用クラス
+*
+* Social用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+class PARTS_Social extends DB_Common
+{
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "social_data" ;
+		$alias		= "scl" ;
+		$primarykey	= "socialid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_TOP ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+	
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+				
+		// 編集中フラグ
+		if ( $edit_flg != -1 )
+			$sql .= sprintf( "AND %s.edit_flg = %d " , $this -> alias , $edit_flg ) ;
+
+		// 掲載開始日
+		if ( $start_date != -1 )
+			$sql .= sprintf( "AND %s.start_date %s " , $this -> alias , $start_date ) ;
+
+		// 掲載終了日
+		if ( $end_date != -1 )
+			$sql .= sprintf( "AND %s.end_date %s " , $this -> alias , $end_date ) ;
+
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			else
+				$sql .= sprintf( "ORDER BY %s.update_date DESC " , $this -> alias , $this -> alias ) ;
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+}
+?>

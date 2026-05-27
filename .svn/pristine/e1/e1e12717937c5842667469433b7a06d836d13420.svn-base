@@ -1,0 +1,395 @@
+<?php
+/**
+* BLAMS 基本関数郡 取引先情報用クラス
+*
+* 取引先情報用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+//
+// 取引先種類
+//
+$_FUNC = 1 ;
+define( "DEF_PARTNER_DELIVER"		,	$_FUNC ++	) ;		// 主要納入先
+define( "DEF_PARTNER_SUPPLIER"		,	$_FUNC ++	) ;		// 主要仕入先
+define( "DEF_PARTNER_BANK"			,	$_FUNC ++	) ;		// 主要取引銀行
+define( "DEF_PARTNER_EXCHANGE"		,	$_FUNC ++	) ;		// 主要取引先
+define( "DEF_PARTNER_COOPERATION"	,	$_FUNC ++	) ;		// 協力企業
+define( "DEF_PARTNER_TIEUP"			,	$_FUNC ++	) ;		// 業務提携
+
+global $arPartnerTitle ;
+$arPartnerTitle = array(
+	DEF_PARTNER_DELIVER			=> "主要納入先" ,
+	DEF_PARTNER_SUPPLIER		=> "主要仕入先" ,
+	DEF_PARTNER_EXCHANGE		=> "主要取引先" ,
+	DEF_PARTNER_BANK			=> "主要取引銀行" ,
+	DEF_PARTNER_COOPERATION		=> "協力会社" ,
+	DEF_PARTNER_TIEUP			=> "業務提携" ,
+) ;
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Partner extends DB_Common
+{
+	var	$obPhoto ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "partner_data" ;
+		$alias		= "ptr" ;
+		$primarykey	= "partnerid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_CORP ;
+
+		$this -> obPhoto	= new PARTS_Photo( $this -> conn ) ;
+
+		$this -> searchkey = array(
+				"S_NAME"			,
+				"S_TYPE"			,
+			) ;
+
+		$this -> images = array( "bannerid" ) ;
+
+		$this -> fieldsData[] = array( "name" => "zip1"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "zip2"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel1"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel2"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel3"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "fax1"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "fax2"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "fax3"					, "type" => "" , "format" => "%s" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$alias = $this -> alias ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$cnt = count( $arData ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$name		= $arData[ $i ][ $this -> alias . "_name"		] ;
+				$title		= $arData[ $i ][ $this -> alias . "_title"		] ;
+				$position	= $arData[ $i ][ $this -> alias . "_position"	] ;
+				$department	= $arData[ $i ][ $this -> alias . "_department"	] ;
+				$lname = PARTS_Corp::createLongName( $name , $title , $position , $department ) ;
+
+				// 郵便番号、電話、ＦＡＸ分解
+				$arZip	= explode( '-' , $arData[ $i ][ $alias . "_zip"	] ) ;
+				$arTel	= explode( '-' , $arData[ $i ][ $alias . "_tel"	] ) ;
+				$arFax	= explode( '-' , $arData[ $i ][ $alias . "_fax"	] ) ;
+			
+				$arData[ $i ][ $alias . "_zip1"	] = "" ;
+				$arData[ $i ][ $alias . "_zip2"	] = "" ;
+				if ( count( $arZip ) == 2 )
+				{
+					$arData[ $i ][ $alias . "_zip1"	] = $arZip[ 0 ] ;
+					$arData[ $i ][ $alias . "_zip2"	] = $arZip[ 1 ] ;
+				}
+				
+				$arData[ $i ][ $alias . "_tel1"	] = "" ;
+				$arData[ $i ][ $alias . "_tel2"	] = "" ;
+				$arData[ $i ][ $alias . "_tel3"	] = "" ;
+				if ( count( $arTel ) == 3 )
+				{
+					$arData[ $i ][ $alias . "_tel1"	] = $arTel[ 0 ] ;
+					$arData[ $i ][ $alias . "_tel2"	] = $arTel[ 1 ] ;
+					$arData[ $i ][ $alias . "_tel3"	] = $arTel[ 2 ] ;
+				}
+				
+				$arData[ $i ][ $alias . "_fax1"	] = "" ;
+				$arData[ $i ][ $alias . "_fax2"	] = "" ;
+				$arData[ $i ][ $alias . "_fax3"	] = "" ;
+				if ( count( $arFax ) == 3 )
+				{
+					$arData[ $i ][ $alias . "_fax1"	] = $arFax[ 0 ] ;
+					$arData[ $i ][ $alias . "_fax2"	] = $arFax[ 1 ] ;
+					$arData[ $i ][ $alias . "_fax3"	] = $arFax[ 2 ] ;
+				}
+
+				$arData[ $i ][ $this -> alias . "_lname" ] = $lname ;
+			}
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "name_unique" ;
+		$arParamList[] = "department_unique" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+		
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , $partnerid ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		if ( $name != -1 && $name != "" )
+			$sql .= sprintf( "AND %s.name like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $name ) ) ;
+
+		if ( $kana != -1 && $kana != "" )
+			$sql .= sprintf( "AND %s.kana like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $kana ) ) ;
+
+		// 名称で検索
+		if ( $name_unique != -1 && $name_unique != "" )
+			$sql .= sprintf( "AND %s.name = '%s' " , $this -> alias , $this -> mb_addslashes( $name_unique ) ) ;
+
+		// 部署名で検索
+		if ( $department_unique != -1 && $department_unique != "" )
+			$sql .= sprintf( "AND %s.department = '%s' " , $this -> alias , $this -> mb_addslashes( $department_unique ) ) ;
+
+		// 電話番号で検索
+		if ( $tel != -1 && $tel != "" )
+			$sql .= sprintf( "AND %s.tel = '%s' " , $this -> alias , $this -> mb_addslashes( $tel ) ) ;
+
+		// FAX番号で検索
+		if ( $fax != -1 && $fax != "" )
+			$sql .= sprintf( "AND %s.fax = '%s' " , $this -> alias , $this -> mb_addslashes( $fax ) ) ;
+
+		// 種類による検索
+		if ( $type != -1 )
+			$sql .= sprintf( "AND %s.type = '%d' " , $this -> alias , $type ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.type  , " , $this -> alias ) ;
+				$sql .= sprintf( "%s.sort  , " , $this -> alias ) ;
+				$sql .= sprintf( "%s.kana   " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		return $sql ;
+	}
+
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		${ $alias . "_kana" } = $this -> hira2kana( ${ $alias . "_kana" } ) ;
+		
+		if ( ${ $alias . "_type" } == "" )
+			${ $alias . "_type" } = -1 ;
+	
+		if ( ${ $alias . "_state" } == "" )
+			${ $alias . "_state" } = -1 ;
+	
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+	
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// 社名
+			if ( ${ $alias . "_name" } == "" )
+				$error .= "・組織名が入力されていません。\n" ;
+	
+			// カナ
+			if ( ${ $alias . "_kana" } == "" )
+				$error .= "・カナが入力されていません。\n" ;
+	
+			// 法人格
+			if ( ${ $alias . "_title" } == -1 )
+				$error .= "・法人格が選択されていません。\n" ;
+	
+			// 法人格位置
+			if ( ${ $alias . "_position" } == -1 )
+				$error .= "・法人格位置が選択されていません。\n" ;
+
+			// 電話番号
+			
+			$errorTel = $this -> checkTel( $arParam[ $alias . "_tel" ] , true , ${ $alias . "_tel1" } , ${ $alias . "_tel2" } , ${ $alias . "_tel3" } ) ;
+			if ( $errorTel == "" && $arParam[ $alias . "_tel" ] != "" )
+			{
+				// 入力にエラーが無い場合は、重複チェックを行う
+				$arWhere = array() ;
+				$arWhere[ "tel"			] = $arParam[ $alias . "_tel" ] ;
+				if ( $mode == "update" )
+					$arWhere[ "where"	] = sprintf( "AND %s.%s != %d" , $alias , $primarykey , ${ $keyname } ) ;
+
+				$arCheck = $this -> getData( $arWhere ) ;
+				if ( count( $arCheck ) > 0 )
+					$error .= "・同じ電話番号の会社情報が存在しています。\n" ;
+			}
+			else
+			{
+				$error .= $errorTel ;
+			}
+			
+			// FAX番号
+			$errorFax = $this -> checkTel( $arParam[ $alias . "_fax" ] , true , ${ $alias . "_fax1" } , ${ $alias . "_fax2" } , ${ $alias . "_fax3" } ) ;
+			if ( $errorFax == "" && $arParam[ $alias . "_fax" ] != "" )
+			{
+				// 入力にエラーが無い場合は、重複チェックを行う
+				$arWhere = array() ;
+				$arWhere[ "fax"			] = $arParam[ $alias . "_fax" ] ;
+				if ( $mode == "update" )
+					$arWhere[ "where"	] = sprintf( "AND %s.%s != %d" , $alias , $primarykey , ${ $keyname } ) ;
+		
+				$arCheck = $this -> getData( $arWhere ) ;
+				if ( count( $arCheck ) > 0 )
+					$error .= "・同じFAX番号の会社情報が存在しています。\n" ;
+			}
+			else
+			{
+				$error .= $errorFax ;
+			}
+
+			// URL
+			if( ${ $alias . "_url" } != "" )
+			{
+				$blams		= new BLAMS() ;
+				$arParam[ $alias . "_url" ] = $blams -> AddHTTPProtocol( ${ $alias . "_url" } ) ;
+				$url = $arParam[ $alias . "_url" ] ;
+				if( !($blams -> is_url( ${ $alias . "_url" } ) ) )
+				{
+					$error .= "・URLの書式が正しくありません。\n" ;
+				}
+			}
+
+			// 企業情報
+			$obPhoto = $this -> obPhoto ;
+			$error .= $obPhoto -> checkData( $alias . "_bannerid_img" , $alias . "_bannerid_tmp" , $arParam , "img"	, "バナー画像"	) ;
+
+			// エラーが無い場合は 社名 + 部署名 + 電話番号 重複検査
+			if ( $error == "" )
+			{
+				if ( ${ $alias . "_name" } != "" )
+				{
+					$arWhere = array() ;
+					$arWhere[ "name_unique"			] = ${ $alias . "_name" } ;
+					$arWhere[ "department_unique"	] = ${ $alias . "_department" } ;
+					$arWhere[ "tel"					] = $arParam[ $alias . "_tel" ] ;
+					
+					if ( $mode == "update" )
+						$arWhere[ "where"	] = sprintf( "AND %s.%s != %d" , $alias , $primarykey , ${ $keyname } ) ;
+						
+					$arCheck = $this -> getData( $arWhere ) ;
+					
+					if ( count( $arCheck ) > 0 )
+						$error .= "・同じ名称の企業情報が存在しています。\n" ;
+				}
+			}
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$arParam[ $alias . "_title"			] = DEF_CATEGORY_OTHER ;
+		$arParam[ $alias . "_position"		] = DEF_POSITION_NONE ;
+		$arParam[ $alias . "_state"			] = -1 ;
+	}
+
+	//
+	// 新規データ登録
+	//
+	function insertData( &$arParam )
+	{
+		$result = false ;
+
+		$result = parent::insertData( $arParam , -1 , "" ) ;
+		
+		return $result ;
+	}
+
+	//
+	// 新規データ登録
+	//
+	function updateData( $arParam )
+	{
+		$result = false ;
+	
+		$result = parent::updateData( $arParam , -1 , "" ) ;
+
+		return $result ;
+	}
+}
+?>

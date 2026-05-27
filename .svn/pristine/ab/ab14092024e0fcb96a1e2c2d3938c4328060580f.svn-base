@@ -1,0 +1,28 @@
+<?php
+	require_once( "../../lib/system.php") ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+	$obSession -> writeLogout( SESSION_ADMIN ) ;
+
+	$menu = FUNC_LOGOUT ;
+
+	$blams = new BLAMS() ;
+
+	$screentype = "logout" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"	, $funcname	) ;
+	$data = $tmpl -> fetch( "logout.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	$contents = $blams -> fetchContents( $data ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents ) ;
+	
+	exit ;
+
+?>

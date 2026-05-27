@@ -1,0 +1,78 @@
+<?php
+
+// TOPICS表示
+function	fetchTopics( $func , $page = 0 , $type = "" )
+{
+	$limit = NUMBER_PER_PAGE ;
+	if ( $func == DEF_PERSONAL_FUNC_TOP )
+		$limit = NUMBER_PER_TOPICS ;
+
+	$obTopics = new PARTS_Topics() ;
+	
+	$arWhere = array() ;
+	$arWhere[ "edit_flg"	] = DEF_EDITSTATUS_OPENED ;
+	$arWhere[ "start_date"	] = sprintf( "<= '%s 00:00:00' " , date( "Y-m-d" ) ) ;
+	$max	= $obTopics -> getCount( $arWhere ) ;
+	$arResult = $obTopics -> getData( $arWhere , $page , $limit ) ;
+
+	$link		= "" ;
+	$paging		= "" ;
+	$pagejump	= "" ;
+	$paging		= fetchtPaging( $page , $max , NUMBER_PER_PAGE , $link , $func ) ;
+	$pagejump	= fetchtPagejump( $page , $max , NUMBER_PER_PAGE , NUMBER_PER_PAGE , $link , $func ) ;
+
+	$tmplFile = "topics/topics.tmpl" ;
+	if ( $func == DEF_PERSONAL_FUNC_TOP )
+	{
+		if ( $type == "" )
+			$tmplFile = "topics/topics_index.tmpl" ;
+		else if ( $type == "sub" )
+			$tmplFile = "topics/topics_sub.tmpl" ;
+	}
+	
+	// 生成された会社情報がある場合は テンプレートを表示する
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "topics_data"		, $arResult ) ;
+	$tmpl -> assign( "paging"			, $paging ) ;
+	$tmpl -> assign( "pagejump"			, $pagejump ) ;
+	$data = $tmpl -> fetch( $tmplFile ) ;
+	unset( $tmpl ) ;
+
+	return $data ;
+}
+
+// RSSフィールドの書き出し
+function fetchRSS( $func )
+{
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	global	$arTopicsTitle ;
+	global	$arTopicsLink ;
+	
+	if ( $title == "" )
+		$title = "" ;
+
+	$obTopics = new PARTS_Topics() ;
+	
+	$arWhere = array() ;
+	$arWhere[ "edit_flg"	] = DEF_EDITSTATUS_OPENED ;
+	$arWhere[ "start_date"	] = sprintf( "<= '%s 00:00:00' " , date( "Y-m-d" ) ) ;
+	$arResult = $obTopics -> getData( $arWhere , $page , NUMBER_PER_PAGE ) ;
+
+	global	$_SERVER ;
+	$site = sprintf( "http://%s/" , $_SERVER[ "SERVER_NAME" ] ) ;
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "url"			, $site ) ;
+	$tmpl -> assign( "corp_data"	, $arCorp ) ;
+	$tmpl -> assign( "topics_link"	, $arTopicsLink ) ;
+	$tmpl -> assign( "topics_data"	, $arResult ) ;
+	$tmpl -> display( "rss20.tmpl" , "utf8" ) ;
+	
+	unset( $tmpl ) ;
+}
+
+?>

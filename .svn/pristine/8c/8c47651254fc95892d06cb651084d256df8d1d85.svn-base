@@ -1,0 +1,315 @@
+<?php
+/**
+* BLAMS 基本関数郡 Webpage用クラス
+*
+* Webpage用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+// 固定文章用
+$_FUNC = 100 ;
+define( "DEF_PAGE_PRIVACY"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_RULES"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_PROGRAM"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_ORDERSLAW"	,	$_FUNC ++ ) ;
+define( "DEF_PAGE_EYECATCH"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_SUPPORT"		,	$_FUNC ++ ) ;
+
+$_FUNC = 200 ;
+define( "DEF_PAGE_FB_TOP1"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_TOP2"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_TOP3"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_TOP4"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_TOP5"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_TOP6"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_TOP7"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_TOP8"		,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_TOP9"		,	$_FUNC ++ ) ;
+
+$_FUNC = 300 ;
+define( "DEF_PAGE_FB_CONTENTS1"	,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_CONTENTS2"	,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_CONTENTS3"	,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_CONTENTS4"	,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_CONTENTS5"	,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_CONTENTS6"	,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_CONTENTS7"	,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_CONTENTS8"	,	$_FUNC ++ ) ;
+define( "DEF_PAGE_FB_CONTENTS9"	,	$_FUNC ++ ) ;
+
+global	$arWebpageType ;
+$arWebpageType = array(
+	DEF_PAGE_PRIVACY		=> "個人情報について" ,
+	DEF_PAGE_RULES			=> "ご利用規約" ,
+	DEF_PAGE_PROGRAM		=> "活動内容について" ,
+	DEF_PAGE_ORDERSLAW		=> "特定商取引法に基づく表記" ,
+	DEF_PAGE_EYECATCH		=> "アイキャッチ" ,
+	DEF_PAGE_SUPPORT		=> "サポート" ,
+	
+	DEF_PAGE_FB_TOP1		=> "facebook ようこそページ1" ,
+	DEF_PAGE_FB_TOP2		=> "facebook ようこそページ2" ,
+	DEF_PAGE_FB_TOP3		=> "facebook ようこそページ3" ,
+	DEF_PAGE_FB_TOP4		=> "facebook ようこそページ4" ,
+	DEF_PAGE_FB_TOP5		=> "facebook ようこそページ5" ,
+	DEF_PAGE_FB_TOP6		=> "facebook ようこそページ6" ,
+	DEF_PAGE_FB_TOP7		=> "facebook ようこそページ7" ,
+	DEF_PAGE_FB_TOP8		=> "facebook ようこそページ8" ,
+	DEF_PAGE_FB_TOP9		=> "facebook ようこそページ9" ,
+	DEF_PAGE_FB_CONTENTS1	=> "facebook コンテンツページ1" ,
+	DEF_PAGE_FB_CONTENTS2	=> "facebook コンテンツページ2" ,
+	DEF_PAGE_FB_CONTENTS3	=> "facebook コンテンツページ3" ,
+	DEF_PAGE_FB_CONTENTS4	=> "facebook コンテンツページ4" ,
+	DEF_PAGE_FB_CONTENTS5	=> "facebook コンテンツページ5" ,
+	DEF_PAGE_FB_CONTENTS6	=> "facebook コンテンツページ6" ,
+	DEF_PAGE_FB_CONTENTS7	=> "facebook コンテンツページ7" ,
+	DEF_PAGE_FB_CONTENTS8	=> "facebook コンテンツページ8" ,
+	DEF_PAGE_FB_CONTENTS9	=> "facebook コンテンツページ9" ,
+) ;
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Webpage extends DB_Common
+{
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "webpage_data" ;
+		$tblalias	= "wp" ;
+		$primarykey	= "webpageid" ;
+
+		parent::__construct(  $dbname , $user , $passwd , $host , $port , $tname , $tblalias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> searchkey = array(
+				"S_CORPID"			,
+				"S_SUBJECT"			,
+				"S_TYPE"			,
+				"S_EDIT_FLG"		,
+			) ;
+			
+		$this -> fieldsData[] = array( "name" => "start_date_y"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_m"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_d"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "end_date_y"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "end_date_m"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "end_date_d"			, "type" => "" , "format" => "%s" ) ;
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+	
+	function	makeSQL( $arParam , $fields , $listpage = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+		$arParamList[] = "start_date_after" ;
+		$arParamList[] = "start_date_before" ;
+		$arParamList[] = "end_date_before" ;
+		$arParamList[] = "end_date_after" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$tblalias	= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $tblalias . "_" . $this -> primarykey ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $tblalias ) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $tblalias ) ;
+
+		$limit = "" ;
+		if ( ${ $primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $tblalias , $primarykey , ${ $primarykey } ) ;
+		else
+			if ( $listpage != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $listpage * $per_page ) ) ;
+		
+		if ( $subject != -1 && $subject != "" )
+			$sql .= sprintf( "AND %s.subject like '%%%s%%' " , $tblalias , $subject ) ;
+
+		if ( $type != -1 )
+		{
+			if ( is_array( $type ) == true )
+			{
+				$arType = $type ;
+				$type = "" ;
+				foreach( $arType as $value )
+				{
+					if ( $type != "" )
+						$type .= ", " ;
+					$type .= sprintf( "%d" , $value ) ;
+				}
+			}
+			$sql .= sprintf( "AND %s.type in ( %s ) " , $tblalias , $type ) ;
+		}
+
+		if ( $alias != -1 )
+			$sql .= sprintf( "AND %s.alias = '%s' " , $tblalias , $alias ) ;
+
+		if ( $page != -1 )
+			$sql .= sprintf( "AND %s.page = %d " , $tblalias , $page ) ;
+
+		if ( $edit_flg != -1 )
+			$sql .= sprintf( "AND %s.edit_flg = %d " , $tblalias , $edit_flg ) ;
+
+		if ( $corpid != -1 )
+			$sql .= sprintf( "AND %s.corpid = %d " , $tblalias , $corpid ) ;
+
+		if ( $page != -1 )
+			$sql .= sprintf( "AND %s.page = %d " , $tblalias , $page ) ;
+
+		if ( $start_date_before != -1 )
+			$sql .= sprintf( "AND %s.start_date <= '%s' " , $tblalias , $start_date_before ) ;
+
+		if ( $start_date_after != -1 )
+			$sql .= sprintf( "AND %s.start_date >= '%s' " , $tblalias , $start_date_after ) ;
+
+		if ( $end_date_before != -1 )
+			$sql .= sprintf( "AND %s.end_date <= '%s' " , $tblalias , $end_date_before ) ;
+
+		if ( $end_date_after != -1 )
+			$sql .= sprintf( "AND %s.end_date >= '%s' " , $tblalias , $end_date_after ) ;
+
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			else
+				$sql .= sprintf( "ORDER BY %s.start_date DESC , %s.end_date , %s.update_date DESC " , $tblalias , $tblalias , $tblalias ) ;
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+	
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam , $type , $corpid )
+	{
+		parent::initData( $arParam ) ;
+		
+		$tblalias	= $this -> alias ;
+
+		$arParam[ $tblalias . "_type"		] = $type ;
+		$arParam[ $tblalias . "_corpid"		] = $corpid ;
+		$arParam[ $tblalias . "_page"		] = 0 ;
+		$arParam[ $tblalias . "_start_date"	] = DEF_DATE_MIN ;
+		$arParam[ $tblalias . "_end_date"	] = DEF_DATE_MAX ;
+		
+		$arParam[ $tblalias . "_edit_flg"	] = DEF_EDITSTATUS_EDITTING ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+
+		$tblalias	= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $tblalias . "_" . $this -> primarykey ;
+
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			if ( ${ $tblalias . "_subject" } == "" )
+				$error .= "・タイトルが入力されていません。\n" ;
+	
+			if ( ${ $tblalias . "_type" } == DEF_PAGE_FB_TOP && empty( ${ $tblalias . "_alias" } ) != true )
+				$error .= "・ようこそページの場合は別名を指定できません。\n" ;
+			if ( ${ $tblalias . "_type" } == DEF_PAGE_FB_CONTENTS && empty( ${ $tblalias . "_alias" } ) == true )
+				$error .= "・コンテンツページの場合は別名を指定してください。\n" ;
+
+			// 内容
+			if ( ${ $tblalias . "_sentence" } == "" )
+				$error .= "・内容が入力されていません。\n" ;
+
+			// 表示開始日
+			$arParam[ $tblalias . "_start_date" ] = sprintf( "%s" , DEF_DATE_MIN ) ;
+			$error .= $this -> checkDate(	$arParam[ $tblalias . "_start_date" ] ,
+											true ,
+											${ $tblalias . "_start_date_y" } ,
+											${ $tblalias . "_start_date_m" } ,
+											${ $tblalias . "_start_date_d" } ,
+											true ,
+											"表示開始日"
+										) ;
+
+			// 表示終了日
+			$arParam[ $tblalias . "_end_date" ] = sprintf( "%s" , DEF_DATE_MAX ) ;
+			$error .= $this -> checkDate(	$arParam[ $tblalias . "_end_date" ] ,
+											true ,
+											${ $tblalias . "_end_date_y" } ,
+											${ $tblalias . "_end_date_m" } ,
+											${ $tblalias . "_end_date_d" } ,
+											true ,
+											"表示終了日"
+										) ;
+
+			// 表示種類
+			if ( ${ $tblalias . "_type" } == -1 )
+			{
+				$error .= "・表示種類が選択されていません。\n" ;
+			}
+
+			// 編集状態
+			if ( ${ $tblalias . "_edit_flg" } == -1 )
+			{
+				$error .= "・編集状態が選択されていません。\n" ;
+			}
+
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+
+		return $error ;
+	}
+
+}
+?>

@@ -1,0 +1,278 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	// 基本パラメータ変換
+	if ( empty( $mode ) == true )
+		$mode = "update" ;
+
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams		= new BLAMS() ;
+	$obAdmin	= new PARTS_Admin() ;
+
+	$alias 		= $obAdmin -> alias ;
+	$primarykey	= $obAdmin -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obAdmin -> assignGlobal( $additional , $arParam ) ;
+
+	// 検索用パラメータ変換
+	$S_NAME = $obAdmin -> mb2sb( $S_NAME ) ;
+
+	if ( $S_LEVEL == "" )
+		$S_LEVEL = -1 ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	$arParamFind[ "S_NAME"			] = $S_NAME			;
+	$arParamFind[ "S_LEVEL"			] = $S_LEVEL		;
+	$arParamFind[ "page"			] = $page			;
+
+	// 「一覧」表示判定
+	$list_flg = true ;
+	if ( $login_level > DEF_SYSTEM && $login_level != 100 )
+		$list_flg = false ;
+
+	// WHERE句の初期化
+	$arWhere = array() ;
+	$arWhere[ "where"		] = "" ;
+	$arWhere[ "not_level"	] = DEF_ADMIN ;
+
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg == false )
+	{
+		// 一覧表示権限がないログイン者の場合は、自身の情報のみ編集可能
+		$arWhere[ "adminid" ] = $login_adminid ;
+	}
+	else
+	{
+		// 管理者レベルテーブル生成
+		global	$arAdminLevel ;
+		$arAdminLevel_local = $arAdminLevel ;
+		unset( $arAdminLevel_local[ 0 ] ) ;
+		unset( $arAdminLevel_local[ DEF_ADMIN ] ) ;
+
+		// 名前で検索
+		$arWhere[ "name" ] = $S_NAME ;
+
+		// 管理者レベルで検索
+		if ( $login_level != DEF_ADMIN )
+		{
+			// 検索制限も掛かる
+			if ( $S_LEVEL != -1 && S_LEVEL != DEF_SYSTEM )
+				$arWhere[ "level" ] = $S_LEVEL ;
+			else
+				$arWhere[ "where" ] = sprintf( "AND %s.level >= %d " , $alias , $login_level ) ;
+		}
+		else
+		{
+			// 「ADMIN」レベル
+			if ( $S_LEVEL != -1 )
+				$arWhere[ "level" ] = $S_LEVEL ;
+
+			unset( $arWhere[ "not_level"	] ) ;
+			
+			global	$arAdminLevel ;
+			$arAdminLevel[ DEF_ADMIN ] = "特殊ユーザ" ;
+		}
+	}
+
+	$menu = FUNC_ADMIN ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $arWhere , $list_flg , $obAdmin ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $arWhere , $list_flg , $obAdmin )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 該当データ数取得
+	$cnt = 0 ;
+	if ( $obAdmin -> isOpen() == true )
+	{
+		$cnt		= $obAdmin -> getCount( $arWhere ) ;
+		$arAdmin	= $obAdmin -> getData( $arWhere , $page , NUMBER_PER_PAGE ) ;
+	}
+
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$paging = "" ;
+	$pageJump = "" ;
+	$arList = array() ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $obAdmin ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = FetchSearch( $blams , $arParamFind ) ;
+	}
+	$arHeader = array(
+		array( "caption" => "ログインID"		, "class" => "w192 left" ) ,
+		array( "caption" => "名前"				, "class" => "w400 left" ) ,
+		array( "caption" => "操作レベル"		, "class" => "w128 center" ) ,
+		array( "caption" => "メールアドレス"	, "class" => "w128 center" ) ,
+	) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$arFoem = array() ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_NAME" , $S_NAME , 256 - 16  , 64 , IME_ON ) ;
+	$value .= $blams -> fetchTDTD( "名前" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	global	$arAdminLevel ;
+	$form	= $blams -> fetchSelectbox( "S_LEVEL" , $S_LEVEL , $arAdminLevel , 192 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "操作レベル" , $form , 128 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $page , $arParamFind , $obAdmin )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	global	$arAdminLevel ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	$arAdmin	= $obAdmin -> arData ;
+	$alias 		= $obAdmin -> alias ;
+	$primarykey	= $obAdmin -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	foreach ( $arAdmin as $arData )
+	{
+		// データの取得
+		$adminid		= $arData[ $keyname				] ;
+		$loginid		= $arData[ $alias . "_loginid"	] ;
+		$name			= $arData[ $alias . "_name"		] ;
+		$level			= $arData[ $alias . "_level"	] ;
+		$email			= $arData[ $alias . "_email"	] ;
+
+		$szLevel = "不明" ;
+		if ( empty( $arAdminLevel[ $level ] ) == false )
+			$szLevel = $arAdminLevel[ $level ] ;
+		
+		$arAnchor = array() ;
+		$arAnchor[ "url" 			] = "edit.php"		;
+		$arAnchor[ "idname"			] = $keyname		;
+		$arAnchor[ "id"				] = $adminid		;
+		$arAnchor[ "param"			] = $param			;
+		$arAnchor[ "anchor"			] = $loginid		;
+		$arAnchor[ "caption"		] = $loginid		;
+		$arAnchor[ "class"			] = "border left"	;
+		$arAnchor[ "script"			] = ""									;
+		$arAnchor[ "date_format"	] = ""									;
+
+		$arData = array() ;
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $name ,			"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szLevel ,		"class" => "border center"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $email ,		"class" => "border center"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arList[] = $arData ;
+	}
+	
+	return $arList ;
+}
+
+?>

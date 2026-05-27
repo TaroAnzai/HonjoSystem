@@ -1,0 +1,6 @@
+<?php
+define( "DB_NAME"	,	"blams" ) ;
+define( "DB_USER"	,	"blams" ) ;
+define( "DB_PASSWD"	,	"n5uh7bnu" ) ;
+define( "DB_HOST"	,	"127.0.0.1" ) ;
+?>

@@ -1,0 +1,27 @@
+<?php
+	global	$_SERVER ;
+	global	$_ENV ;
+
+	$SERVER_NAME = "" ;
+	if ( defined( "SERVER_NAME" ) == true )
+	{
+		$SERVER_NAME = SERVER_NAME ;
+	}
+	else
+	{
+		if ( empty( $_SERVER[ 'SERVER_NAME' ] ) == false )
+			$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+		else if ( empty( $ENV[ "HOSTNAME" ] ) == false )
+			$SERVER_NAME = $ENV[ "HOSTNAME" ] ;
+		
+		if (  empty( $SERVER_NAME ) !== false )
+			$SERVER_NAME = exec( "/bin/hostname -f" ) ;
+
+		define( "SERVER_NAME" ,	$SERVER_NAME ) ;
+	}
+	
+	define( "DB_NAME"			,	"bcinfo" ) ;
+	define( "DB_USER"			,	"bcinfo" ) ;
+	define( "DB_PASSWD"			,	"H1DK888D" ) ;
+
+?>

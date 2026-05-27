@@ -1,0 +1,583 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	$mode = "" ;
+	$func = "" ;
+
+	// 登録ボタン名によって処理を分ける
+	$arMode = array( "append" , "update" , "delete" , "copy" , "renumber" ) ;
+	GetSystemMode( $mode , $func , $arMode ) ;
+
+	// 基本パラメータ変換
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	// 検索用パラメータ保存
+	$S_KIND = -1 ;
+	if ( empty( $_GET[ "S_KIND" ] ) == false )
+		$S_KIND = $_GET[ "S_KIND" ] ;
+	else if ( empty( $_POST[ "S_KIND" ] ) == false )
+		$S_KIND = $_POST[ "S_KIND" ] ;
+	else
+		exit ;
+
+	$blams		= new BLAMS() ;
+	if ( $S_KIND >= DEF_CATEGORY_SITEADMIN )
+		$obDB	= new PARTS_Permission() ;
+	else
+		$obDB	= new PARTS_Category() ;
+
+	$alias 		= $obDB -> alias ;
+	$primarykey	= $obDB -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// 編集データ保存
+	$arParam = array() ;
+
+	$additional = array() ;
+	$obDB -> assignGlobal( $additional , $arParam ) ;
+
+	$arParam[ $alias . "_kind" ] = $S_KIND ;
+
+	$arParamFind = array() ;
+	foreach( $obDB -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+
+	// タイトル取得時のキー初期化＆大中小項目で検索
+	global	$arFunctionTitle ;
+	$pageFunc = $arFunctionTitle[ $S_KIND ] ;
+	if ( $pageFunc == "" )
+		$pageFunc = -1 ;
+	
+	// 機能
+	$input_error = "" ;
+	$copy_error = "" ;
+	switch ( $mode )
+	{
+	case	"append" :
+		$input_error = $obDB -> checkData( $mode , $func , $arParam ) ;
+		if ( $input_error == "" )
+			$obDB -> insertData( $arParam ) ;
+		break ;
+		
+	case	"update" :
+		$input_error = $obDB -> checkData( $mode , $func , $arParam ) ;
+		if ( $input_error == "" )
+			$obDB -> updateData( $arParam ) ;
+		break ;
+		
+	case	"delete" :
+		$input_error = $obDB -> checkData( $mode , $func , $arParam ) ;
+		if ( $input_error == "" )
+			$obDB -> deleteData( $arParam ) ;
+		break ;
+		
+	case	"copy" :
+		$copy_error = $obDB -> checkData( $mode , $arParam ) ;
+		if ( $copy_error == "" )
+		{
+			$obDB -> copyData( $arParam ) ;
+			
+			$arParam[ $alias . "_category1" ] = ${ $alias . "_destcategory1" } ;
+			$arParam[ $alias . "_category2" ] = ${ $alias . "_destcategory2" } ;
+		}
+		break ;
+	}
+
+	$arError = array() ;
+	$arError[ "input" ] = $input_error ;
+	$arError[ "copy" ] = $copy_error ;
+
+	// 該当データ数取得
+	$arCategory = array() ;
+	$arCategory1 = array() ;
+	$cnt = 0 ;
+	if ( $pageFunc != -1 )
+	{
+		if ( $obDB -> isOpen() )
+		{
+			$sort_error = "" ;
+			if ( $mode == "renumber" )
+			{
+				$kind	= $S_KIND ;
+				$c1		= ${ $alias . "_category1" } ;
+				$c2		= ${ $alias . "_category2" } ;
+				$c3		= ${ $alias . "_category3" } ;
+
+				switch ( $func )
+				{
+				case	"riseup" :
+					$sort_error = $obDB -> riseup( $kind , $c1 , $c2 , $c3 ) ;
+					break ;
+				
+				case	"falldown" :
+					$sort_error = $obDB -> falldown( $kind , $c1 , $c2 , $c3 ) ;
+					break ;
+				}
+			}
+			$arError[ "sort" ] = $sort_error ;
+
+			$arWhere = array() ;
+			$arWhere[ "kind" ] = $S_KIND ;
+			$arResult = $obDB -> getData( $arWhere ) ;
+			$cnt = count( $arResult ) ;
+			for ( $index = 0 ; $index < $cnt ; $index ++ )
+			{
+				// データの取得
+				$arData = $arResult[ $index ] ;
+				${ $keyname }	= $arData[ $keyname					] ;
+				$kind			= $arData[ $alias . "_kind"			] ;
+				$categoryname	= $arData[ $alias . "_name"			] ;
+				$category1		= $arData[ $alias . "_category1"	] ;
+				$category2		= $arData[ $alias . "_category2"	] ;
+				$category3		= $arData[ $alias . "_category3"	] ;
+				
+				if ( $category1 != 0 && $category2 == 0 && $category3 == 0 )
+				{
+					$arCategory[ $category1 ][ 0 ] = array( ${ $keyname } => $categoryname ) ;
+					$arCategory1[ $category1 ] = $categoryname ;
+				}
+				else if ( $category1 != 0 && $category2 != 0 && $category3 == 0 )
+				{
+					$arCategory[ $category1 ][ $category2 ][ 0 ] = array( ${ $keyname } => $categoryname ) ;
+				}
+				else if ( $category1 != 0 && $category2 != 0 && $category3 != 0 )
+				{
+					$arCategory[ $category1 ][ $category2 ][ $category3 ][ 0 ] = array( ${ $keyname } => $categoryname ) ;
+				}
+			}
+			
+		}
+	}
+
+	$menu = $pageFunc ;
+
+	$blams = new BLAMS() ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+	// 登録フォームの表示
+	$input	= FetchCategoryInput( $blams , $arParamFind , $arParam , $arCategory , $arCategory1 , $obDB ) ;
+
+	// コピーフォームの表示
+	$copy = "" ;
+	if ( $S_KIND == DEF_CATEGORY_ITEM || $S_KIND == DEF_CATEGORY_PRODUCT )
+		$copy	= FetchCategoryCopy( $blams , $arParamFind , $arParam , $arCategory , $arCategory1 , $obDB ) ;
+
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $arParam , $arCategory , $input , $copy , $arError , $obDB ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+// カテゴリーの入力フォーム
+function	FetchCategoryInput( $blams , $arParamFind , $arParam , $arCategory , $arCategory1 , $obDB )
+{
+	$alias 		= $obDB -> alias ;
+	$primarykey	= $obDB -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// パラメータからデータを取り出す
+	foreach( $arParamFind as $key => $value )
+		${ $key } = $value ;
+	foreach( $arParam as $key => $value )
+		${ $key } = $value ;
+
+	$dummyForm = FetchCategoryForm( $blams , "" , $arCategory ) ;
+
+	$arForm = array() ;
+
+	$tsize = 136 ;
+	$isize = $tsize - 16 ;
+
+	$arCol = array() ;
+	$arCol[]	= $blams -> fetchTH( "レベル1" , $tsize , "" , "left" , BLAMS_FORMAT_BORDER ) ;
+	
+	if ( $S_KIND == DEF_CATEGORY_ITEM || $S_KIND == DEF_CATEGORY_PRODUCT )
+	{
+		$arCol[]	= $blams -> fetchTH( "レベル2" , $tsize , "" , "left" , BLAMS_FORMAT_BORDER ) ;
+		$arCol[]	= $blams -> fetchTH( "レベル3" , $tsize , "" , "left" , BLAMS_FORMAT_BORDER ) ;
+	}
+	$arCol[]	= $blams -> fetchTH( "名前" , 176 , "" , "left" , BLAMS_FORMAT_BORDER ) ;
+
+	$data		 = "" ;
+	$data		.= $blams -> fetchButton( "submit" , "append[done]" , "登録" , "minibutton" ) ;
+	$data		.= $blams -> fetchButton( "submit" , "update[done]" , "更新" , "minibutton" ) ;
+	$data		.= $blams -> fetchButton( "submit" , "delete[done]" , "削除" , "minibutton" ) ;
+	$arCol[]	= $blams -> fetchTD( $data , 160 , "" , "center bottom" , BLAMS_FORMAT_NOBORDER , 1 , 2 ) ;
+
+	$arForm[]	= $arCol ;
+
+	$jsform = sprintf( "ChangeCategory%%d( 0 , 'edit_form' , '' , '%%s' );" ) ;
+
+	$arCol = array() ;
+
+	$js = sprintf( $jsform , 2 , $alias ) ;
+	$data		= $blams -> fetchSelectbox(	$alias . "_category1" ,
+											${ $alias . "_category1" } ,
+											$arCategory1 ,
+											$isize ,
+											"新規作成" ,
+											false ,
+											$js
+										) ;
+	$arCol[]	= $blams -> fetchTD( $data , $tsize , "col1" , "left" , BLAMS_FORMAT_BORDER ) ;
+
+	if ( $S_KIND == DEF_CATEGORY_ITEM || $S_KIND == DEF_CATEGORY_PRODUCT )
+	{
+		$js = sprintf( $jsform , 3 , $alias ) ;
+		$data		= $blams -> fetchSelectbox(	$alias . "_category2" ,
+												${ $alias . "_category2" } ,
+												array() ,
+												$isize ,
+												"新規作成" ,
+												false ,
+												$js
+											) ;
+		$arCol[]	= $blams -> fetchTD( $data , $tsize , "col1" , "left" , BLAMS_FORMAT_BORDER ) ;
+	
+		$data		= $blams -> fetchSelectbox(	$alias . "_category3" ,
+												${ $alias . "_category3" } ,
+												array() ,
+												$isize ,
+												"新規作成" ,
+												false ,
+												""
+											) ;
+		$arCol[]	= $blams -> fetchTD( $data , $tsize , "col1" , "left" , BLAMS_FORMAT_BORDER ) ;
+	}
+	$data		= $blams -> fetchInputbox( $alias . "_name" , ${ $alias . "_name" } , 160 , MAX_CATEGORYNAME , IME_ON ) ;
+	$arCol[]	= $blams -> fetchTD( $data , 176 , "col1" , "left" , BLAMS_FORMAT_BORDER ) ;
+
+	$arForm[]	= $arCol ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "edit_url"			, "list.php"	) ;
+	$tmpl -> assign( "search_data"		, $arParamFind	) ;
+	$tmpl -> assign( "category_data"	, $arParam		) ;
+	$tmpl -> assign( "dummy_form"		, $dummyForm	) ;
+	$tmpl -> assign( "form_data"		, $arForm		) ;
+	$data = $tmpl -> fetch( "category/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// カテゴリーのコピーフォーム
+function	FetchCategoryCopy( $blams , $arParamFind , $arParam , $arCategory , $arCategory1 , $obDB )
+{
+	$alias 		= $obDB -> alias ;
+	$primarykey	= $obDB -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// パラメータからデータを取り出す
+	foreach( $arParamFind as $key => $value )
+		${ $key } = $value ;
+	foreach( $arParam as $key => $value )
+		${ $key } = $value ;
+
+	$tsize = 136 ;
+	$isize = $tsize - 16 ;
+
+	$arForm = array() ;
+
+	$jsform = sprintf( "ChangeCategory%%d( 0 , 'copy_form' , '%%s' , '%%s' );" ) ;
+
+	$js = sprintf( $jsform , 2 , "src" , $alias ) ;
+	$data		= $blams -> fetchSelectbox(	$alias . "_srccategory1" ,
+											${ $alias . "_srccategory1" } ,
+											$arCategory1 ,
+											$isize ,
+											"---" ,
+											false ,
+											$js
+										) ;
+	$arForm[]	= $blams -> fetchTHTD( "レベル1" , $data , 80 , $tsize , "col1" , "left" , "left" , BLAMS_FORMAT_BORDER ) ;
+
+	$data		= $blams -> fetchSelectbox(	$alias . "_srccategory2" ,
+											${ $alias . "_srccategory2" } ,
+											array()	,
+											$isize ,
+											"---" ,
+											false ,
+											""
+										) ;
+	$arForm[]	= $blams -> fetchTHTD( "レベル2" , $data , 80 , $tsize , "col1" , "left" , "left" , BLAMS_FORMAT_BORDER ) ;
+
+	$js = sprintf( $jsform , 2 , "dest" , $alias ) ;
+	$data		= $blams -> fetchSelectbox(	$alias . "_destcategory1" ,
+											${ $alias . "_destcategory1" } ,
+											$arCategory1 ,
+											$isize ,
+											"---" ,
+											false ,
+											$js
+										) ;
+	$arForm[]	= $blams -> fetchTHTD( "レベル1" , $data , 80 , $tsize , "col1" , "left" , "left" , BLAMS_FORMAT_BORDER ) ;
+
+	$data		= $blams -> fetchSelectbox(	$alias . "_destcategory2" ,
+											${ $alias . "_destcategory2" } ,
+											array()	,
+											$isize ,
+											"---" ,
+											false ,
+											""
+										) ;
+	$arForm[]	= $blams -> fetchTHTD( "レベル2" , $data , 80 , $tsize , "col1" , "left" , "left" , BLAMS_FORMAT_BORDER ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "search_data"		, $arParamFind	) ;
+	$tmpl -> assign( "category_data"	, $arParam		) ;
+	$tmpl -> assign( "form_data"		, $arForm		) ;
+	$data = $tmpl -> fetch( "category/copy.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+// カテゴリーのリスト表示
+function	FetchList( $blams , $funcname , $arParamFind , $arParam , $arCategory , $input , $copy , $arError , $obDB )
+{
+	$alias 		= $obDB -> alias ;
+	$primarykey	= $obDB -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// パラメータからデータを取り出す
+	foreach( $arParamFind as $key => $value )
+		${ $key } = $value ;
+	foreach( $arParam as $key => $value )
+		${ $key } = $value ;
+
+	$tree = FetchCategoryTree( $blams , $S_KIND , "" , $arCategory , $alias , 0 , 0 , 0 ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"		, DEF_SITE_ROOTPATH				) ;
+	$tmpl -> assign( "funcname"		, $funcname						) ;
+	$tmpl -> assign( "input_error"	, $arError[ "input" ]			) ;
+	$tmpl -> assign( "copy_error"	, $arError[ "copy" ]			) ;
+	$tmpl -> assign( "alias"		, $alias						) ;
+	$tmpl -> assign( "input"		, $input						) ;
+	$tmpl -> assign( "copy"			, $copy							) ;
+	$tmpl -> assign( "tree"			, $tree							) ;
+	$tmpl -> assign( "category1"	, ${ $alias . "_category1" }	) ;
+	$tmpl -> assign( "category2"	, ${ $alias . "_category2" }	) ;
+	$tmpl -> assign( "category3"	, ${ $alias . "_category3" }	) ;
+	$data = $tmpl -> fetch( "category/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+// カテゴリーツリーの表示
+function	FetchCategoryTree( $blams , $kind , $parent , $arCategory , $alias , $category1 , $category2 , $category3 , $level = 1 )
+{
+	$arTree = array() ;
+
+	$cnt = count( $arCategory ) ;
+
+	$data = "" ;
+	if ( $cnt > 0 )
+	{
+		$arData = array() ;
+		
+		$keys	= array_keys( $arCategory )  ;
+
+		$prev = -1 ;
+		$next = -1 ;
+
+		// Treeデータの保存
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			$arResult = $arCategory[ $keys[ $i ] ] ;
+			$arMe = $arResult[ 0 ] ;
+			unset( $arResult[ 0 ] ) ;
+
+			if ( $parent != "" )
+				$arData[ "name"		]	= sprintf( "%s-%d" , $parent , $keys[ $i ] ) ;
+			else
+				$arData[ "name"		]	= sprintf( "%d" , $keys[ $i ] ) ;
+
+			switch( $level )
+			{
+			case	1 :
+				$category1 = $keys[ $i ] ;
+				break ;
+			case	2 :
+				$category2 = $keys[ $i ] ;
+				break ;
+			case	3 ;
+				$category3 = $keys[ $i ] ;
+				break ;
+			}
+
+			$subcnt = count( $arResult ) ;
+			if ( $subcnt > 0 )
+			{
+				$arSubCategory = array_values( $arResult ) ;
+				$subkey	= array_keys( $arSubCategory[ 0 ][ 0 ] )  ;
+				$arData[ "idname"	] = sprintf( "%s-%d" , $arData[ "name" ] , $subkey[ 0 ] ) ;
+			}
+
+			if ( $i < $cnt - 1 )
+				$next = $keys[ $i + 1 ] ;
+			$me	= array_keys( $arMe )  ;
+			$arData[ "subject"		] = $arMe[ $me[ 0 ] ] ;
+			$arData[ "child"		] = FetchCategoryTree( $blams , $kind , $arData[ "name" ] , $arResult , $alias , $category1 , $category2 , $category3 , $level + 1 ) ;
+			$arData[ "category1"	] = $category1 ;
+			$arData[ "category2"	] = $category2 ;
+			$arData[ "category3"	] = $category3 ;
+			$arData[ "current"		] = $keys[ $i ] ;
+			$arData[ "prev"			] = $prev ;
+			$arData[ "next"			] = $next ;
+			$arTree[] = $arData ;
+			
+			$prev = $keys[ $i ] ;
+		}
+		
+		$tmpl = $blams -> tmpl ;
+		$tmpl -> assign( "rootpath"		, DEF_SITE_ROOTPATH		) ;
+		$tmpl -> assign( "alias"		, $alias				) ;
+		$tmpl -> assign( "kind"			, $kind					) ;
+		$tmpl -> assign( "level"		, $level				) ;
+		$tmpl -> assign( "tree_data"	, $arTree				) ;
+		$data = $tmpl -> fetch( "category/tree.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+	}
+	return $data ;
+}
+
+// カテゴリーフォームの表示
+function	FetchCategoryForm( $blams , $upper , $arCategory )
+{
+	$cnt = count( $arCategory ) ;
+	$data = "" ;
+	if ( $cnt > 0 )
+	{
+		$arForm			= array() ;
+		$arCategorySum	= array() ;
+
+		$key	= array_keys( $arCategory )  ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			// 自レベルの配列の作成
+			$subkey = array_keys( $arCategory[ $key[ $i ] ][ 0 ] ) ;
+			$value = array_values( $arCategory[ $key[ $i ] ][ 0 ] ) ;
+			$arCategorySum[ $key[ $i ] ] = $value[ 0 ] ;
+
+			$level = "" ;
+			if ( $upper != "" )
+				$level = "-" ;
+			$level = sprintf( "%s%s%d" , $upper , $level , $key[ $i ] ) ;
+
+			// 再帰処理の起動
+			$arSubCategory = $arCategory[ $key[ $i ] ] ;
+			unset( $arSubCategory[ 0 ] ) ;
+			$arForm[] = FetchCategoryForm( $blams , $level , $arSubCategory ) ;
+
+		}
+
+		$tmpl = $blams -> tmpl ;
+		$tmpl -> assign( "upper"			, $upper			) ;
+		$tmpl -> assign( "category_data"	, $arCategorySum	) ;
+		$tmpl -> assign( "form_data"		, $arForm			) ;
+		$data = $tmpl -> fetch( "category/dummyform.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+	}
+	return $data ;
+}
+
+// データのコピー
+function	CopyData( &$arParam )
+{
+	$name			= $arParam[ "name"			] ;
+	$kind			= $arParam[ "kind"			] ;
+	$srccategory1	= $arParam[ "srccategory1"	] ;
+	$srccategory2	= $arParam[ "srccategory2"	] ;
+	$destcategory1	= $arParam[ "destcategory1"	] ;
+	$destcategory2	= $arParam[ "destcategory2"	] ;
+	$create_date	= time() ;
+	$update_date	= time() ;
+	
+	$srcLevel = 1 ;
+	if ( $srccategory2 != -1 )
+	{
+		$srcLevel = 2 ;
+	}
+	
+	$destLevel = 1 ;
+	if ( $destcategory2 != -1 )
+	{
+		$destLevel = 2 ;
+	}
+	
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		// コピー先のデータを削除する
+		$sql  = sprintf( "DELETE FROM %s WHERE kind = %d " , TABLE_CATEGORY , $kind ) ;
+		$sql .= sprintf( "AND category1 = %d AND category2 != 0 " , $destcategory1 ) ;
+		if ( $destcategory2 != -1 )
+			$sql .= sprintf( "AND category2 = %d AND category3 != 0 " , $destcategory2 ) ;
+		
+		$record = $obDB -> executeSQL( $sql ) ;
+
+		$sql  = sprintf( "SELECT * FROM %s WHERE kind = %d " , TABLE_CATEGORY , $kind ) ;
+		$sql .= sprintf( "AND status = 1 " ) ;
+		$sql .= sprintf( "AND category1 = %d AND category2 != 0 " , $srccategory1 ) ;
+		if ( $srccategory2 != -1 )
+			$sql .= sprintf( "AND category2 = %d AND category3 != 0 " , $srccategory2 ) ;
+		$sql .= sprintf( "ORDER BY category1 , category2 , category3 " ) ;
+		
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $c = 0 ; $c < $cnt ; $c ++ )
+			{
+				$arResult = $obDB -> getValues( $record , $c ) ;
+				
+				$category1 = $arResult[ "category1" ] ;
+				$category2 = $arResult[ "category2" ] ;
+				$category3 = $arResult[ "category3" ] ;
+//debug( $arResult ) ;
+				$arResult[ "category1" ] = $destcategory1 ;
+				if ( $destcategory2 != -1 )
+				{
+					$arResult[ "category2" ] = $destcategory2 ;
+				}
+				else if ( $srcLevel > $destLevel )
+				{
+					$arResult[ "category2" ] = $category3 ;
+					$arResult[ "category3" ] = 0 ;
+				}
+
+//debug( $arResult ) ;
+								
+				InsertData( $arResult , $conn ) ;
+			}
+		}
+		
+	}
+	
+	$arParam[ "srccategory1"	] = -1 ;
+	$arParam[ "srccategory2"	] = -1 ;
+	$arParam[ "destcategory1"	] = -1 ;
+	$arParam[ "destcategory2"	] = -1 ;
+}
+
+?>

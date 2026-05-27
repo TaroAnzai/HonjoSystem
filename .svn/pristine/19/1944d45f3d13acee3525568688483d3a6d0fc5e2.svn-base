@@ -1,0 +1,64 @@
+/*
+-------------------------------------------------------------------------------
+	Pageing
+-------------------------------------------------------------------------------
+*/
+
+#page ,
+#pageJump ,
+#pageBack ,
+#pageDummy
+{
+	width : 896px ;
+	margin : auto ;
+}
+
+#pageShop ,
+#pageDummy
+{
+	width : 748px ;
+}
+
+#pageCurrent
+{
+	width : 256px ;
+	float : left ;
+	margin-top : 4px ;
+}
+
+#pageAllow
+{
+	width : 320px ;
+	float : right ;
+	text-align : right ;
+	margin-right : 0px ;
+	margin-top : 4px ;
+}
+
+#pageJump p ,
+#pageDummy p
+{
+	text-align : right ;
+	margin : 0px auto 4px 0px ;
+}
+
+#pageBack p ,
+#pageDummy p
+{
+	text-align : left ;
+	margin-left : 0px ;
+}
+
+#page:after ,
+#pageCurrent:after ,
+#pageAllow:after ,
+#pageJump:after ,
+#pageBack:after ,
+#pageDummy:after
+{
+	content : "." ;
+	display : block ;
+	height : 0px ;
+	clear : both ;
+	visibility : hidden ;
+}

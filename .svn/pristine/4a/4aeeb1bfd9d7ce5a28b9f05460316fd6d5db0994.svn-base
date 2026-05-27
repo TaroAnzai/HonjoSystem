@@ -1,0 +1,344 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	// 基本パラメータ変換
+	if ( empty( $mode ) == true )
+		$mode = "update" ;
+
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	if ( empty( $opage ) == true )
+		$opage = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams		= new BLAMS() ;
+	$obTop		= new PARTS_Top() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$additional[] = "opage" ;
+	$obTop -> assignGlobal( $additional ) ;
+
+	// 検索用パラメータ変換
+	$dbParts = new DB_Common() ;
+	$S_SUBJECT = $dbParts -> mb2sb( $S_SUBJECT ) ;
+
+	if ( $S_EDIT_FLG == "" )
+		$S_EDIT_FLG = -1 ;
+
+	$arParamFind = array() ;
+	foreach( $obTop -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page			;
+	$arParamFind[ "opage"	] = $opage			;
+
+	$list_flg = FALSE ;
+
+	$menu = FUNC_TOP ;
+
+//	// タイトルの表示
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$funcname = $funcname ."（ 現在公開中 ）" ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+
+	// WHERE句の初期化
+	$where = sprintf( "WHERE status = 1 " ) ;
+
+	// 現在公開中のトップコンテンツを検索
+//	$now = date( "Y-m-d H:i:s" ) ;
+	$now_date = new DateTime();
+	$now = $now_date -> format( "Ymd" ) ;
+	$where .= sprintf( "AND edit_flg = %d " , DEF_EDITSTATUS_OPENED ) ;
+//	$where .= sprintf( "AND start_date <= to_timestamp( '%s 235959' , 'YYYYMMDD HH24MISS' ) " , date2( "Ymd" , $now ) ) ;
+	$where .= sprintf( "AND start_date <= to_timestamp( '%s 235959' , 'YYYYMMDD HH24MISS' ) " , $now ) ;
+	$where .= sprintf( "AND end_date >= to_timestamp( '%s 0000' , 'YYYYMMDD HH24MISS' ) " , $now ) ;
+
+global	$opened_topid ;
+	$opened_topid = -1 ;
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $where , $list_flg , 1 , FALSE ) ;
+
+	// タイトルの表示
+	$screentype = "default" ;	$funcname = $blams -> GetFuncName( $menu ) ;
+	$funcname = $funcname ."（ 一覧 ）" ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	$list_flg = TRUE ;
+
+	// WHERE句の初期化
+	$where = sprintf( "WHERE status = 1 " ) ;
+
+	// 現在公開中以外を検索
+	$where .= sprintf( "AND topid <> %d " , $opened_topid ) ;
+
+	// タイトルで検索
+	if ( $S_SUBJECT != "" )
+		$where .= sprintf( "AND subject LIKE '%%%s%%' " , $S_SUBJECT ) ;
+
+	// 編集状態で検索
+	if ( $S_EDIT_FLG != -1 )
+		$where .= sprintf( "AND edit_flg = %d " , $S_EDIT_FLG ) ;
+
+	// リスト表示
+	$data .= FetchList( $blams , $funcname , $arParamFind , $where , $list_flg ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 状態テーブル作成
+	global	$arEditStatus ;
+	$arEditStatus_local	= array() ;
+	for ( $i = 0 ; $i < count( $arEditStatus ) ; $i ++ )
+	{
+		$arEditStatus_local[ $i ] = $arEditStatus[ $i ] ;
+	}
+
+	$arFoem = array() ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_SUBJECT" , $S_SUBJECT , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "タイトル" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form	= $blams -> fetchSelectbox( "S_EDIT_FLG" , $S_EDIT_FLG , $arEditStatus_local , 192 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "状態" , $form , 128 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, ""				) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $where , $list_flg , $number_per_page = NUMBER_PER_PAGE , $page_flg = TRUE )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$page_local	= $page ;
+	$page_name	= "page" ;
+	if( $page_flg == FALSE )
+	{
+		$page_local	= $opage ;
+		$page_name	= "opage" ;
+	}
+
+	// 該当データ数取得
+	$sql  = "" ;
+	$sql .= "SELECT count(*) FROM top_data " ;
+	$sql .= $where ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) != 0 )
+				$cnt = $obDB -> getValue( $record , "count" ) ;
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+
+	$tmpl = $blams -> tmpl ;
+
+
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$arList = array() ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / $number_per_page ) ;
+		if ( $page_local == "" )
+			$page_local = 0 ;
+		else if ( $page_local >= $maxpage )
+			$page_local = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		if( $page_flg == FALSE )	// TOPの公開OKは、1件だけ表示する ページ移動とジャンプも表示しない
+		{
+			$page_local = 0 ;
+			$cnt = 0 ;
+			$maxpage = 0 ;
+		}
+
+		$nStart = $page_local * $number_per_page ;
+		$nEnd = $page_local * $number_per_page + $number_per_page ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , $number_per_page , $page_name ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page_local , $arParamFind , $where , $number_per_page ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , $number_per_page , $page_name ) ;
+	}
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = FetchSearch( $blams , $arParamFind ) ;
+	}
+
+	$arHeader = array(
+		array( "caption" => "タイトル"		, "class" => "w384 left" ) ,
+		array( "caption" => "公開開始日"	, "class" => "w128 center" ) ,
+		array( "caption" => "公開終了日"	, "class" => "w128 center" ) ,
+		array( "caption" => "編集状態"		, "class" => "w128 center" ) ,
+		array( "caption" => "更新日"		, "class" => "w128 center" ) ,
+	) ;
+
+	if( empty( $search ) == true )
+		$search = "" ;
+
+	if( empty( $paging ) == true )
+		$paging = "" ;
+
+	if( empty( $pageJump ) == true )
+		$pageJump = "" ;
+
+	if( empty( $funcname ) == true )
+		$funcname = "" ;
+
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page_local		) ;
+	$tmpl -> assign( "maxline"			, $number_per_page	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $start_page , $arParamFind , $where , $number_per_page = NUMBER_PER_PAGE )
+{
+	global $obTop ;
+	$alias = $obTop -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	global	$arEditStatus ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	// 表示に必要な個数だけデータを取得する
+	$limit  = sprintf( " LIMIT %d OFFSET %d" , $number_per_page , ( $start_page * $number_per_page ) ) ;
+
+	$sql  = "" ;
+	$sql .= sprintf( "SELECT * FROM top_data %s ORDER BY start_date DESC , update_date DESC %s" , $where ,  $limit ) ;
+
+//debug($sql);
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $index = 0 ; $index < $cnt ; $index ++ )
+			{
+				// データの取得
+				$arData		= $obDB -> getValues( $record , $index ) ;
+				
+				$topid		= $arData[ "topid"		] ;
+				$subject	= $arData[ "subject"	] ;
+				$edit_flg	= $arData[ "edit_flg"	] ;
+				$start_date	= $arData[ "start_date"	] ;
+				$end_date	= $arData[ "end_date"	] ;
+				$update_date= $arData[ "update_date"] ;
+				$edit_flg = $arEditStatus[ $edit_flg ] ;
+				if ( $edit_flg == "" )
+					$edit_flg = "不明" ;
+				
+				$arAnchor[ "url" 			] = "edit.php"		;
+				$arAnchor[ "idname"			] = $alias . "_topid"		;
+				$arAnchor[ "id"				] = $topid			;
+				$arAnchor[ "param"			] = $param			;
+				$arAnchor[ "anchor"			] = $subject		;
+				$arAnchor[ "caption"		] = $subject		;
+				$arAnchor[ "class"			] = "border left"	;
+				$arAnchor[ "script"			] = ""				;
+				$arAnchor[ "date_format"	] = ""				;
+
+				$arData = array() ;
+				$arData[] = $arAnchor ;
+				$arData[] = array( "caption" => $start_date ,	"class" => "border center"	, "date_format" => "%Y/%m/%d"	, "anchor" => "" ) ;
+				$arData[] = array( "caption" => $end_date ,		"class" => "border center"	, "date_format" => "%Y/%m/%d"	, "anchor" => "" ) ;
+				$arData[] = array( "caption" => $edit_flg ,		"class" => "border center"	, "date_format" => ""			, "anchor" => "" ) ;
+				$arData[] = array( "caption" => $update_date ,	"class" => "border center"	, "date_format" => "%Y/%m/%d"	, "anchor" => "" ) ;
+				$arList[] = $arData ;
+				
+				global	$opened_topid ;
+				$opened_topid = $topid ;	// to global
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+	
+	return $arList ;
+}
+
+
+
+?>

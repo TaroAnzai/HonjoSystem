@@ -1,0 +1,81 @@
+<?php
+	ini_set( "display_errors" , 1 ) ;
+	require_once( "../../lib/system.php") ;
+
+	$blams = new BLAMS() ;
+	$obAdmin = new PARTS_Admin() ;
+
+	$keys = array( "action" , "loginid" , "passwd" ) ;
+	$obAdmin -> assignGlobal( $keys ) ;
+
+	$result = FALSE ;
+	$level = -1 ;
+
+	$error = "" ;
+	if ( $action == "login" )
+	{
+		$arWhere = array() ;
+		$arWhere[ "loginid"	] = $loginid ;
+		$arWhere[ "passwd"	] = $obAdmin -> encrypt( $passwd ) ;
+
+		if ( $obAdmin -> isOpen() )
+		{
+			$arResult = $obAdmin -> getData( $arWhere ) ;
+			if ( count( $arResult ) > 0 )
+			{
+				$arResult = $arResult[ 0 ] ;
+				$userid = $arResult[ $obAdmin -> alias . "_" . $obAdmin -> primarykey ] ;
+				$level  = SESSION_ADMIN ;
+				$result = TRUE ;
+			}
+
+			if ( $result == TRUE )
+			{
+				$obSession = new PARTS_Session() ;
+				$SSID = $obSession -> getID() ;
+				
+				$obSession -> writeLogin( $userid , $level ) ;
+				$location = sprintf( "Location: /%s/menu.php" , DEF_SITE_ROOTPATH , $SSID ) ;
+				header( $location ) ;
+				exit ;
+			}
+			else
+			{
+				$error = "・ログインIDもしくはパスワードが間違っています。\n" ;
+			}
+		}
+	}
+
+	$menu = FUNC_LOGIN ;
+
+	$screentype = "login" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	$data = FetchLogin( $blams , $funcname , $loginid , $error ) ;
+
+	$contents = $blams -> fetchContents( $data ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents ) ;
+	
+	exit ;
+
+// 
+// メニュー
+// 
+function	FetchLogin( $blams , $funcname , $loginid , $error )
+{
+	$error .= "ログインIDとパスワードを入力して「ログイン」ボタンをクリックしてください" ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"	, $funcname	) ;
+	$tmpl -> assign( "loginid"	, $loginid		) ;
+	$tmpl -> assign( "error"	, $error	) ;
+	$data = $tmpl -> fetch( "login.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+?>

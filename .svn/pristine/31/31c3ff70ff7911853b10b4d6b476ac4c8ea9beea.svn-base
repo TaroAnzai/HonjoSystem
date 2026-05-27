@@ -1,0 +1,380 @@
+// 初期プルダウンの表示
+function	SelectMenuList( menucategory , category1 , category2 , category3 , form , alias )
+{
+	var objForm ;
+	var objDest ;
+
+	objForm	= document.getElementById( form ) ;
+	objDest	= objForm.elements[ alias + '_menucategory' ] ;
+
+	if ( menucategory == -1 )
+	{
+		objDest.selectedIndex = 0 ;
+	}
+	else
+	{
+		objDest.selectedIndex = 0 ;
+		cnt = objDest.length ;
+		for ( i = 1 ; i < cnt ; i ++ )
+		{
+			if ( objDest.options[ i ].value == menucategory )
+			{
+				objDest.selectedIndex = i ;
+				break ;
+			}
+		}
+	}
+
+	if ( menucategory != -1 )
+		ChangeMenuCategory( menucategory , form , alias ) ;
+	if ( category1 != -1 )
+		ChangeCategory1( category1 , form , alias ) ;
+	if ( category2 != -1 )
+		ChangeCategory2( category2 , form , alias ) ;
+	
+	if ( menucategory != -1 )
+	{
+		displayList( "id" + menucategory + "c" , true ) ;
+
+		if ( category1 != -1 )
+		{
+			displayList( "id" + menucategory + "-" + category1 + "c" , true ) ;
+
+			if ( category2 != -1 )
+			{
+				displayList( "id" + menucategory + "-" + category1 + "-" + category2 + "c" , true ) ;
+			}
+		}
+	}
+}
+
+function	GetCurrent( index , name , obj )
+{
+	var	current = index ;
+	
+	if ( current == -999 )
+	{
+		current	= obj.elements[ name ].selectedIndex ;
+		if ( current != -1 )
+			current = obj.elements[ name ].options[ current ].value ;
+	}
+	
+	return current ;
+}
+
+function	ChangeCategorySelect( parent , child , mc , c1 , c2 , c3 , form , alias )
+{
+	var objForm = document.getElementById( form ) ;
+	
+	var objSrc ;
+	var objParent ;
+	var objChild ;
+
+	var current = -1 ;
+	var target = "" ;
+	var start = 0 ;
+	var end = 0 ;
+	if ( mc > 0 || mc == -999 )
+	{
+		mc = GetCurrent( mc , alias + "_menucategory"	, objForm ) ;
+		current = mc ;
+		target = alias + "_category" + mc ;
+		start ++ ;
+		end = 4 ;
+		if ( c1 > 0 || c1 == -999 )
+		{
+			c1 = GetCurrent( c1 , alias + "_category1"		, objForm ) ;
+			current = c1 ;
+			target = target + "-" + c1 ;
+			start ++ ;
+			if ( c2 > 0 || c2 == -999 )
+			{
+				c2 = GetCurrent( c2 , alias + "_category2"		, objForm ) ;
+				current = c2 ;
+				target = target + "-" + c2 ;
+				start ++ ;
+				if ( c3 > 0 || c3 == -999 )
+				{
+					c3 = GetCurrent( c3 , alias + "_category3"		, objForm ) ;
+					current = c3 ;
+					target = target + "-" + c3 ;
+					start ++ ;
+				}
+			}
+		}
+	}
+	
+	// 今あるデータを全部削除する
+	var cnum = start ;
+	for ( cnum = start ; cnum < end ; cnum ++ )
+	{
+		objChild = objForm.elements[ alias + "_category" + cnum ] ;
+		cnt = objChild.length ;
+		objChild.selectedIndex = -1 ;
+		for ( i = 0 ; i  < cnt ; i ++ )
+		{
+			objChild.options[ 0 ] = null ;
+		}
+		objChild.options[ 0 ] = new Option( "新規作成" , -1 ) ;
+	}
+
+	objParent	= objForm.elements[ parent ] ;
+	objChild	= objForm.elements[ child ] ;
+
+	if ( objParent && objChild )
+	{
+		if ( current != -1 )
+		{
+			objSrc = document.getElementById( target ) ;
+			
+			if ( objSrc )
+			{
+				cnt = objSrc.elements.length ;
+				for ( i = 0 ; i < cnt ; i ++ )
+				{
+					objChild.options[ i + 1 ] = new Option( objSrc.elements[ i ].value , objSrc.elements[ i ].name ) ;
+				}
+				if ( current == -1 )
+				{
+					objParent.selectedIndex = 0 ;
+				}
+			}
+		}
+	}
+}
+
+function	ChangeMenuCategory( mc , form , alias )
+{
+	ChangeCategorySelect( alias + "_menucategory" , alias + "_category1" , mc , -1 , -1 , -1 , form , alias ) ;
+}
+
+// カテゴリーの切り替え
+function	ChangeCategory1( c1 , form , alias )
+{
+	ChangeCategorySelect( alias + "_category1" , alias + "_category2" , -999 , c1 , -1 , -1 , form , alias ) ;
+	ChangeDetail( form , alias ) ;
+}
+
+// カテゴリーの切り替え
+function	ChangeCategory2( c2 , form , alias )
+{
+	ChangeCategorySelect( alias + "_category2" , alias + "_category3" , -999 , -999 , c2 , -1 , form , alias ) ;
+	ChangeDetail( form , alias ) ;
+}
+
+// カテゴリーの切り替え
+function	ChangeCategory3( c3 , form , alias )
+{
+	ChangeDetail( form , alias ) ;
+}
+
+function	ChangeStandard( form , alias )
+{
+	var objSrc ;
+	var objForm ;
+	var objStandard ;
+
+	var	cnt ;
+	var	category1 ;
+	var	category2 ;
+
+	objForm		= document.getElementById( form ) ;
+	objStandard	= objForm.elements[ alias + '_standard' ] ;
+
+	if ( objStandard )
+	{
+		i = objStandard.selectedIndex ;
+		if ( i != -1 )
+		{
+			standard = objStandard.options[ i ].value ;
+			
+			if ( standard != 99 )
+			{
+				objSrc = document.getElementById( 'standard' + standard ) ;
+
+				objForm.elements[ alias + '_anchor'		].value = objSrc.elements[ alias + '_anchor'	].value ;
+				objForm.elements[ alias + '_class'		].value = objSrc.elements[ alias + '_class'		].value ;
+				objForm.elements[ alias + '_url'		].value = objSrc.elements[ alias + '_url'		].value ;
+				objForm.elements[ alias + '_subject'	].value = objSrc.elements[ alias + '_subject'	].value ;
+
+				objForm.elements[ alias + '_class'		].readOnly = "readonly" ;
+				objForm.elements[ alias + '_url'		].readOnly = "readonly" ;
+			}
+			else
+			{
+				objForm.elements[ alias + '_anchor'		].value = "" ;
+				objForm.elements[ alias + '_class'		].value = "" ;
+				objForm.elements[ alias + '_url'		].value = "" ;
+				objForm.elements[ alias + '_subject'	].value = "" ;
+
+				objForm.elements[ alias + '_class'		].readOnly = "" ;
+				objForm.elements[ alias + '_url'		].readOnly = "" ;
+			}
+		}
+	}
+	
+}
+
+function	displayList( id , display )
+{
+	var	objSrc = document.getElementById( id ) ;
+	var	objOpen = document.getElementById( id + "o" ) ;
+	var	objClose = document.getElementById( id + "c" ) ;
+
+	var value = "none" ;
+	if ( display == true )
+	{
+		value = "block" ;
+		if ( objOpen )
+			objOpen.style.display = "none" ;
+		
+		if ( objClose )
+			objClose.style.display = "block" ;
+	}
+	else
+	{
+		if ( objOpen )
+			objOpen.style.display = "block" ;
+		if ( objClose )
+			objClose.style.display = "none" ;
+	}
+	if ( objSrc )
+		objSrc.style.display = value ;
+}
+
+// Treeのリンクをクリックした場合に内容を表示する
+function	menuLookup( mc , c1 , c2 , c3 , standard , form , alias )
+{
+	id = "menuDetail-" + mc + "-" + c1 + "-" + c2 + "-" + c3 ;
+	
+	var objSrc  = document.getElementById( id ) ;
+	var objDest = document.getElementById( form ) ;
+
+	if ( objSrc && objDest )
+	{
+		var objSelect ;
+		var sname = new Array() ;
+		sname[ 0 ] = alias + '_menucategory' ;
+		sname[ 1 ] = alias + '_category1' ;
+		sname[ 2 ] = alias + '_category2' ;
+		sname[ 3 ] = alias + '_category3' ;
+		sname[ 4 ] = alias + '_standard' ;
+
+		var sval = new Array() ;
+		sval[ 0 ] = mc ;
+		sval[ 1 ] = c1 ;
+		sval[ 2 ] = c2 ;
+		sval[ 3 ] = c3 ;
+		sval[ 4 ] = standard ;
+		
+		for ( s = 0 ; s < sname.length ; s ++ )
+		{
+			objSelect = objDest.elements[ sname[ s ] ] ;
+			cnt = objSelect.length ;
+
+			for ( os = 0 ; os < cnt ; os ++ )
+			{
+				if ( objSelect.options[ os ].value == sval[ s ] )
+				{
+					objSelect.selectedIndex = os ;
+
+					mc = -999 ;
+					c1 = -1 ;
+					c2 = -1 ;
+					c3 = -1 ;
+					switch ( s )
+					{
+					case	1 :
+						mc = -999 ;
+						c1 = -999 ;
+						break ;
+					case	2 :
+						mc = -999 ;
+						c1 = -999 ;
+						c2 = -999 ;
+						break ;
+					case	3 :
+						mc = -999 ;
+						c1 = -999 ;
+						c2 = -999 ;
+						c3 = -999 ;
+						break ;
+					}
+					
+					if ( s < sname.length - 1 )
+					{
+						ChangeCategorySelect( sname[ s ] , sname[ s + 1 ] , mc , c1 , c2 , c3 , form , alias ) ;
+					}
+					break ;
+
+				}
+			}
+		}
+		
+		objDest.elements[ alias + '_anchor'		].value	= objSrc.elements[ 'anchor'		].value ;
+		objDest.elements[ alias + '_class'		].value	= objSrc.elements[ 'class'		].value ;
+		objDest.elements[ alias + '_url'		].value	= objSrc.elements[ 'url'		].value ;
+		objDest.elements[ alias + '_subject'	].value	= objSrc.elements[ 'subject'	].value ;
+	}
+}
+
+function	setCorpID( corpid )
+{
+	var url = "./list.php?S_CORPID=" + corpid ;
+	location.href = url ;
+}
+
+function	ChangeDetail( form , alias )
+{
+	var objForm ;
+	
+	objForm		= document.getElementById( form ) ;
+	if ( objForm )
+	{
+		var mc = GetCurrent( -999 , alias + "_menucategory"	, objForm ) ;
+		var c1 = GetCurrent( -999 , alias + "_category1"		, objForm ) ;
+		var c2 = GetCurrent( -999 , alias + "_category2"		, objForm ) ;
+		var c3 = GetCurrent( -999 , alias + "_category3"		, objForm ) ;
+		
+		var id = "" ;
+		if ( mc != -1 )
+		{
+			if ( c1 == -1 )
+			{
+				c1 = 0 ;
+			}
+			if ( c2 == -1 )
+			{
+				c2 = 0 ;
+			}
+			if ( c3 == -1 )
+			{
+				c3 = 0 ;
+			}
+			
+			id = "menuDetail-" + mc + "-" + c1 + "-" + c2 + "-" + c3 ;
+		}
+		
+		if ( id != "" )
+		{
+			var objSrc		= document.getElementById( id ) ;
+			if ( objSrc )
+			{
+				objForm.elements[ alias + "_standard"	].selectedIndex = -1 ;
+				var len = objForm.elements[ alias + "_standard"	].length ;
+				for ( i = 0 ; i < len ; i ++ )
+				{
+					if ( objForm.elements[ alias + "_standard"	].options[ i ].value == objSrc.elements[ "standard"	].value )
+					{
+						objForm.elements[ alias + "_standard"	].selectedIndex = i ;
+						break ;
+					}
+				}
+				objForm.elements[ alias + "_url"		].value			= objSrc.elements[ "url"		].value ;
+				objForm.elements[ alias + "_anchor"		].value			= objSrc.elements[ "anchor"		].value ;
+				objForm.elements[ alias + "_class"		].value			= objSrc.elements[ "class"		].value ;
+				objForm.elements[ alias + "_subject"	].value			= objSrc.elements[ "subject"	].value ;
+			}
+		}
+	}
+}

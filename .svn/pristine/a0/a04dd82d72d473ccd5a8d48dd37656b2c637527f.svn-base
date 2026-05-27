@@ -1,0 +1,1108 @@
+<?php
+/**
+* BLAMS 基本関数郡 売り上げ用クラス
+*
+* カート用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+require_once( 'class/db.class.php' ) ;
+require_once( 'class/cart.class.php' ) ;
+require_once( 'class/cartitem.class.php' ) ;
+require_once( 'class/member.class.php' ) ;
+require_once( 'class/member_corp.class.php' ) ;
+require_once( 'class/serialno.class.php' )  ;
+require_once( 'class/merchandise.class.php' )  ;
+require_once( 'class/price.class.php' )  ;
+require_once( 'class/category.class.php' )  ;
+
+class PARTS_Sale extends PARTS_Cart
+{
+	var	$obMember ;
+	var	$obCartItem ;
+	var	$obMerchandise ;
+	
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "cart_data" ;
+		$alias		= "ct" ;
+		$primarykey	= "cartid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_CART ;
+
+		$this -> obMember		= new PARTS_Member( $this -> conn ) ;
+		$this -> obCartItem		= new PARTS_CartItem( $this -> conn ) ;
+		$this -> obMerchandise	= new PARTS_Merchandise( $this -> conn ) ;
+
+		$this -> searchkey = array(
+				"S_DATE"			,
+				"S_DATE_Y"			,
+				"S_DATE_M"			,
+				"S_MEMBER_FLG"		,
+			) ;
+	}
+
+	// セッションIDとメンバーIDから カートIDを取得する
+	// 引数に請求状態を追加
+	function	getID( $sessionid , $memberid , $billing_status = -1 )
+	{
+		$id = -1 ;
+		
+		$arWhere = array() ;
+		if ( $memberid != -1 )
+		{
+			$arWhere[ "member_flg"	]	= 1 ;
+			$arWhere[ "memberid"	]	= $memberid ;
+		}
+		else
+		{
+			// 非会員ならセッションIDで検索する
+			$arWhere[ "member_flg"	]	= 0 ;
+			$arWhere[ "sessionid"	]	= $sessionid ;
+		}
+		
+		if( $billing_status != -1 )
+			$arWhere[ "billing_status"	]	= $billing_status ;
+		
+		$arWhere[ "order"	]	=	sprintf( "%s.update_date DESC " , $this -> alias ) ;
+		
+		$arData = $this -> getData( $arWhere ) ;
+		if ( count( $arData ) > 0 )
+		{
+			$id = $arData[ 0 ][ sprintf( "%s_%s" , $this -> alias , $this -> primarykey ) ] ;
+			
+			$this -> arData = $arData ;
+		}
+		return $id ;
+	}
+
+	// $item_flg
+	// カートアイテムを含む全件取得は重いので、暫定で不必要な場合は切れるように
+	function	getData( $arParam , $page = -1 , $per_page = -1 , $item_flg = true )
+	{
+		$obCartItem = $this -> obCartItem ;
+	
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s , " , $this -> makeAliaseFields() ) ;
+			$fields .= sprintf( "%s   " , $this -> obMember -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$cnt = count( $arData ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arCartItem = array() ;
+				$arOrder = array() ;
+				if( $item_flg == true )
+				{
+					$arWhere = array() ;
+					$arWhere[ $this -> primarykey ] = $arData[ $i ][ sprintf( "%s_%s" , $this -> alias , $this -> primarykey ) ] ;
+					if ( isset( $arParam[ "merchandiseid" ] ) == true )
+						$arWhere[ "merchandiseid" ] = $arParam[ "merchandiseid" ] ;
+					if ( isset( $arParam[ "where_item" ] ) == true )
+						$arWhere[ "where" ] = $arParam[ "where_item" ] ;
+
+					$arCartItem = $obCartItem -> getData( $arWhere ) ;
+	
+					$arOrder = $this -> createOtherParam( $arData[ $i ] , $arCartItem ) ;
+				}
+				$arData[ $i ][ "cartitem_data"	] = $arCartItem ;
+				$arData[ $i ][ "cart_order"		] = $arOrder ;
+			}
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "mb_tel" ;
+		$arParamList[] = "tp_tel" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "LEFT JOIN %s %s ON %s.memberid = %s.memberid " , 
+							$this -> obMember -> tname , 
+							$this -> obMember -> alias , 
+							$this -> alias , 
+							$this -> obMember -> alias 
+						) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		if ( $sessionid != -1 )
+			$sql .= sprintf( "AND %s.sessionid = '%s' " , $this -> alias , $this -> mb_addslashes( $sessionid ) ) ;
+
+		if ( $memberid != -1 )
+			$sql .= sprintf( "AND %s.memberid = %d " , $this -> alias , $memberid ) ;
+
+		if ( $member_flg != -1 )
+			$sql .= sprintf( "AND %s.member_flg = %d " , $this -> alias , $member_flg ) ;
+
+		if ( $shipping != -1 )
+			$sql .= sprintf( "AND %s.shipping = %d " , $this -> alias , $shipping ) ;
+
+//		if ( $name != -1 )
+//			$sql .= sprintf( "AND %s.name = '%s' " , $this -> alias , $this -> mb_addslashes( $name ) ) ;
+
+		if ( $billing_status != -1 )
+			$sql .= sprintf( "AND %s.billing_status = %d " , $this -> alias , $billing_status ) ;
+
+		if ( $shipped_status == DF_STATETRANS_OTHER )
+		{
+			$sql .= sprintf( "AND ( " ) ;
+			$sql .= sprintf( "%s.shipped_status != %d " , $this -> alias , DF_STATETRANS_DELIVERED ) ;
+			$sql .= sprintf( "AND " ) ;
+			$sql .= sprintf( "%s.shipped_status != %d " , $this -> alias , DF_STATETRANS_ENDSTATE ) ;
+			$sql .= sprintf( ") " ) ;
+		}
+		else if ( $shipped_status != -1 )
+		{
+			$sql .= sprintf( "AND %s.shipped_status = %d " , $this -> alias , $shipped_status ) ;
+		}
+		
+		if ( $sheetno != -1 )
+			$sql .= sprintf( "AND %s.sheetno = '%s' " , $this -> alias , $this -> mb_addslashes( $sheetno ) ) ;
+
+		if ( $mb_tel != -1 )
+			$sql .= sprintf( "AND ( %s.tel_home = '%s' OR %s.tel_port = '%s' ) " ,	$this -> obMember -> alias ,
+																					$this -> mb_addslashes( $mb_tel ) ,
+																					$this -> obMember -> alias ,
+																					$this -> mb_addslashes( $mb_tel ) ) ;
+		
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			else
+				$sql .= sprintf( "ORDER BY %s.order_date " , $this -> alias ) ;
+		}
+		$sql .= $limit ;
+		
+		return $sql ;
+	}
+
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$error = "" ;
+		return $error ;
+	}
+
+	// カートアイテムを削除(status = -1)する
+	function	deleteData( $cartid = -1 )
+	{
+		$result = false ;
+
+		$sql  = sprintf( "UPDATE cart_data SET " ) ;
+		$sql .= sprintf( "status = -1 , " ) ;
+		$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+		$sql .= sprintf( "WHERE %s = %d "	, $this -> primarykey , ${ $this -> primarykey } ) ;
+		$record = $this -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$result = true ;
+			$this -> closeRecord( $record ) ;
+		}
+	
+		return $result ;
+	}
+
+	// DBのフィールド名＝変数名
+	// 異なる場合は事前に設定必要
+	function	insertData( &$arParam )
+	{
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		$result = parent::insertData( $arParam ) ;
+		return $result ;
+
+/*
+		// 次のシーケンスID取得
+		$sql = sprintf( "SELECT NEXTVAL( '%s_%s_seq' ) " , $this -> tname , $this -> primarykey ) ;
+		$record = $this -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			${ $this -> primarykey } = $this -> getValue( $record , "nextval" ) ;
+			$this -> closeRecord( $record ) ;
+		}
+		else
+		{
+			${ $this -> primarykey } = -1 ;
+		}
+
+		if( ${ $this -> primarykey } != -1 )
+		{
+			$arParamList = $this -> fields ;
+			$sql_field  = "" ;
+			$sql_value  = "" ;
+			$sql_field .= sprintf( "%s , " , $this -> primarykey ) ;
+			$sql_value .= sprintf( "%d , " , ${ $this -> primarykey } ) ;
+			for( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+			{
+				$key = $arParamList[ $i ] ;
+				if( !( $key == $this -> primarykey || $key == "update_date" || $key == "create_date" || $key == "status" ) )
+				{
+					$value = $arParam[ $key ] ;
+					$sql_field .= sprintf( "%s , " , $key ) ;
+		
+					// 型による切り分け
+					switch( $key )
+					{
+						// text
+						case "sessionid" :
+						case "sheetno" :
+						case "city" :
+						case "addr1" :
+						case "addr2" :
+						case "zip" :
+						case "tel" :
+						case "name" :
+						case "comment" :
+							$sql_value .= sprintf( "'%s' , " , $value ) ;
+							break ;
+					
+						// timestamp
+						case "order_date" :
+						case "income_date" :
+						case "limit_date" :
+						case "delivery_date" :
+						case "delivery_date" :
+							if( $value != "" )
+								$sql_value .= sprintf( "'%s' , " , $value ) ;
+							else
+								$sql_value .= sprintf( "NULL , " ) ;
+							break ;
+		
+						// int2 int4
+						case "memberid" :
+						case "member_flg" :
+						case "settlement" :
+						case "orderway" :
+						case "used_point" :
+						case "delivery_time" :
+						case "shipping" :
+						case "state" :
+						case "state_trans" :
+						case "billing_status" :
+						case "shipped_status" :
+						case "print_status" :
+							$sql_value .= sprintf( "%d , " , $value ) ;
+							break ;
+		
+						// float4
+						case "append_point" :
+						case "limit_point" :
+							$sql_value .= sprintf( "'%s' , " , $value ) ;
+							break ;
+
+						default :
+							$sql_value .= sprintf( "'%s' , " , $value ) ;
+							break ;
+					}
+				}
+			}
+			
+			$sql  = "" ;
+			$sql .= sprintf( "INSERT INTO cart_data ( " ) ;
+			$sql .= $sql_field ;
+			$sql .= sprintf( "status " ) ;
+			$sql .= sprintf( " ) VALUES ( " ) ;
+			$sql .= $sql_value ;
+			$sql .= sprintf( "1 " ) ;
+			$sql .= sprintf( " ) " ) ;
+
+			$record = $this -> executeSQL( $sql ) ;
+			if ( $record )
+				$this -> closeRecord( $record ) ;
+		}
+
+		return ${ $this -> primarykey } ;
+*/
+	}
+
+	// カートに商品を入れる
+	// 管理画面からはcartidを引数にしないと取得できないので追加
+	function	appendOrder( $merchandiseid , $number = 1 , $wrapping = 0 , $decoration = 0 , $package = 0 , $billstatus = DF_BILLSTATUS_BUYING , $cartid = -1 )
+	{
+		$cartitemid = -1 ;
+		$obCartItem		= $this -> obCartItem ;
+		$obMerchandise	= $this -> obMerchandise ;
+		$obSerialno		= new PARTS_Serialno( $this -> conn ) ;
+
+		$alias			= $this -> alias ;
+		$alias_mb		= $this -> obMember -> alias ;
+		$alias_ci		= $obCartItem -> alias ;
+
+		// ログイン情報の取得
+		$memberid	= -1 ;
+
+		$obSession = new PARTS_Session( $this -> conn ) ;
+		$sessionid	= $obSession -> getID() ;
+		$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+		// カート管理情報を検索
+		if( ${ $this -> primarykey } == -1 )
+			${ $this -> primarykey } = $this -> getID( $sessionid , $memberid , $billstatus ) ;
+
+		if ( ${ $this -> primarykey } != -1 )
+		{
+			// カートが既に存在していれば、セッションIDを更新する（エラー処理なし）
+			$this -> updateSessionid( ${ $this -> primarykey } , $sessionid ) ;
+		}
+		else
+		{
+			// カートが存在していなかったら、カート管理情報を新規作成する
+			if ( $memberid != -1 )
+			{
+				// 会員なら会員判定フラグ更新（会員）
+				$member_flg = 1 ;
+			}
+			else
+			{
+				// 非会員なら会員判定フラグ更新（非会員）と共に、仮会員情報を新規作成する
+				$member_flg = 0 ;
+	
+				// 仮会員ログインID（パスワード）新規作成
+				$new_id = $obSerialno -> createSerialNo( SERIALNO_TYPE_MEMBER ) ;
+				if ( $new_id == 0 )
+				{
+					$memberid = -1 ;
+				}
+				else
+				{
+					$arMember = array() ;
+					$arMember[ $alias_mb . "_loginid"		] = $new_id ;
+					$arMember[ $alias_mb . "_passwd"		] = "temptemptemp" ;
+					$arMember[ $alias_mb . "_level"			] = DEF_MEMBER_LEVEL_NON ;
+					$arMember[ $alias_mb . "_name"			] = "仮会員" ;
+					$arMember[ $alias_mb . "_name_en"		] = "tempmember" ;
+					$arMember[ $alias_mb . "_kana"			] = "カリカイイン" ;
+					$arMember[ $alias_mb . "_point"			] = 0 ;
+					$arMember[ $alias_mb . "_total_point"	] = 0 ;
+
+					$this -> obMember -> checkPassword( $arMember[ $alias_mb . "_passwd" ] , $arMember[ $alias_mb . "_crypt_passwd" ] ) ;
+					$arMember[ $alias_mb . "_clear_passwd"		] = $this -> obMember -> decrypt( $arMember[ $alias_mb . "_crypt_passwd" ] ) ;
+
+					// 仮のため必要最低限(notnull)の情報のみ登録する
+					// checkDataを回避する
+					$result = $this -> tempMemberInsert( $arMember ) ;
+					if( $result )
+						$memberid = $arMember[ $alias_mb . "_memberid" ] ;
+					else
+						$memberid = -1 ;
+				}
+			}
+
+			// 会員ID指定、もしくは正常に新規作成できた場合のみ、カート管理情報を新規作成する
+			// 必要最低限の情報のみ
+			if ( $memberid != -1 )
+			{
+				$arNewCart = array() ;
+				$arNewCart[ $alias . "_sessionid"		] = $sessionid ;
+				$arNewCart[ $alias . "_memberid"		] = $memberid ;
+				$arNewCart[ $alias . "_member_flg"		] = $member_flg ;
+				$arNewCart[ $alias . "_sheetno"			] = "9999999999" ;
+				$arNewCart[ $alias . "_settlement"		] = -1 ;
+				$arNewCart[ $alias . "_orderway"		] = 1 ;
+				$arNewCart[ $alias . "_used_point"		] = 0 ;
+				$arNewCart[ $alias . "_append_point"	] = 0 ;
+				$arNewCart[ $alias . "_limit_point"		] = 0 ;
+				$arNewCart[ $alias . "_delivery_time"	] = -1 ;
+				$arNewCart[ $alias . "_shipping"		] = 0 ;
+				$arNewCart[ $alias . "_state_trans"		] = 0 ;
+				$arNewCart[ $alias . "_billing_status"	] = $billstatus ;
+				$arNewCart[ $alias . "_shipped_status"	] = DF_STATETRANS_STOCKCHK ;
+				$arNewCart[ $alias . "_print_status"	] = 0 ;
+
+				$result = $this -> tempCartInsert( $arNewCart ) ;
+				if( $result )
+					${ $this -> primarykey } = $arNewCart[ $alias . "_" . $this -> primarykey ] ;
+				else
+					${ $this -> primarykey } = -1 ;
+			}
+		}
+	
+		// カート管理ID検索、もしくは正常に新規作成できた場合のみ、カート商品情報へ追加する
+		// 必要最低限の情報のみ
+		if ( ${ $this -> primarykey } != -1 )
+		{
+			$arWhere[ "merchandiseid" ] = $merchandiseid ;
+			$arMerchandise = $obMerchandise -> getData( $arWhere ) ;
+	
+			if( count( $arMerchandise ) )
+			{
+				$key = sprintf( "%s_coolpack" , $obMerchandise -> alias ) ;
+				$coolpack = $arMerchandise[ 0 ][ $key ] ;
+			}
+	
+			$arNewCartItem = array() ;
+			$arNewCartItem[ $alias_ci . "_cartid"			] = ${ $this -> primarykey } ;
+			$arNewCartItem[ $alias_ci . "_merchandiseid"	] = $merchandiseid ;
+			$arNewCartItem[ $alias_ci . "_number"			] = $number ;
+			$arNewCartItem[ $alias_ci . "_wrapping"			] = $wrapping ;
+			$arNewCartItem[ $alias_ci . "_decoration"		] = $decoration ;
+			$arNewCartItem[ $alias_ci . "_package"			] = $package ;
+			$arNewCartItem[ $alias_ci . "_coolpack"			] = $coolpack ;
+			$arNewCartItem[ $alias_ci . "_deco_used"		] = -1 ;
+
+			$result = $this -> tempCartItemInsert( $arNewCartItem ) ;
+			if( $result )
+				$cartitemid = $arNewCartItem[ $alias_ci . "_cartitemid" ] ;
+			else
+				$cartitemid = -1 ;
+		}
+		return $cartitemid ;
+	}
+
+	// 仮メンバー登録
+	function	tempMemberInsert( &$arParam )
+	{
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$alias_mb		= $this -> obMember -> alias ;
+		$result			= false ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "INSERT INTO member_data ( " ) ;
+		$sql .= sprintf( "loginid , " ) ;
+		$sql .= sprintf( "passwd , " ) ;
+		$sql .= sprintf( "clear_passwd , " ) ;
+		$sql .= sprintf( "level , " ) ;
+		$sql .= sprintf( "name , " ) ;
+		$sql .= sprintf( "name_en , " ) ;
+		$sql .= sprintf( "kana , " ) ;
+		$sql .= sprintf( "point , " ) ;
+		$sql .= sprintf( "total_point , " ) ;
+		$sql .= sprintf( "status " ) ;
+		$sql .= sprintf( " ) VALUES ( " ) ;
+		$sql .= sprintf( "'%s' , " , ${ $alias_mb . "_loginid" } ) ;
+		$sql .= sprintf( "'%s' , " , ${ $alias_mb . "_passwd" } ) ;
+		$sql .= sprintf( "'%s' , " , ${ $alias_mb . "_clear_passwd" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_mb . "_level" } ) ;
+		$sql .= sprintf( "'%s' , " , ${ $alias_mb . "_name" } ) ;
+		$sql .= sprintf( "'%s' , " , ${ $alias_mb . "_name_en" } ) ;
+		$sql .= sprintf( "'%s' , " , ${ $alias_mb . "_kana" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_mb . "_point" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_mb . "_total_point" } ) ;
+		$sql .= sprintf( "1 " ) ;
+		$sql .= sprintf( " ) " ) ;
+
+		$record = $this -> obMember -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$this -> obMember -> closeRecord( $record ) ;
+			$arParam[ $alias_mb . "_memberid" ] = $this -> obMember -> getLastInsertedID() ;
+			$result = true ;
+		}
+		return $result ;
+	}
+
+	function	tempCartInsert( &$arParam )
+	{
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$alias		= $this -> alias ;
+		$result		= false ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "INSERT INTO cart_data ( " ) ;
+		$sql .= sprintf( "sessionid , " ) ;
+		$sql .= sprintf( "memberid , " ) ;
+		$sql .= sprintf( "member_flg , " ) ;
+		$sql .= sprintf( "sheetno , " ) ;
+		$sql .= sprintf( "settlement , " ) ;
+		$sql .= sprintf( "orderway , " ) ;
+		$sql .= sprintf( "used_point , " ) ;
+		$sql .= sprintf( "append_point , " ) ;
+		$sql .= sprintf( "limit_point , " ) ;
+		$sql .= sprintf( "delivery_time , " ) ;
+		$sql .= sprintf( "shipping , " ) ;
+		$sql .= sprintf( "state_trans , " ) ;
+		$sql .= sprintf( "billing_status , " ) ;
+		$sql .= sprintf( "shipped_status , " ) ;
+		$sql .= sprintf( "print_status , " ) ;
+		$sql .= sprintf( "status " ) ;
+		$sql .= sprintf( " ) VALUES ( " ) ;
+		$sql .= sprintf( "'%s' , " , ${ $alias . "_sessionid" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_memberid" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_member_flg" } ) ;
+		$sql .= sprintf( "'%s' , " , ${ $alias . "_sheetno" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_settlement" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_orderway" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_used_point" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_append_point" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_limit_point" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_delivery_time" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_shipping" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_state_trans" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_billing_status" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_shipped_status" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias . "_print_status" } ) ;
+		$sql .= sprintf( "1 " ) ;
+		$sql .= sprintf( " ) " ) ;
+
+		$record = $this -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$this -> closeRecord( $record ) ;
+			$arParam[ $alias . "_cartid" ] = $this -> getLastInsertedID() ;
+			$result = true ;
+		}
+		return $result ;
+	}
+
+	function	tempCartItemInsert( &$arParam )
+	{
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$obCartItem		= $this -> obCartItem ;
+		$alias_ci		= $obCartItem -> alias ;
+		$result			= false ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "INSERT INTO cartitem_data ( " ) ;
+		$sql .= sprintf( "cartid , " ) ;
+		$sql .= sprintf( "merchandiseid , " ) ;
+		$sql .= sprintf( "number , " ) ;
+		$sql .= sprintf( "wrapping , " ) ;
+		$sql .= sprintf( "decoration , " ) ;
+		$sql .= sprintf( "package , " ) ;
+		$sql .= sprintf( "coolpack , " ) ;
+		$sql .= sprintf( "deco_used , " ) ;
+		$sql .= sprintf( "status " ) ;
+		$sql .= sprintf( " ) VALUES ( " ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_ci . "_cartid" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_ci . "_merchandiseid" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_ci . "_number" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_ci . "_wrapping" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_ci . "_decoration" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_ci . "_package" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_ci . "_coolpack" } ) ;
+		$sql .= sprintf( "'%d' , " , ${ $alias_ci . "_deco_used" } ) ;
+		$sql .= sprintf( "1 " ) ;
+		$sql .= sprintf( " ) " ) ;
+
+		$record = $obCartItem -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$obCartItem -> closeRecord( $record ) ;
+			$arParam[ $alias_ci . "_cartitemid" ] = $obCartItem -> getLastInsertedID() ;
+			$result = true ;
+		}
+		return $result ;
+	}
+
+	// arParam : key = DBフィールド名
+	// arParam : value = 値
+	// update_date だけは無条件で付加する
+	// arWhere : 条件（なしだと全件更新してしまうので注意）
+	// arWhere : key = DBフィールド名
+	// arWhere : value = 値
+	function	updateData( $arParam , $arWhere = array() )
+	{
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		$result = parent::updateData( $arParam ) ;
+		return $result ;
+
+/*
+		$sql = "" ;
+		$result = false ;
+		if( is_array( $arParam ) && is_array( $this -> fields ) )
+		{
+			$sql .= sprintf( "UPDATE %s SET " , $this -> tname ) ;
+			foreach( $arParam as $key => $value )
+			{
+				if( in_array( $key , $this -> fields ) )
+				{
+					// 型による切り分け
+					switch( $key )
+					{
+						// text
+						case "sessionid" :
+						case "sheetno" :
+						case "city" :
+						case "addr1" :
+						case "addr2" :
+						case "zip" :
+						case "tel" :
+						case "name" :
+						case "comment" :
+							$sql .= sprintf( "%s = '%s' , " , $key , $this -> mb_addslashes( $value ) ) ;
+							break ;
+					
+						// timestamp
+						case "order_date" :
+						case "income_date" :
+						case "limit_date" :
+						case "delivery_date" :
+							if( $value != "" )
+								$sql .= sprintf( "%s = '%s' , " , $key , $value ) ;
+							else
+								$sql .= sprintf( "%s = NULL , " , $key ) ;
+							break ;
+		
+						// int2 int4
+						case "memberid" :
+						case "member_flg" :
+						case "settlement" :
+						case "orderway" :
+						case "used_point" :
+						case "delivery_time" :
+						case "shipping" :
+						case "state" :
+						case "state_trans" :
+						case "billing_status" :
+						case "shipped_status" :
+						case "print_status" :
+						case "status" :
+							$sql .= sprintf( "%s = %d , " , $key , $value ) ;
+							break ;
+		
+						// float4
+						case "append_point" :
+						case "limit_point" :
+							$sql .= sprintf( "%s = %.4f , " , $key , $value ) ;
+							break ;
+
+						default :
+							$sql .= sprintf( "%s = '%s' , " , $key , $this -> mb_addslashes( $value ) ) ;
+							break ;
+					}
+				}
+			}
+			$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+		}
+		if( is_array( $arWhere ) && is_array( $this -> fields ) )
+		{
+			$sql .= sprintf( "WHERE " ) ;
+			foreach( $arWhere as $key => $value )
+			{
+				if( in_array( $key , $this -> fields ) )
+				{
+					$sql .= sprintf( "%s = '%s' AND " , $key , $this -> mb_addslashes( $value ) ) ;
+				}
+			}
+			$sql .= sprintf( "cartid is not NULL " ) ;
+		}
+
+		if( $sql != "" )
+		{
+			$record = $this -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				$this -> closeRecord( $record ) ;
+				$result = true ;
+			}
+		}
+		return $result ;
+*/
+	}
+
+	// カート内に指定の商品データあるかどうか検索する
+	function	inCart( &$arMerchandise )
+	{
+		$obMerchandise	= $this -> obMerchandise ;
+		$merchandiseid	= sprintf( "%s_merchandiseid" , $obMerchandise -> alias ) ;
+		$cartid			= sprintf( "%s_%s" , $this -> alias , $this -> primarykey ) ;
+
+		$arCart = $this -> arData ;
+		if ( count( $arCart ) > 0 )
+			$arCart = $arCart[ 0 ] ;
+
+		if ( isset( $arCart[ $cartid ] ) == true )
+		{
+			$arItem = $arCart[ "cartitem_data" ] ;
+			for ( $i = 0 ; $i < count( $arItem ) ; $i ++ )
+			{
+				$arMerchandise[ "registered" ] = false ;
+				if ( isset( $arMerchandise[ $merchandiseid ] ) == true )
+				{
+					if ( $arItem[ $i ][ $merchandiseid ] == $arMerchandise[ $merchandiseid ] )
+					{
+						$arMerchandise[ "registered" ] = true ;
+						break ;
+					}
+				}
+			}
+		}
+		
+		return $arMerchandise ;
+	}
+
+	// セッションIDのみを更新する
+	// （エラー処理なし）
+	function	updateSessionid( $cartid , $sessionid )
+	{
+		$arParam[ "sessionid"	] = $sessionid ;
+		$arWhere[ "cartid"		] = $cartid ;
+		$this -> updateData( $arParam , $arWhere ) ;
+	}
+
+	// DBからは取得でない情報（総料金など）や送料などを取得する
+	function	createOtherParam( $arCart , $arCartItem )
+	{
+		$obCartItem				= $this -> obCartItem ;
+		$obMerchandise			= $this -> obMerchandise ;
+		$obMerchandiseMaster	= $this -> obMerchandise -> obMaster ;
+		$obCategory				= $this -> obMerchandise -> obCategory ;
+		$obPrice				= new PARTS_Price( $this -> conn ) ;
+
+		$total_price = 0 ;
+		$large = 0 ;
+		$small = 0 ;
+		$large_cool = 0 ;
+		$small_cool = 0 ;
+		$total_number = 0 ;
+		$wrapping_flg = 0 ;
+		$decoration_flg = 0 ;
+		$deco_used = "" ;
+
+		$arOrder = array() ;
+
+		$arTotal = array() ;
+		$arTotal[ "total"			] = "" ;
+		$arTotal[ "total_item"		] = "" ;
+		$arTotal[ "total_package"	] = "" ;
+		$arTotal[ "package"			] = "" ;
+
+		$arPackage = array() ;
+		$arPackage[ "large"			] = "" ;
+		$arPackage[ "small"			] = "" ;
+		$arPackage[ "large_cool"	] = "" ;
+		$arPackage[ "small_cool"	] = "" ;
+
+		for( $i = 0 ; $i < count( $arCartItem ) ; $i ++ )
+		{
+			$arItem = $arCartItem[ $i ] ;
+		
+			$cartitemid		= $arItem[ sprintf( "%s_cartitemid"		, $obCartItem -> alias ) ] ;
+			$merchandiseid	= $arItem[ sprintf( "%s_merchandiseid"	, $obCartItem -> alias ) ] ;
+			$number			= $arItem[ sprintf( "%s_number"			, $obCartItem -> alias ) ] ;
+			$wrapping		= $arItem[ sprintf( "%s_wrapping"		, $obCartItem -> alias ) ] ;
+			$decoration		= $arItem[ sprintf( "%s_decoration"		, $obCartItem -> alias ) ] ;
+			$package		= $arItem[ sprintf( "%s_package"		, $obCartItem -> alias ) ] ;
+			$coolpack		= $arItem[ sprintf( "%s_coolpack"		, $obCartItem -> alias ) ] ;
+			$deco_used		= $arItem[ sprintf( "%s_deco_used"		, $obCartItem -> alias ) ] ;
+			$wrapping_flg	= $wrapping ;
+			$decoration_flg	= $decoration ;
+
+			$price			= $arItem[ sprintf( "%s_price"			, $obMerchandise -> alias ) ] ;
+			$tax			= $arItem[ sprintf( "%s_tax"			, $obMerchandise -> alias ) ] ;
+			$net			= $arItem[ sprintf( "%s_net"			, $obMerchandiseMaster -> alias ) ] ;
+			$categoryid		= $arItem[ sprintf( "%s_categoryid"		, $obCategory -> alias ) ] ;
+
+			if ( $package == 0 )
+				$arItem[ "package_price" ] = 0 ;
+
+			$packageprice	= $this -> calcPackagePrice( $categoryid ) ;
+			$total_number	= $total_number + $number ;
+
+			$arTotal	= $this -> sumPriceTotal( $number , $price , $tax , $packageprice , $package , $arTotal ) ;
+			$arPackage	= $this -> sumPackageCount( $number , $net , $coolpack , $arPackage ) ;
+		}
+
+		$large				= $arPackage[ "large" ] ;
+		$small				= $arPackage[ "small" ] ;
+		$large_cool			= $arPackage[ "large_cool" ] ;
+		$small_cool			= $arPackage[ "small_cool" ] ;
+		$package_count		= $this -> calcPackageCount( $large , $small ) ;
+		$package_count_cool	= $this -> calcPackageCount( $large_cool , $small_cool ) ;
+
+		$arOrder[ "total_number"		] = $total_number ;
+		$arOrder[ "total_price"			] = $arTotal[ "total" ] ;
+		$arOrder[ "total_item"			] = $arTotal[ "total_item" ] ;
+		$arOrder[ "total_package"		] = $arTotal[ "total_package" ] ;
+		$arOrder[ "coolpack"			] = $package_count_cool ;
+		$arOrder[ "package_count"		] = $package_count + $package_count_cool ;
+		$arOrder[ "data_count"			] = count( $arCartItem ) ;
+		$arOrder[ "package"				] = $arTotal[ "package" ] ;
+		$arOrder[ "wrapping_flg"		] = $wrapping_flg ;
+		$arOrder[ "decoration_flg"		] = $decoration_flg ;
+		$arOrder[ "deco_used"			] = $deco_used ;
+		
+		if( $deco_used != "" )
+		{
+			$arWhere = array() ;
+			$arWhere[ "categoryid" ] = $deco_used ;
+			$arDeco_used_string = $obCategory -> getData( $arWhere ) ;
+			$arOrder[ "deco_used_string"	] = $arDeco_used_string[ 0 ][ sprintf( "%s_name" , $obCategory -> alias ) ] ;
+		}
+		else
+		{
+			$arOrder[ "deco_used_string"	] = "" ;
+		}
+
+		$state = -1 ;
+		if( $arCart[ sprintf( "%s_shipping" , $this -> alias ) ] == DEF_SHIPPING_ON )
+			$state = $arCart[ sprintf( "%s_state" , $this -> alias ) ] ;
+		else
+			$state = $arCart[ sprintf( "%s_state" , $this -> obMember -> alias ) ] ;
+
+//		$arOrder[ "price_transport"	] = $obPrice -> calcPriceTransport( $state , $arCart[ sprintf( "%s_order_date" , $this -> alias ) ] ) ;
+		$arOrder[ "price_transport"	] = 0 ;
+
+		// 決算方法が代金引換の場合、手数料を計算する。
+		$arOrder[ "price_charge" ] = 0 ;
+		if ( $arCart[ sprintf( "%s_settlement" , $this -> alias ) ] == DF_SETTLEMENT_COD )
+		{
+			global	$arPriceCharge ;
+			for ( $pc = 0 ; $pc < count( $arPriceCharge ) ; $pc ++ )
+			{
+				if ( $arTotal[ "total" ] < $arPriceCharge[ $pc ][ 0 ] )
+				{
+					$arOrder[ "price_charge" ] = $arPriceCharge[ $pc ][ 1 ] ;
+					break ;
+				}
+			}
+		}
+		
+		return $arOrder ;
+	}
+
+	// 合計金額の集計
+	function	sumPriceTotal( $number , $price , $tax , $packageprice , $package , $arTotal )
+	{
+		$arTotal[ "total" ]			+=	$tax * $number ;
+		$arTotal[ "total" ]			+=	$packageprice * $number * $package ;
+		$arTotal[ "total_item" ]	+=	$tax * $number ;
+		$arTotal[ "total_package" ]	+=	$packageprice * $number * $package ;
+		
+		if( $packageprice != 0 && $number * $package != 0 )
+			$arTotal[ "package" ][ $packageprice ] += $number * $package ;
+		
+		return $arTotal ;
+	}
+
+	// 梱包数の累計の計算
+	function	sumPackageCount( $number , $net , $coolpack , $arPackage )
+	{
+		if ( $coolpack != TRUE )
+		{
+			if ( $net > PRICE_PACKAGE_EDGE )
+				$arPackage[ "large" ]	+= $number ;
+			else
+				$arPackage[ "small" ]	+= $number ;
+		}
+		else
+		{
+			if ( $net > PRICE_PACKAGE_EDGE )
+				$arPackage[ "large_cool" ]	+= $number ;
+			else
+				$arPackage[ "small_cool" ] += $number ;
+		}
+	
+		return $arPackage ;
+	}
+
+	// 荷物数の計算
+	function	calcPackageCount( $large , $small )
+	{
+		$count = 0 ;
+		$packing_count		= ceil( ( $large + $small ) / UNIT_PER_BOX ) ;
+/*
+		// 大のケースの数を計算
+		if ( $large > 0 )
+		{
+			$count = ceil( $large / PRICE_PACKAGE_MAX_L ) ;
+			
+			// 大のケースの空きスペースを使用する
+			$small = $small - ( $count * PRICE_PACKAGE_MAX_L - $large ) ;
+		}
+		
+		// 小のケースの数を計算
+		if ( $small > 0 )
+		{
+			$count += ceil( $small / PRICE_PACKAGE_MAX_S ) ;
+		}
+*/
+		return $packing_count ;
+	}
+
+	// 1つあたりの専用BOXの値段を計算する
+	// 未実装？
+	function	calcPackagePrice( $categoryid )
+	{
+		$price = 0 ;
+
+		// 大項目を取り出す
+//		$categoryname = GetCategoryNameFromID( $conn , $categoryid , 1 , DEF_CATEGORY_ITEM ) ;
+		
+		// 大項目に対応した金額を計算する
+		switch( $categoryname )
+		{
+		}
+		return $price ;
+	}
+
+	// 過去の決済済みお届け先を取得（一覧）
+	function	getDst( $memberid )
+	{
+		$arDelivery = array() ;
+		$arDelivery[ 0 ] = "ご注文者と同じ" ;
+		if( $memberid != -1 )
+		{
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = $memberid ;
+
+			// 決済済み
+			$arWhere[ "billing_status" ] = DF_BILLSTATUS_SETTLED ;
+			
+			// 御届先指定があったもの
+			$arWhere[ "shipping" ] = DEF_SHIPPING_ON ;
+
+			// 3ヶ月以内に入金があったもの
+			$obThreeMonthAgo = new DateTime() ;
+			$obThreeMonthAgo -> modify( "-3 month" ) ;
+			$arWhere[ "where" ] = sprintf( "AND %s.income_date >= '%s' " , $this -> alias , $obThreeMonthAgo -> format( "Y-m-d H:i:s" ) ) ;
+	
+			$arSettledCart = $this -> getData( $arWhere ) ;
+			if( count( $arSettledCart ) )
+			{
+				for( $i = 0 ; $i < count( $arSettledCart ) ; $i ++ )
+				{
+					$cartid	= $arSettledCart[ $i ][ sprintf( "%s_cartid"	, $this -> alias ) ] ;
+					$name	= $arSettledCart[ $i ][ sprintf( "%s_name"		, $this -> alias ) ] ;
+					$arDelivery[ $cartid ] = $name ;
+				}
+			}
+		}
+		$arDelivery[ -1 ] = "新規登録" ;
+		return $arDelivery ;
+	}
+	
+	// お届け先の cartid を取得する
+	// 更新の初期画面で必要
+	// 現状では、ct_name で管理している為
+	function	getDstId( $memberid , $name )
+	{
+		$targetid = -1 ;
+		$arWhere = array() ;
+		$arWhere[ "memberid" ] = $memberid ;
+
+		// 決済済み
+		$arWhere[ "billing_status" ] = DF_BILLSTATUS_SETTLED ;
+		
+		// 御届先指定があったもの
+		$arWhere[ "shipping" ] = DEF_SHIPPING_ON ;
+
+		// 御届先の名前
+		$arWhere[ "name" ] = $name ;
+
+		// 3ヶ月以内に入金があったもの
+		$obThreeMonthAgo = new DateTime() ;
+		$obThreeMonthAgo -> modify( "-3 month" ) ;
+		$arWhere[ "where" ] = sprintf( "AND %s.income_date >= '%s' " , $this -> alias , $obThreeMonthAgo -> format( "Y-m-d H:i:s" ) ) ;
+
+		$arSettledCart = $this -> getData( $arWhere ) ;
+		if( count( $arSettledCart ) )
+		{
+			$targetid = $arSettledCart[ 0 ][ sprintf( "%s_cartid"	, $this -> alias ) ] ;
+		}
+		return $targetid ;
+	}
+	
+	// 書類印刷済みフラグをONにする
+	function	changePrintStatus( $cartid )
+	{
+		$result = false ;
+		if( $cartid != "" )
+		{
+			$arWhere = array() ;
+			$arWhere[ "cartid" ] = $cartid ;
+			$arUpdate = array() ;
+			$arUpdate[ "print_status" ] = 1 ;
+		
+			$result = $this -> updateData( $arUpdate , $arWhere ) ;
+		}
+		return $result ;
+	}
+
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+
+}
+
+?>

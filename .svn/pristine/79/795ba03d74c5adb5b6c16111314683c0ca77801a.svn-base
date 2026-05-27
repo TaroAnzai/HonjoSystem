@@ -1,0 +1,2050 @@
+<?php
+	ini_set( "display_errors" , On ) ;
+	require_once( "server.ini" ) ;
+	require_once( "system.php" )  ;
+	
+	ob_implicit_flush() ;
+	
+	//print_r( $argv ) ;
+	
+
+	// コマンド解析
+	$cmd = $argv[ 1 ] ;
+	$func = $argv[ 2 ] ;
+
+	if ( $cmd == "CL" )
+	{
+		WriteSyslog( "client mode:" . $func ) ;
+	
+		// 機能種別
+		switch ( $func )
+		{
+		// 在庫情報
+		case	NAC_STORAGE_LIST :
+			NacStorageList() ;
+			break ;
+		
+		// 空棚情報
+		case	NAC_FREE_LOCATION :
+			NacFreeLocation() ;
+			break ;
+		}
+	}
+	else if ( $cmd == "SV" )
+	{
+		// 標準入力からシーケンサーからの電文受信
+		$stdin = trim(fgets(STDIN));
+		
+		// 標準出力へ電文送信
+		echo $stdin ;
+		echo "\r\n" ;
+	}
+
+exit ;
+
+// AWC用 Socket Open
+function	AwcOpenSock()
+{
+	return OpenSock( AWC_IPADDR , AWC_PORT ) ;
+}
+
+// LINTEC用 Socket Open
+function	LintecOpenSock()
+{
+	return OpenSock( LINTEC_IPADDR , LINTEC_PORT ) ;
+}
+
+// 電文発行
+function	AwcWrite( $sock , $cmd )
+{
+	// コマンドからヘッダを作成する
+	$head = sprintf( AWCFMT_HEADER , strlen( $cmd ) , AWC_MAKITA , AWC_SERVER ) ;
+	
+	$len  = 1 ;
+	$len += AWCFMT_HEADER_LEN ;
+	$len += strlen( $cmd ) ;
+	
+	// SOHを送信
+	$data = AWC_SOH . $head . $cmd ;
+
+	WriteSyslog( "HEADER  : " . $head ) ;
+	WriteSyslog( "COMMAND : " . $cmd ) ;
+
+	// コマンドを送信
+	return fwrite( $sock , $data , $len ) ;
+}
+
+// 応答電文発行
+function	AwcRewrite( $sock , $cmd )
+{
+	// コマンドからヘッダを作成する
+	$head = sprintf( AWCFMT_HEADER , strlen( $cmd ) , AWC_MAKITA , AWC_SERVER ) ;
+	
+	$len  = 1 ;
+	$len += AWCFMT_HEADER_LEN ;
+	$len += strlen( $cmd ) ;
+	
+	// SOHを送信
+	$data = AWC_SOH . $head . $cmd ;
+
+	print $head . "\n" ;
+	print $cmd . "\n" ;
+
+	// コマンドを送信
+	return socket_write( $sock , $data , $len ) ;
+}
+
+// シーケンス番号の取得
+function	AwcGetSeqNum()
+{
+	$seq = 0 ;
+	$cnt = 0 ;
+
+	// ファイルのオープン
+	if ( file_exists( AWC_SEQ ) )
+		$fp = @fopen( AWC_SEQ , "r+" ) ;
+	else
+		$fp = @fopen( AWC_SEQ , "w+" ) ;
+	
+	if ( is_resource( $fp ) )
+	{
+		while ( $cnt < 3 )
+		{
+			// ファイルのロック
+			if ( flock( $fp , LOCK_EX ) )
+			{
+				// シーケンス番号の取得
+				$seq = sprintf( "%d" , fgets( $fp ) ) ;
+				$seq ++ ;
+				if ( $seq > 9999 )
+					$seq = 1 ;
+				rewind( $fp ) ;
+				
+				$dat = sprintf( "%d" , $seq ) ;
+				fwrite( $fp , $dat , strlen( $dat ) ) ;
+			
+				// ファイルのロック解除
+				flock( $fp , LOCK_UN ) ;
+				break ;
+			}
+			else
+			{
+				usleep( 200000 ) ;
+			}
+			$cnt ++ ;
+		}
+		fclose( $fp ) ;
+	}
+	return $seq ;
+}
+
+// データ解析
+function	AwcExec( $sock )
+{
+	WriteSyslog( "AWC Request" ) ;
+
+	// 電文の解析
+	$head	= @socket_read( $sock , AWCFMT_HEADER_LEN , PHP_BINARY_READ ) ;
+	$len	= substr( $head , 0 , 4 ) ;
+	
+	// コマンドの受信
+	$cmd	= @socket_read( $sock , $len , PHP_BINARY_READ ) ;
+	
+	echo $head . "\n" ;
+	echo $cmd . "\n" ;
+
+	$rSeq	= substr( $cmd , 0 , 4 ) ;
+	$rFunc	= substr( $cmd , 4 , 2 ) ;
+	$rTime	= substr( $cmd , 14 , 6 ) ;
+
+	WriteSyslog( sprintf( "HEADER : %s\n" , $head ) ) ;
+	WriteSyslog( sprintf( "FUNC   : %s\n" , $rFunc ) ) ;
+	WriteSyslog( sprintf( "REQ    : %s\n" , $rSeq ) ) ;
+	WriteSyslog( sprintf( "TIME   : %s\n" , $rTime ) ) ;
+	WriteSyslog( sprintf( "DATA   : %s\n" , $cmd ) ) ;
+
+	$boolen = AWCFMT_ERROR ;
+	switch ( $rFunc )
+	{
+	case	AWC_STORAGE_CMP :
+		$boolen = AWCFMT_SUCCESS ;
+		AwcReqCmp( $sock , AWC_STORAGE_REQCMP , $boolen , $rTime , $rSeq ) ;
+	
+		$paletteno	= substr( $cmd , 20 , 6 ) ;
+		$depository	= substr( $cmd , 26 , 6 ) ;
+		$date		= substr( $cmd , 32 , 14 ) ;
+
+		WriteSyslog( sprintf( "PLT-NO : %s\n" , $paletteno ) ) ;
+		WriteSyslog( sprintf( "DEPOS  : %s\n" , $depository ) ) ;
+		WriteSyslog( sprintf( "DATE   : %s\n" , $date ) ) ;
+		
+		// 入庫OKなら 該当するパレットのデータを取得する。
+		$conn = ConnectDatabase() ;
+		if ( $conn )
+		{
+			$sql  = sprintf( "SELECT stock_data.length as slength , stock_data.width as swidth , * FROM stock_data , palette_data , product_data " ) ;
+			$where  = sprintf( "WHERE stock_data.status = 1 " ) ;
+			$where .= sprintf( "AND stock_data.productid = product_data.productid " ) ;
+			$where .= sprintf( "AND stock_data.paletteid = palette_data.paletteid " ) ;
+			$where .= sprintf( "AND ( stock_data.storage_status & %d ) != 0 " , DEF_STORAGE_STATUS_IN ) ;
+			$where .= sprintf( "AND ( stock_data.shipped_status & %d ) = 0 " , DEF_SHIPPED_STATUS_IN ) ;
+			$where .= sprintf( "AND stock_data.depositorytype = %d " , DEF_DEPOSITORY_PALETTE ) ;
+			$where .= sprintf( "AND palette_data.paletteno = '%s' " , $paletteno ) ;
+			
+			echo "PALETTE:".$paletteno ."\n";
+			$stockid = -1 ;
+			$record = ExecuteSQL( $conn , $sql . $where ) ;
+			if ( $record )
+			{
+				if ( GetDataCount( $record ) == 1 )
+				{
+					$arData = GetValues( $record ) ;
+					$stockid		= $arData[ "stockid"	] ;
+					$productno		= $arData[ "productno"	] ;
+					$lintecname		= $arData[ "name"		] ;
+					$makername		= $arData[ "makername"	] ;
+					$lotno			= $arData[ "lotno"		] ;
+					$makerlotno		= $arData[ "makerlotno"	] ;
+					$width			= $arData[ "swidth"		] ;
+					$length			= $arData[ "slength"	] ;
+					$joint			= $arData[ "joint"		] ;
+					$separator		= $arData[ "separator"	] ;
+					$ignore			= $arData[ "ignore"		] ;
+					$reserve		= $arData[ "reserve"	] ;
+					$paletteid		= $arData[ "paletteid"	] ;
+					$paletteno		= $arData[ "paletteno"	] ;
+					$depositorytype	= $arData[ "depositorytype"	] ;
+
+					WriteSyslog( sprintf( "STOCKID   : %d\n" , $stockid ) ) ;
+					WriteSyslog( sprintf( "LOTNO     : %s\n" , $lotno ) ) ;
+					
+					// 在庫更新のコマンドを発行する。
+					$cmd = sprintf( "%s client %d '%s' '%s' '%s' '%s' '%s' %d %d %d %d %d %d '%s' &" ,
+									SELF_FULLCOMMAND ,
+									AWC_RENEW_REQ ,
+									$productno	,
+									$lintecname	,
+									$makername	,
+									$lotno		,
+									$makerlotno	,
+									$width		,
+									$length		,
+									$joint		,
+									$separator	,
+									$ignore		,
+									$reserve	,
+									$paletteno	) ;
+					echo "COMMAND : " . $cmd . "\n" ;
+					exec( $cmd ) ;
+				}
+				CloseRecord( $record ) ;
+				
+				// 該当するパレットを自動倉庫に格納状態にする
+				if ( $stockid != -1 )
+				{
+					$sql	 = sprintf( "UPDATE palette_data SET " ) ;
+					$sql	.= sprintf( "depositorytype = %d ," , DEF_DEPOSITORY_AUTO ) ;
+					$sql	.= sprintf( "depository = '%s' ," , $depository ) ;
+					$sql	.= sprintf( "update_date = now()" ) ;
+					$sql	.= sprintf( "WHERE paletteid = %d " , $paletteid ) ;
+					$record = ExecuteSQL( $conn , $sql ) ;
+					if ( $record )
+						CloseRecord( $record ) ;
+					
+					$sql	 = sprintf( "UPDATE stock_data SET " ) ;
+					$sql	.= sprintf( "movepos_date = to_timestamp( '%s' , 'YYYYMMDDHH24MISS' ) , " , $date ) ;
+					$sql	.= sprintf( "update_date = now() " ) ;
+					$sql	.= sprintf( "WHERE stockid = %d " , $stockid ) ;
+					$record = ExecuteSQL( $conn , $sql ) ;
+					if ( $record )
+						CloseRecord( $record ) ;
+
+					// 保管場所の作成
+					$depositorydetail = MakeDepository( $depositorytype , "" , 0 , 0 , $paletteid , TRUE , $conn ) ;
+
+					// 作業日報の入庫データで該当するパレット番号で更新する
+					$sql	 = sprintf( "UPDATE history_data SET " ) ;
+					$sql	.= sprintf( "depository = '%s' , " , $depositorydetail ) ;
+					$sql	.= sprintf( "update_date = now() " ) ;
+					$sql	.= sprintf( "WHERE stockid = %d " , $stockid ) ;
+					$sql	.= sprintf( "AND ( operations = %d OR operations = %d ) " , DEF_HIS_STORAGE , DEF_HIS_PALETTEMOVE ) ;
+					$sql	.= sprintf( "AND depository like '%%(P:%s)' " , $paletteno ) ;
+					$record = ExecuteSQL( $conn , $sql ) ;
+					if ( $record )
+						CloseRecord( $record ) ;
+				
+					WriteSyslog( "Update History Index" ) ;
+				}
+			}
+			DisconnectDatabase( $conn ) ;
+		}
+		break ;
+	
+	// 出庫完了報告
+	case	AWC_SHIPPED_CMP :
+		$boolen = AWCFMT_SUCCESS ;
+		AwcReqCmp( $sock , AWC_SHIPPED_REQCMP , $boolen , $rTime , $rSeq ) ;
+		break ;
+	
+	// 搬送完了報告
+	case	AWC_MOVEOUT_CMP :
+		$boolen = AWCFMT_SUCCESS ;
+		AwcReqCmp( $sock , AWC_MOVEOUT_REQCMP , $boolen , $rTime , $rSeq ) ;
+		
+		// 生産計画から該当するLotNoを完了にする。
+		$paletteno	= substr( $cmd , 20 , 6 ) ;
+		$lotno		= trim( substr( $cmd , 48 , 40 ) ) ;
+		$date		= trim( substr( $cmd , 88 , 8 ) ) ;
+		$scheduleno	= intval( trim( substr( $cmd , 96 , 10 ) ) ) ;
+		$conn		= ConnectDatabase() ;
+		if ( $conn )
+		{
+			$sql	 = sprintf( "SELECT * FROM schedule_data " ) ;
+			$sql	.= sprintf( "WHERE lotno = '%s' " , $lotno ) ;
+			$sql	.= sprintf( "AND SCHEDULE_DATE = to_timestamp( '%s' , 'YYYYMMDD' ) " , $date ) ;
+			$sql	.= sprintf( "AND SCHEDULENO = %d " , $scheduleno ) ;
+			$sql	.= sprintf( "AND status = %d " , DEF_SCHEDULE_MOVING ) ;
+//			WriteSyslog( $sql ) ;
+			$record = ExecuteSQL( $conn , $sql ) ;
+			if ( $record )
+			{
+				if ( GetDataCount( $record ) > 0 )
+				{
+					// 生産計画の状態を変更する
+					UpdateSchedule( $lotno , DEF_SCHEDULE_MOVEOUT , $conn ) ;
+				}
+				
+				CloseRecord( $record ) ;
+			}
+			DisconnectDatabase( $conn ) ;
+		}
+		
+		break ;
+		
+	case	AWC_STOCK_CMP ;
+		$boolen = AWCFMT_SUCCESS ;
+		AwcReqCmp( $sock , AWC_STOCK_REQCMP , $boolen , $rTime , $rSeq ) ;
+		break ;
+		
+	default :
+		AwcReqCmp( $sock , 99 , $boolen , $rTime , $rSeq ) ;
+	}
+}
+
+// 応答完了コマンドを送信
+function	AwcReqCmp( $sock , $func , $boolen , $time , $parent )
+{
+	$seq = AwcGetSeqNum() ;
+	
+	// 応答完了コマンドを作成する
+	$cmd = sprintf( AWCFMT_ACK , $seq , $func , date( "His" ) , $time , $parent , $boolen ) ;
+	
+	// コマンドを送信
+	AwcRewrite( $sock , $cmd ) ;
+}
+
+// 応答電文の解析
+function	AwcCheckStatus( $sock , $func , $seq )
+{
+	// 電文の解析
+	$head	= fread( $sock , AWCFMT_HEADER_LEN ) ;
+	$len	= substr( $head , 0 , 4 ) ;
+	
+	// コマンドの受信
+	$cmd	= fread( $sock , $len ) ;
+	
+	// ステータスの取得
+	$status	= substr( $cmd , 24 , 1 ) ;
+	$rSeq	= substr( $cmd , 20 , 4 ) ;
+	$rFunc	= substr( $cmd , 4 , 2 ) ;
+
+	WriteSyslog( sprintf( "HEADER : %s\n" , $head ) ) ;
+	WriteSyslog( sprintf( "FUNC   : %s\n" , $rFunc ) ) ;
+	WriteSyslog( sprintf( "REQ    : %s\n" , $rSeq ) ) ;
+	WriteSyslog( sprintf( "STATUS : %s\n" , $status ) ) ;
+	
+	$result = FALSE ;
+	if ( ( $rFunc == $func ) && ( $rSeq == $seq ) )
+	{
+		if ( $status == AWCFMT_ERROR )
+			$result = FALSE ;
+		else
+			$result = TRUE ;
+	}
+	
+	if ( $result == FALSE )
+		WriteSyslog( "AWC Result Error" ) ;
+	return $result ;
+}
+
+// 入庫予定処理
+function	AwcStorage( $palette )
+{
+	// ソケット作成
+	$sock = AwcOpenSock() ;
+	if ( $sock )
+	{
+		$seq = AwcGetSeqNum() ;
+		
+		// パレットNOからコマンドを作成する
+		$cmd = sprintf( AWCFMT_STORAGE_REQ , $seq , AWC_STORAGE_REQ , date( "His" ) , date( "Ymd" ) , $palette ) ;
+		
+		// コマンドの受信
+		AwcWrite( $sock , $cmd ) ;
+		
+		// 応答待ち
+		$result = -1 ;
+		while ( ( $result === -1 ) )
+		{
+			$dat = fread( $sock , 1 ) ;
+			
+			// 応答有の場合、完了を送信
+			if ( $dat == AWC_SOH )
+			{
+				$result = AwcCheckStatus( $sock , AWC_STORAGE_ACK , $seq ) ;
+			}
+			else
+			{
+				$result = FALSE ;
+			}
+		}
+		
+		// ソケット破棄
+		CloseSock( $sock ) ;
+	}
+
+	return $result ;
+}
+
+// 生産計画
+function	AwcSchedule( $mode , $warehouse , $date , $scheduleno , $lotno , $productno , $paint , $lintecname , $width , $length , $joint , $separator )
+{
+	// リトライ回数
+	$retry = 3 ;
+
+	for ( $i = 0 ; $i < $retry ; $i ++ )
+	{
+		// ソケット作成
+		$sock = AwcOpenSock() ;
+		if ( $sock )
+		{
+			$seq = AwcGetSeqNum() ;
+
+			// 在庫データ要求コマンドを作成する
+			$cmd = sprintf(	AWCFMT_SCHEDULE_REQ , $seq , AWC_SCHEDULE_REQ , date( "His" ) ,
+							$mode ,
+							$warehouse ,
+							$date ,
+							$scheduleno ,
+							$lotno ,
+							$productno ,
+							$paint ,
+							$lintecname ,
+							$width ,
+							$length / 1000 ,
+							$joint ,
+							$separator
+						) ;
+	
+			// コマンドの受信
+			AwcWrite( $sock , $cmd ) ;
+			
+			// 応答待ち
+			$result = -1 ;
+			while ( ( $result === -1 ) )
+			{
+				$dat = fread( $sock , 1 ) ;
+				
+				// 応答有の場合、完了を送信
+				if ( $dat == AWC_SOH )
+				{
+					$result = AwcCheckStatus( $sock , AWC_SCHEDULE_ACK , $seq ) ;
+				}
+				else
+				{
+					$result = FALSE ;
+				}
+			}
+			CloseSock( $sock ) ;
+		}
+		
+		if ( $result == TRUE )
+			break ;
+	}
+
+	return $result ;
+}
+
+// 在庫更新指示
+function	AwcRenew( $productno , $lintecname , $makername , $lotno , $makerlotno , $width , $length , $joint , $separator , $ignore , $reserve , $paletto )
+{
+	// ソケット作成
+	$sock = AwcOpenSock() ;
+	if ( $sock )
+	{
+		$seq = AwcGetSeqNum() ;
+
+		$lintecname = mb_convert_kana( $lintecname , "ak" , "SJIS" ) ;
+
+		// 在庫データ要求コマンドを作成する
+		$cmd = sprintf(	AWCFMT_RENEW_REQ , $seq , AWC_RENEW_REQ , date( "His" ) ,
+						$productno ,
+						$lintecname ,
+						$makername ,
+						$lotno ,
+						$makerlotno ,
+						$width ,
+						$length ,
+						$joint ,
+						$separator ,
+						$ignore ,
+						$reserve ,
+						$paletto
+					) ;
+
+		// コマンドの受信
+		AwcWrite( $sock , $cmd ) ;
+		
+		// 応答待ち
+		$result = -1 ;
+		while ( ( $result === -1 ) )
+		{
+			$dat = fread( $sock , 1 ) ;
+			
+			// 応答有の場合、完了を送信
+			if ( $dat == AWC_SOH )
+			{
+				$result = AwcCheckStatus( $sock , AWC_RENEW_ACK , $seq ) ;
+			}
+			else
+			{
+				$result = FALSE ;
+			}
+		}
+
+		CloseSock( $sock ) ;
+	}
+
+	return $result ;
+}
+
+// 在庫データ要求指示
+function	AwcStock()
+{
+	// ソケット作成
+	$sock = AwcOpenSock() ;
+	if ( $sock )
+	{
+		$seq = AwcGetSeqNum() ;
+
+		// 在庫データ要求コマンドを作成する
+		$cmd = sprintf( AWCFMT_STOCK_REQ , $seq , AWC_STOCK_REQ , date( "His" ) ) ;
+		
+		// コマンドの受信
+		AwcWrite( $sock , $cmd ) ;
+		
+		// 応答待ち
+		$result = -1 ;
+		while ( ( $result === -1 ) )
+		{
+			$dat = fread( $sock , 1 ) ;
+			
+			// 応答有の場合、完了を送信
+			if ( $dat == AWC_SOH )
+			{
+				$result = AwcCheckStatus( $sock , AWC_STOCK_ACK , $seq ) ;
+			}
+			else
+			{
+				$result = FALSE ;
+			}
+		}
+		CloseSock( $sock ) ;
+	}
+
+	return $result ;
+}
+
+// 自動出庫指示
+function	AwcAutoMove( $palette , $lotno , $date , $scheduleno )
+{
+	// ソケット作成
+	$sock = AwcOpenSock() ;
+	if ( $sock )
+	{
+		$seq = AwcGetSeqNum() ;
+		
+		// パレットNOからコマンドを作成する
+		$cmd = sprintf( AWCFMT_AUTOMOVE_REQ , $seq , AWC_AUTOMOVE_REQ , date( "His" ) , $palette , $lotno , $date , $scheduleno ) ;
+		
+		// コマンドの受信
+		AwcWrite( $sock , $cmd ) ;
+		
+		// 応答待ち
+		$result = -1 ;
+		while ( ( $result === -1 ) )
+		{
+			$dat = fread( $sock , 1 ) ;
+			
+			// 応答有の場合、完了を送信
+			if ( $dat == AWC_SOH )
+			{
+				$result = AwcCheckStatus( $sock , AWC_AUTOMOVE_ACK , $seq ) ;
+			}
+			else
+			{
+				$result = FALSE ;
+			}
+		}
+		
+		// ソケット破棄
+		CloseSock( $sock ) ;
+	}
+
+	return $result ;
+}
+
+// 応答完了コマンドを送信
+function	LintecReqCmp( $sock , $result , $func , $len )
+{
+	// 応答完了コマンドを作成する
+	$cmd = sprintf( LTCFMT_HEADER , $result , $func , $len ) ;
+	
+	// コマンドを送信
+	return socket_write( $sock , $cmd , LTCFMT_HEADER_LEN + 2 ) ;
+}
+
+// リンテックからの送信
+function	LintecExec( $sock , $data )
+{
+	WriteSyslog( "LINTEC Request" ) ;
+	
+	// 電文の解析
+	$func	= substr( $data , 2 , 6 ) ;
+	$len	= intval( trim( substr( $data , 8 , 8 ) ) ) ;
+	WriteSyslog( "COMMAND:" . $func ) ;
+	WriteSyslog( "LENGTH:" . $len ) ;
+	switch ( $func )
+	{
+	// 入荷予定
+	case	LTC_ARRIVAL :
+		LintecArrival( $sock , $len ) ;
+		break ;
+	
+	// 入庫予定
+	case	LTC_STORAGE :
+	case	LTC_UPDATE :
+		LintecStorage( $sock , $len , $func ) ;
+		break ;
+
+	// 品種マスター
+	case	LTC_MASTER :
+		LintecMaster( $sock , $len ) ;
+		break ;
+	
+	// 生産計画
+	case	LTC_SCHEDULE :
+		LintecSchedule( $sock , $len ) ;
+		break ;
+	}
+}
+
+// 入荷予定
+function	LintecArrival( $sock , $len )
+{
+	$result = TRUE ;
+
+	$customerid = GetCustomerID_LINTEC() ;
+	
+	// データの数分だけ取り込む
+	for ( $i = 0 ; $i < $len ; $i ++ )
+	{
+		$data = @socket_read( $sock , 1024 , PHP_NORMAL_READ ) ;
+		
+		if ( $data === FALSE )
+		{
+			$result = FALSE ;
+			break ;
+		}
+		$data = trim( $data ) ;
+		if ( empty( $data ) )
+		{
+			$i -- ;
+			continue ;
+		}
+		
+		// 入荷予定データの作成
+		$no				= trim( substr( $data , 0 , 8 ) ) ;
+		$productno		= trim( substr( $data , 8 , 10 ) ) ;
+		$name			= trim( substr( $data , 18 , 25 ) ) ;
+		$width			= intval( trim( substr( $data , 43 , 5 ) ) ) ;
+		$storage_date	= trim( substr( $data , 48 , 8 ) ) ;
+		$length			= intval( trim( substr( $data , 56 , 10 ) ) ) ;
+		$number			= intval( trim( substr( $data , 66 , 3 ) ) ) ;
+		
+		// 入荷データの登録
+		$conn = ConnectDatabase() ;
+		if ( $conn )
+		{
+			$result = FALSE ;
+			
+			// 入荷データの作成
+			$sql  = sprintf( "INSERT INTO arrivalplan_data ( " ) ;
+			$sql .= sprintf( "orderno , " ) ;
+			$sql .= sprintf( "productno , " ) ;
+			$sql .= sprintf( "name , " ) ;
+			$sql .= sprintf( "customerid , " ) ;
+			$sql .= sprintf( "width , " ) ;
+			$sql .= sprintf( "length , " ) ;
+			$sql .= sprintf( "storage_date	, " ) ;
+			$sql .= sprintf( "number , " ) ;
+			$sql .= sprintf( "status " ) ;
+			$sql .= sprintf( ") VALUES ( " ) ;
+			$sql .= sprintf( "'%s' , "												, $no ) ;
+			$sql .= sprintf( "'%s' , "												, $productno ) ;
+			$sql .= sprintf( "'%s' , "												, $name ) ;
+			$sql .= sprintf( "'%d' , "												, $customerid ) ;
+			$sql .= sprintf( "'%d' , "												, $width ) ;
+			$sql .= sprintf( "'%d' , "												, $length ) ;
+			$sql .= sprintf( "to_timestamp( '%s 000000' , 'YYYYMMDD HH24MISS' ) , "	, $storage_date ) ;
+			$sql .= sprintf( "'%d' , "												, $number ) ;
+			$sql .= sprintf( "'%d' "												, 1 ) ;
+			$sql .= sprintf( ") " ) ;
+//			echo $sql . "\n" ;
+			$record = ExecuteSQL( $conn , $sql ) ;
+			if ( $record )
+			{
+				$result = TRUE ;
+				CloseRecord( $record ) ;
+			}
+			DisconnectDatabase( $conn ) ;
+		}
+		usleep( 200000 ) ;
+	}
+
+	// 正常に取込みが完了した場合、応答を返す
+	if ( $result == TRUE )
+	{
+		LintecReqCmp( $sock , LTC_SUCCESS , LTC_ARRIVAL , $i ) ;
+	}
+}
+
+// 入庫予定
+function	LintecStorage( $sock , $len , $func )
+{
+	$result = TRUE ;
+	
+	// データの数分だけ取り込む
+	for ( $i = 0 ; $i < $len ; $i ++ )
+	{
+		$data = @socket_read( $sock , 1024 , PHP_NORMAL_READ ) ;
+		
+		if ( $data === FALSE )
+		{
+			$result = FALSE ;
+			break ;
+		}
+		$data = trim( $data ) ;
+		if ( empty( $data ) )
+		{
+			$i -- ;
+			continue ;
+		}
+		
+		// 入庫予定データの作成
+		$lotno			= trim( substr( $data , 0 , 15 ) ) ;
+		$productno		= trim( substr( $data , 15 , 10 ) ) ;
+		$lintecname		= trim( substr( $data , 25 , 25 ) ) ;
+		$makername		= trim( substr( $data , 50 , 50 ) ) ;
+		$type			= trim( substr( $data , 100 , 1 ) ) ;
+		$number			= intval( trim( substr( $data , 101 , 8 ) ) ) ;
+		$unit			= intval( trim( substr( $data , 109 , 8 ) ) ) ;
+		$width			= intval( trim( substr( $data , 117 , 5 ) ) ) ;
+		$length			= intval( trim( substr( $data , 122 , 8 ) ) ) ;
+		$joint			= intval( trim( substr( $data , 130 , 1 ) ) ) ;
+		$separator		= intval( trim( substr( $data , 131 , 1 ) ) ) ;
+		$ignore			= trim( substr( $data , 132 , 1 ) ) ;
+		$reserve		= trim( substr( $data , 133 , 1 ) ) ;
+		$standard		= trim( substr( $data , 134 , 20 ) ) ;
+		$tier			= intval( trim( substr( $data , 154 , 1 ) ) ) ;
+		$plantno		= intval( trim( substr( $data , 155 , 1 ) ) ) ;
+
+		$conn = ConnectDatabase() ;
+		if ( $conn )
+		{
+			$result = FALSE ;
+
+			// 製品Noの更新
+			UpdateProductAtStock( $lotno , $productno , $lintecname , $conn ) ;
+			
+			// ダイフク在庫の更新
+			UpdateWarehouseAtStock( $lotno , $conn ) ;
+			
+			// 入庫予定の場合、予定データを作成する
+			if ( $func == LTC_STORAGE )
+			{
+				// 生産計画データの作成
+				$sql  = sprintf( "INSERT INTO storageplan_data ( " ) ;
+				$sql .= sprintf( "lotno , " ) ;
+				$sql .= sprintf( "productno , " ) ;
+				$sql .= sprintf( "name , " ) ;
+				$sql .= sprintf( "makername , " ) ;
+				$sql .= sprintf( "customerid , " ) ;
+				$sql .= sprintf( "type , " ) ;
+				$sql .= sprintf( "number , " ) ;
+				$sql .= sprintf( "unit , " ) ;
+				$sql .= sprintf( "width , " ) ;
+				$sql .= sprintf( "length , " ) ;
+				$sql .= sprintf( "joint , " ) ;
+				$sql .= sprintf( "separator , " ) ;
+				$sql .= sprintf( "ignore , " ) ;
+				$sql .= sprintf( "reserve , " ) ;
+				$sql .= sprintf( "standard , " ) ;
+				$sql .= sprintf( "tier , " ) ;
+				$sql .= sprintf( "plantno , " ) ;
+				$sql .= sprintf( "status " ) ;
+				
+				$sql .= sprintf( ") VALUES ( " ) ;
+	
+				$sql .= sprintf( "'%s' , "		, $lotno ) ;
+				$sql .= sprintf( "'%s' , "		, $productno ) ;
+				$sql .= sprintf( "'%s' , "		, $lintecname ) ;
+				$sql .= sprintf( "'%s' , "		, $makername ) ;
+				$sql .= sprintf( "'%d' , "		, $customerid ) ;
+				$sql .= sprintf( "'%d' , "		, $type ) ;
+				$sql .= sprintf( "'%d' , "		, $number ) ;
+				$sql .= sprintf( "'%d' , "		, $unit ) ;
+				$sql .= sprintf( "'%d' , "		, $width ) ;
+				$sql .= sprintf( "'%d' , "		, $length ) ;
+				$sql .= sprintf( "'%d' , "		, $joint ) ;
+				$sql .= sprintf( "'%d' , "		, $separator ) ;
+				$sql .= sprintf( "'%d' , "		, $ignore ) ;
+				$sql .= sprintf( "'%d' , "		, $reserve ) ;
+				$sql .= sprintf( "'%s' , "		, $standard ) ;
+				$sql .= sprintf( "'%d' , "		, $tier ) ;
+				$sql .= sprintf( "'%d' , "		, $plantno ) ;
+				$sql .= sprintf( "'%d'   "		, 1 ) ;
+	
+				$sql .= sprintf( ") " ) ;
+	//			echo $sql . "\n" ;
+				$record = ExecuteSQL( $conn , $sql ) ;
+				if ( $record )
+				{
+					$result = TRUE ;
+					CloseRecord( $record ) ;
+				}
+			}
+			DisconnectDatabase( $conn ) ;
+		}
+		usleep( 200000 ) ;
+	}
+
+	// 正常に取込みが完了した場合、応答を返す
+	if ( $result == TRUE )
+	{
+		LintecReqCmp( $sock , LTC_SUCCESS , $func , $i ) ;
+	}
+}
+
+// 品種マスター
+function	LintecMaster( $sock , $len )
+{
+	$customerid = GetCustomerID_LINTEC() ;
+	
+	$result = TRUE ;
+	
+	// データの数分だけ取り込む
+	for ( $i = 0 ; $i < $len ; $i ++ )
+	{
+		$data = @socket_read( $sock , 1024 , PHP_NORMAL_READ ) ;
+		
+		if ( $data === FALSE )
+		{
+			$result = FALSE ;
+			break ;
+		}
+		$data = trim( $data ) ;
+		if ( empty( $data ) )
+		{
+			$i -- ;
+			continue ;
+		}
+		
+		// 入荷予定データの作成
+		$productno	= trim( substr( $data , 0 , 10 ) ) ;
+		$name		= trim( substr( $data , 10 , 25 ) ) ;
+		
+		CreateProductData( $productno , $name ) ;
+	}
+
+	// 正常に取込みが完了した場合、応答を返す
+	if ( $result == TRUE )
+	{
+		LintecReqCmp( $sock , LTC_SUCCESS , LTC_MASTER , $i ) ;
+	}
+}
+
+// 生産計画
+function	LintecSchedule( $sock , $len )
+{
+	$result = TRUE ;
+	
+	// データの数分だけ取り込む
+	for ( $i = 0 ; $i < $len ; $i ++ )
+	{
+		$data = @socket_read( $sock , 1024 , PHP_NORMAL_READ ) ;
+		
+		if ( $data === FALSE )
+		{
+			$result = FALSE ;
+			break ;
+		}
+		
+		$data = trim( $data ) ;
+		if ( empty( $data ) )
+		{
+			$i -- ;
+			continue ;
+		}
+		
+		$mode			= substr( $data ,  0 , 1  ) ;
+		$date			= substr( $data ,  1 , 8  ) ;
+		$scheduleno		= intval( trim( substr( $data , 9 , 10 ) ) ) ;
+		$plant			= intval( trim( substr( $data , 19 , 2 ) ) ) ;
+		$machineno		= intval( trim( substr( $data , 21 , 2 ) ) ) ;
+		$lotno			= trim( substr( $data , 23 , 15 ) ) ;
+		$paint			= intval( trim( substr( $data , 38 , 1 ) ) ) ;
+		$productno		= trim( substr( $data , 39 , 10 ) ) ;
+		$lintecname		= trim( substr( $data , 49 , 25 ) ) ;
+		$width			= intval( trim( substr( $data , 74 , 5 ) ) ) ;
+		$length			= intval( trim( substr( $data , 79 , 8 ) ) ) ;
+		$joint			= intval( trim( substr( $data , 87 , 2 ) ) ) ;
+		$separator		= intval( trim( substr( $data , 89 , 2 ) ) ) ;
+		
+		$year			= intval( substr( $date , 0 , 4 ) ) ;
+		$month			= intval( substr( $date , 4 , 2 ) ) ;
+		$day			= intval( substr( $date , 6 , 2 ) ) ;
+					
+		$conn = ConnectDatabase() ;
+		if ( $conn )
+		{
+			$result = FALSE ;
+
+			// 製品Noの更新
+			UpdateProductAtStock( $lotno , $productno , $lintecname , $conn ) ;
+			
+			$status = DEF_SCHEDULE_CREATE ;
+			if ( $mode == AWC_NORMAL )
+			{
+				// 同じ生産計画日、計画No、Lotno で データがあるか？
+				$duplicate = 0 ;
+				$sql  = sprintf( "SELECT count(*) FROM schedule_data " ) ;
+				$sql .= sprintf( "WHERE status != -1 AND status != %d " , DEF_SCHEDULE_CANCEL ) ;
+				$sql .= sprintf( "AND schedule_date = to_timestamp( '%s 000000' , 'YYYYMMDD HH24MISS' ) "	, $date ) ;
+				$sql .= sprintf( "AND scheduleno = %d " , $scheduleno ) ;
+				$sql .= sprintf( "AND lotno = '%s' " , $lotno ) ;
+				echo $sql ;
+				$record = ExecuteSQL( $conn , $sql ) ;
+				if ( $record )
+				{
+					if ( GetDataCount( $record ) > 0 )
+					{
+						$duplicate = GetValue( $record , "count" ) ;
+					}
+					CloseRecord( $record ) ;
+				}
+				
+				if ( $duplicate == 0 )
+				{
+					// 生産計画データの作成
+					$sql  = sprintf( "INSERT INTO schedule_data ( " ) ;
+					$sql .= sprintf( "type , " ) ;
+					$sql .= sprintf( "schedule_date , " ) ;
+					$sql .= sprintf( "scheduleno , " ) ;
+					$sql .= sprintf( "plant , " ) ;
+					$sql .= sprintf( "machineno , " ) ;
+					$sql .= sprintf( "lotno , " ) ;
+					$sql .= sprintf( "unwindwerno , " ) ;
+					$sql .= sprintf( "productno , " ) ;
+					$sql .= sprintf( "name , " ) ;
+					$sql .= sprintf( "width , " ) ;
+					$sql .= sprintf( "length , " ) ;
+					$sql .= sprintf( "joint , " ) ;
+					$sql .= sprintf( "separator , " ) ;
+					$sql .= sprintf( "status " ) ;
+					$sql .= sprintf( ") VALUES ( " ) ;
+					$sql .= sprintf( "'%d' , "												, $mode ) ;
+					$sql .= sprintf( "to_timestamp( '%s 000000' , 'YYYYMMDD HH24MISS' ) , "	, $date ) ;
+					$sql .= sprintf( "'%d' , "												, $scheduleno ) ;
+					$sql .= sprintf( "'%d' , "												, $plant ) ;
+					$sql .= sprintf( "'%d' , "												, $machineno ) ;
+					$sql .= sprintf( "'%s' , "												, $lotno ) ;
+					$sql .= sprintf( "'%d' , "												, $paint ) ;
+					$sql .= sprintf( "'%s' , "												, $productno ) ;
+					$sql .= sprintf( "'%s' , "												, $lintecname ) ;
+					$sql .= sprintf( "'%d' , "												, $width ) ;
+					$sql .= sprintf( "'%d' , "												, $length ) ;
+					$sql .= sprintf( "'%d' , "												, $joint ) ;
+					$sql .= sprintf( "'%d' , "												, $separator ) ;
+					$sql .= sprintf( "'%d' "												, $status ) ;
+					$sql .= sprintf( ") " ) ;
+	//				echo $sql . "\n" ;
+					$record = ExecuteSQL( $conn , $sql ) ;
+					if ( $record )
+					{
+						$result = TRUE ;
+						CloseRecord( $record ) ;
+					}
+				}
+			}
+
+			// 在庫より指定のロットの保存場所を求める
+			$stockid = -1 ;
+			$paletteid = -1 ;
+			$warehouseid = -1 ;
+			$depositorytype = DEF_DEPOSITORY_TEMPORARY ;
+			$depository = "" ;
+			
+			if ( $result == TRUE )
+			{
+				$result = FALSE ;
+				$lotno = str_replace( " " , "" , $lotno ) ;
+				if ( $lotno != "" )
+				{
+					$sql  = sprintf( "SELECT * FROM stock_data " ) ;
+					$sql .= sprintf( "WHERE status = %d " , 1 ) ;
+					$sql .= sprintf( "AND lotno = '%s' " , $lotno ) ;
+					$sql .= sprintf( "AND ( stock_data.type = %d OR stock_data.type = %d OR stock_data.type = %d ) " , 
+									DEF_STOCKTYPE_MATERIAL ,
+									DEF_STOCKTYPE_TEMPORARY ,
+									DEF_STOCKTYPE_OTHER
+									) ;
+					$sql .= sprintf( "AND ( storage_status & %d ) != 0 " , DEF_STORAGE_STATUS_IN ) ;
+					$sql .= sprintf( "AND ( storage_status & %d ) = 0 " , DEF_STORAGE_STATUS_REQUEST | DEF_STORAGE_STATUS_RESERVE ) ;
+					$sql .= sprintf( "AND ( shipped_status & %d ) = 0 " , DEF_SHIPPED_STATUS_IN ) ;
+//			echo $sql . "\n" ;
+					$record = ExecuteSQL( $conn , $sql ) ;
+					if ( $record )
+					{
+						if ( GetDataCount( $record ) > 0 )
+						{
+							$stockid		= GetValue( $record , "stockid" ) ;
+							$paletteid		= GetValue( $record , "paletteid" ) ;
+							$depositorytype	= GetValue( $record , "depositorytype" ) ;
+							$depository		= GetValue( $record , "depository" ) ;
+							$warehouseid	= GetValue( $record , "warehouseid" ) ;
+							$shipped_status	= GetValue( $record , "shipped_status" ) ;
+							$result = TRUE ;
+						}
+						CloseRecord( $record ) ;
+					}
+				}
+			}
+			
+			// 出庫予約データの作成
+			if ( $result == TRUE && $mode == AWC_NORMAL )
+			{
+				// 出庫予約を作成する。
+				echo "Create Shipping Schedule\n" ;
+				
+				// 既に 出庫予約すみの場合、一旦 出庫予約をキャンセルする。
+				if ( ( $shipped_status & ( DEF_SHIPPED_STATUS_REQUEST | DEF_SHIPPED_STATUS_RESERVE ) ) != 0 )
+					CancelShippingData( $stockid , -1 , $conn ) ;
+								
+				$priority = DEF_SHIPPING_PRIORITY_NORMAL ;	// 優先度 普通
+				if ( ( $priority % 100 ) != 0 )
+					$priority = DEF_SHIPPING_PRIORITY_IMPORTANT ;	// 優先度 重要
+					
+				$result = FALSE ;
+				$arParam = array() ;
+				$arParam[ "lotno"			] = $lotno ;
+				$arParam[ "productno"		] = $productno ;
+				$arParam[ "year"			] = $year ;
+				$arParam[ "month"			] = $month ;
+				$arParam[ "day"				] = $day ;
+				$arParam[ "shipping"		] = $scheduleno * 100 ;		// 生産計画の場合は、生産計画番号
+				$arParam[ "shippingplace"	] = 6 ;						// 塗工機固定
+				$arParam[ "plant"			] = $plant ;
+				$arParam[ "priority"		] = $priority ;
+				$arParam[ "width"			] = $width ;
+				$arParam[ "length"			] = $length ;
+				$arParam[ "joint"			] = $joint ;
+				$arParam[ "separator"		] = $separator ;
+				$arParam[ "count"			] = $count ;
+				$count = CreateShippingDataLot( $arParam , -1 , 2 , $stockid , 1 , $error , $conn ) ;
+				if ( $count != -1 )
+					$result = TRUE ;
+
+				// 在庫より指定のロットの保存場所を求める
+				$stockid = -1 ;
+				if ( $result == TRUE )
+				{
+					$result = FALSE ;
+					$lotno = str_replace( " " , "" , $lotno ) ;
+					if ( $lotno != "" )
+					{
+						$sql  = sprintf( "SELECT * FROM stock_data " ) ;
+						$sql .= sprintf( "WHERE status = %d " , 1 ) ;
+						$sql .= sprintf( "AND lotno = '%s' " , $lotno ) ;
+						$sql .= sprintf( "AND ( stock_data.type = %d OR stock_data.type = %d OR stock_data.type = %d ) " , 
+										DEF_STOCKTYPE_MATERIAL ,
+										DEF_STOCKTYPE_TEMPORARY ,
+										DEF_STOCKTYPE_OTHER
+										) ;
+						$sql .= sprintf( "AND ( storage_status & %d ) != 0 " , DEF_STORAGE_STATUS_IN ) ;
+//						$sql .= sprintf( "AND ( storage_status & %d ) = 0 " , DEF_STORAGE_STATUS_REQUEST | DEF_STORAGE_STATUS_RESERVE ) ;
+						$sql .= sprintf( "AND ( shipped_status & %d ) != 0 " , DEF_SHIPPED_STATUS_REQUEST ) ;
+						$record = ExecuteSQL( $conn , $sql ) ;
+						if ( $record )
+						{
+							if ( GetDataCount( $record ) > 0 )
+							{
+								$stockid = GetValue( $record , "stockid" ) ;
+							}
+							CloseRecord( $record ) ;
+
+							// 生産計画に在庫を関連つける
+							$sql  = sprintf( "UPDATE schedule_data SET stockid = %d " , $stockid ) ;
+							$sql .= sprintf( "WHERE status = %d " , DEF_SCHEDULE_CREATE ) ;
+							$sql .= sprintf( "AND lotno = '%s' " , $lotno ) ;
+							$sql .= sprintf( "AND schedule_date = to_timestamp( '%s' , 'YYYYMMDD' ) " , $date ) ;
+							$sql .= sprintf( "AND scheduleno = %d " , $scheduleno ) ;
+							$record = ExecuteSQL( $conn , $sql ) ;
+							if ( $record )
+								CloseRecord( $record ) ;
+						}
+					}
+				}
+			}
+			else if ( $mode == AWC_DELETE )
+			{
+				// 生産計画 状態が予約の場合、出庫予定をキャンセルする。
+				$sql  = sprintf( "SELECT * FROM schedule_data " ) ;
+				$sql .= sprintf( "WHERE lotno = '%s' " , $lotno  ) ;
+				$sql .= sprintf( "AND scheduleno = '%d' " , $scheduleno ) ;
+				$sql .= sprintf( "AND schedule_date = to_timestamp( '%s 000000' , 'YYYYMMDD HH24MISS' ) " , $date ) ;
+				$sql .= sprintf( "AND status = %d " , DEF_SCHEDULE_CREATE ) ;
+				$record = ExecuteSQL( $conn , $sql ) ;
+				if ( $record )
+				{
+					if ( GetDataCount( $record ) > 0 )
+					{
+						$sql  = sprintf( "SELECT * FROM stock_data WHERE status = 1 AND lotno = '%s' " , $lotno ) ;
+						$sql .= sprintf( "AND ( shipped_status & %d ) != 0 " , DEF_SHIPPED_STATUS_REQUEST ) ;
+						$stock = ExecuteSQL( $conn , $sql ) ;
+						if ( $stock )
+						{
+							if ( GetDataCount( $stock ) > 0 )
+							{
+								$stockid = GetValue( $stock , "stockid" ) ;
+								CancelShippingData( $stockid , -1 , $conn ) ;
+							}
+						
+							CloseRecord( $stock ) ;
+						}
+					}
+					CloseRecord( $record ) ;
+
+					// 生産計画 状態が予約の場合、生産計画をキャンセルする。
+					$sql  = sprintf( "UPDATE schedule_data " ) ;
+					$sql .= sprintf( "SET status = %d , " , DEF_SCHEDULE_CANCEL ) ;
+					$sql .= sprintf( "update_date = now() " ) ;
+					$sql .= sprintf( "WHERE lotno = '%s' " , $lotno  ) ;
+					$sql .= sprintf( "AND scheduleno = '%s' " , $scheduleno ) ;
+					$sql .= sprintf( "AND schedule_date = to_timestamp( '%s 000000' , 'YYYYMMDD HH24MISS' ) " , $date ) ;
+					$record = ExecuteSQL( $conn , $sql ) ;
+					if ( $record )
+						CloseRecord( $record ) ;
+				}
+			}
+
+//			// 倉庫名を取得する
+//			if ( $warehouseid != -1 )
+//			{
+//				$sql  = "" ;
+//				$sql .= sprintf( "SELECT * FROM WAREHOUSE_DATA WHERE status = 1 AND warehouseid = %d " , $warehouseid ) ;
+//				$record = ExecuteSQL( $conn , $sql ) ;
+//				if ( $record )
+//				{
+//					if ( GetDataCount( $record ) > 0 )
+//						$warehousename = GetValue( $record , "name" ) ;
+//					CloseRecord( $record ) ;
+//				}
+//			}
+
+			// 真北倉庫へ出庫指示
+			$warehouse = AWC_WAREHOUSE_MAKITA ;
+
+			// パレットの場合
+			if ( $depositorytype == DEF_DEPOSITORY_PALETTE )
+			{
+				$arPalatte = GetPaletteInfo( $paletteid , $conn ) ;
+				// パレット番号が6桁の場合は、ダイフク倉庫へ
+				$paletteno = $arPalatte[ "paletteno" ] ;
+				if ( strlen( $paletteno ) == 6 )
+				{
+					$warehouse = AWC_WAREHOUSE_DAIFUKU ;
+
+				/* 在庫更新を中止　2006.10.26
+					// 在庫更新のコマンドを発行する。
+					$cmd = sprintf( "%s client %d '%s' '%s' '%s' '%s' '%s' %d %d %d %d %d %d '%s' &" ,
+									SELF_FULLCOMMAND ,
+									AWC_RENEW_REQ ,
+									$productno	,
+									$lintecname	,
+									$makername	,
+									$lotno		,
+									$makerlotno	,
+									$width		,
+									$length		,
+									$joint		,
+									$separator	,
+									$ignore		,
+									$reserve	,
+									$paletteno	) ;
+					echo "COMMAND : " . $cmd . "\n" ;
+					exec( $cmd ) ;
+				*/
+				}
+			}
+
+			$cmd = sprintf( "%s client %d %d %d '%s' %d '%s' '%s' %d '%s' %d %d %d %d &" ,
+								SELF_FULLCOMMAND ,
+								AWC_SCHEDULE_REQ ,
+								$mode ,
+								$warehouse ,
+								$date ,
+								$scheduleno ,
+								$lotno ,
+								$productno ,
+								$paint ,
+								$lintecname , 
+								$width ,
+								$length ,
+								$joint ,
+								$separator ) ;
+							
+			echo "COMMAND : " . $cmd . "\n" ;
+			exec( $cmd ) ;
+
+			DisconnectDatabase( $conn ) ;
+			$result = TRUE ;
+		}
+		usleep( 200000 ) ;
+	}
+	
+	// 現在 出庫中のものが無ければ 出庫指示をする
+	ExecuteAutomove() ;
+	
+	// 正常に取込みが完了した場合、応答を返す
+	if ( $result == TRUE )
+	{
+		LintecReqCmp( $sock , LTC_SUCCESS , LTC_SCHEDULE , $i ) ;
+	}
+}
+
+// 真北運輸からの送信
+function	LintecResult( $sock , $data )
+{
+	echo "execute\n" ;
+	
+	// 電文の解析
+	$func	= substr( $data , 2 , 6 ) ;
+	$date	= trim( substr( $data , 8 , 8 ) ) ;
+	WriteSyslog( "COMMAND:" . $func ) ;
+	WriteSyslog( "COND:" . $date ) ;
+	switch ( $func )
+	{
+	// 入出庫実績
+	case	LTC_RESULT :
+		LintecMoveout( $sock , $date ) ;
+		break ;
+	
+	// 在庫一覧
+	case	LTC_STOCK :
+		LintecAllStock( $sock ) ;
+		break ;
+	}
+	echo "exit\n" ;
+}
+
+// 入出庫実績
+function	LintecMoveout( $sock , $date )
+{
+	$year	= date( "Y" ) ;
+	$month	= intval( substr( $date , 0 , 2 ) ) ;
+	$day	= intval( substr( $date , 2 , 2 ) ) ;
+	$hour	= intval( substr( $date , 4 , 2 ) ) ;
+	$min	= intval( substr( $date , 6 , 2 ) ) ;
+
+	$customerid = GetCustomerID_LINTEC() ;
+
+	$where	 = sprintf( "stock_data s LEFT JOIN product_data p ON s.productid = p.productid " ) ;
+	$where	.= sprintf( "WHERE s.status = 1 " ) ;
+	$where	.= sprintf( "AND p.customerid = %d" , $customerid ) ;
+	
+	$where	.= sprintf( "AND ( " ) ;
+	
+	// 入庫日
+	$where	.= sprintf( "( " ) ;
+	$where	.= sprintf( "( ( s.storage_status & %d ) != 0 ) " , DEF_STORAGE_STATUS_IN ) ;
+	$where	.= sprintf( "AND ( s.storage_date >= '%04d-%02d-%02d %02d:%02d:00' ) " , $year , $month , $day , $hour , $min ) ;
+	$where	.= sprintf( ") " ) ;
+	
+	// 出庫日
+	$where	.= sprintf( "OR ( " ) ;
+	$where	.= sprintf( "( ( s.shipped_status & %d ) != 0 ) " , DEF_SHIPPED_STATUS_IN ) ;
+	$where	.= sprintf( "AND ( s.shipped_date >= '%04d-%02d-%02d %02d:%02d:00' ) " , $year , $month , $day , $hour , $min ) ;
+	$where	.= sprintf( ") " ) ;
+
+	$where	.= sprintf( " ) " ) ;
+	
+	$sql  = sprintf( "SELECT count( s.stockid ) FROM " ) ;
+	$sql .= $where ;
+	
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+		$record = ExecuteSQL( $conn , $sql ) ;
+		if ( $record )
+		{
+			if ( GetDataCount( $record ) > 0 )
+			{
+				$cnt = GetValue( $record , "count" ) ;
+				
+				// 送信電文の作成
+				$cmd = sprintf( LTCFMT_HEADER , LTC_SUCCESS , LTC_RESULT , $cnt ) ;
+				
+				// 電文の送信
+				socket_write( $sock , $cmd , LTCFMT_HEADER_LEN + 2 ) ;
+				WriteSyslog( "RES:" . $cmd ) ;
+			}
+			CloseRecord( $record ) ;
+		}
+		
+		$sql  = sprintf( "SELECT s.* , p.productid , p.productno , p.name FROM " ) ;
+		$sql .= $where ;
+		$sql .= sprintf( "ORDER BY s.type , s.storage_date , s.shipped_date " ) ;
+		
+		$record = ExecuteSQL( $conn , $sql ) ;
+		if ( $record )
+		{
+			$cnt = GetDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = GetValues( $record , $i ) ;
+				
+				if ( $arData[ "type" ] == DEF_STOCKTYPE_OTHER )
+					$arData[ "type" ] = DEF_STOCKTYPE_CUSTOMP1 ;
+
+				$date = date( "Ymd" , strtotime2( $arData[ "storage_date" ] ) ) ;
+				$time = date( "His" , strtotime2( $arData[ "storage_date" ] ) ) ;
+				if ( ( $arData[ "shipped_status" ] & DEF_SHIPPED_STATUS_IN ) != 0 )
+				{
+					$date = date( "Ymd" , strtotime2( $arData[ "shipped_date" ] ) ) ;
+					$time = date( "His" , strtotime2( $arData[ "shipped_date" ] ) ) ;
+				}
+				
+				$cmd = sprintf(	LTCFMT_RESULT ,
+								trim( substr(	$arData[ "lotno"		] , 0 , 15 ) ) ,
+								trim( substr(	$arData[ "productno"	] , 0 , 10 ) ) ,
+								trim( substr(	$arData[ "name"			] , 0 , 25 ) ) ,
+												$arData[ "type"			] ,
+												$arData[ "number"		] ,
+												$arData[ "unit"			] ,
+												$arData[ "width"		] ,
+												$arData[ "length"		] ,
+												$arData[ "joint"		] ,
+												$arData[ "separator"	] ,
+												$arData[ "tier"			] ,
+								$date ,
+								$time
+							) ;
+				
+				// 電文の送信
+				socket_write( $sock , $cmd , strlen( $cmd ) ) ;
+
+				usleep( 200000 ) ;
+			}
+			CloseRecord( $record ) ;
+		}
+		
+		DisconnectDatabase( $conn ) ;
+	}
+}
+
+function LintecAllStock( $sock )
+{
+	$arCustomerid = GetCustomerID_LINTEC_MULTI() ;
+
+	$where	 = sprintf( "stock_data , product_data WHERE stock_data.status = 1 " ) ;
+	$where	.= sprintf( "AND product_data.productid = stock_data.productid " ) ;
+
+	if ( sizeof( $arCustomerid ) > 0 )
+	{
+		$where	.= sprintf( "AND ( " ) ;
+		$cnt = sizeof( $arCustomerid ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			if ( $i != 0 )
+				$where	.= sprintf( " OR " ) ;
+			
+			$where	.= sprintf( "product_data.customerid = %d" , $arCustomerid[ $i ] ) ;
+		}
+		$where	.= sprintf( " ) " ) ;
+	}
+	else
+	{
+		$where	.= sprintf( "AND product_data.customerid = %d " , -999 ) ;
+	}
+	$where	.= sprintf( "AND ( stock_data.type = %d OR stock_data.type = %d ) " , DEF_STOCKTYPE_MATERIAL , DEF_STOCKTYPE_TEMPORARY  ) ;
+	
+	// 入庫状態
+	$where	.= sprintf( "AND ( storage_status & %d ) != 0 " , DEF_STORAGE_STATUS_IN ) ;
+	
+	// 未出庫状態
+	$where	.= sprintf( "AND ( shipped_status & %d ) = 0 " , DEF_SHIPPED_STATUS_IN ) ;
+	
+	$sql  = sprintf( "SELECT count( * ) FROM " ) ;
+	$sql .= $where ;
+	
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+		$record = ExecuteSQL( $conn , $sql ) ;
+		if ( $record )
+		{
+			if ( GetDataCount( $record ) > 0 )
+			{
+				$cnt = GetValue( $record , "count" ) ;
+				
+				// 送信電文の作成
+				$cmd = sprintf( LTCFMT_HEADER , LTC_SUCCESS , LTC_STOCK , $cnt ) ;
+				
+				// 電文の送信
+				socket_write( $sock , $cmd , LTCFMT_HEADER_LEN + 2 ) ;
+			}
+			CloseRecord( $record ) ;
+		}
+		
+		$sql  = sprintf( "SELECT stock_data.* , product_data.productid , product_data.productno , product_data.name FROM " ) ;
+		$sql .= $where ;
+		$sql .= sprintf( "ORDER BY stock_data.type , stock_data.storage_date , stock_data.shipped_date " ) ;
+		
+		$record = ExecuteSQL( $conn , $sql ) ;
+		if ( $record )
+		{
+			$cnt = GetDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = GetValues( $record , $i ) ;
+				
+				if ( $arData[ "type" ] == 99 )
+					$arData[ "type" ] = 5 ;
+				
+				$date = date( "Ymd" , strtotime2( $arData[ "storage_date" ] ) ) ;
+				$depository = $arData[ "depository" ] ;
+				if ( $arData[ "subdepository" ] != -1 )
+					$depository = sprintf( "%s-%s" , $depository , $arData[ "subdepository" ] ) ;
+				if ( $arData[ "subdepository1" ] != -1 )
+					$depository = sprintf( "%s-%s" , $depository , $arData[ "subdepository1" ] ) ;
+				
+				$cmd = sprintf(	LTCFMT_STOCK ,
+								trim( substr(	$arData[ "lotno"			] , 0 , 15 ) ) ,
+								trim( substr(	$arData[ "productno"		] , 0 , 10 ) ) ,
+								trim( substr(	$arData[ "name"				] , 0 , 25 ) ) ,
+												$arData[ "type"				] ,
+												$arData[ "number"			] ,
+												$arData[ "unit"				] ,
+												$arData[ "width"			] ,
+												$arData[ "length"			] ,
+												$arData[ "joint"			] ,
+												$arData[ "separator"		] ,
+								trim( substr(	$arData[ "standard"			] , 0 , 20 ) ) ,
+												$arData[ "tier"				] ,
+								$date ,
+												$arData[ "depositorytype"	] ,
+								$depository
+							) ;
+				
+				// 電文の送信
+				socket_write( $sock , $cmd , strlen( $cmd ) ) ;
+
+				usleep( 200000 ) ;
+			}
+			CloseRecord( $record ) ;
+		}
+		
+		DisconnectDatabase( $conn ) ;
+	}
+}
+
+// TOYOTA 出庫指示ファイルの作成
+function	ToyotaMoveout( $no , $comment , $seq , $station , $paletteno , $num , $date , $state )
+{
+	// ファイル名の作成
+	$destination_file = sprintf( "F02_%s" , $no ) ;
+	$src_file = sprintf( "W%s" , $destination_file ) ;
+	$filename = sprintf( "/tmp/%s" , $src_file ) ;
+
+	// ファイルの作成
+	$fp = fopen( $filename , "w" ) ;
+	if ( $fp )
+	{
+		$cmd = sprintf(	TOYOTAFMT_MOVEOUT ,
+						$no ,
+						$comment ,
+						$seq ,
+						$station ,
+						$paletteno ,
+						$num ,
+						$date ,
+						$state ) ;
+		echo $cmd . "\n" ;
+		fwrite( $fp , $cmd , strlen( $cmd ) ) ;
+		fclose( $fp ) ;
+	}
+	
+	if ( file_exists( $filename ) )
+	{
+		$ftp_server		= TOYOTA_IPADDR ;
+		$ftp_user_name	= TOYOTA_USER ;
+
+		echo date( "Y/m/d H:n:s\t" ) . "Try Connect ...\n" ;
+		$conn_id = ftp_connect( TOYOTA_IPADDR ) ;
+		if ( $conn_id )
+		{
+			$login_result = ftp_login( $conn_id , TOYOTA_USER , TOYOTA_PASS ) ;
+			
+			// 接続できたか確認する
+			if ( ( !$conn_id ) || ( !$login_result ) )
+			{
+			       echo date( "Y/m/d H:n:s\t" ) . "FTP connection has failed!";
+			       echo date( "Y/m/d H:n:s\t" ) . "Attempted to connect to $ftp_server for user $ftp_user_name";
+			}
+			else
+			{
+				echo date( "Y/m/d H:n:s\t" ) . "Connected to $ftp_server, for user $ftp_user_name";
+				
+				// ディレクトリの一覧を取得して削除する
+				$arDir = ftp_nlist( $conn_id , "Send" ) ;
+				for ( $i = 0 ; $i < sizeof( $arDir ) ; $i ++ )
+				{
+					if ( substr( $arDir[ $i ] , 0 , 3 ) == "F02" )
+						@ftp_delete( $conn_id , "Send/" . $arDir[ $i ] ) ;
+				}
+				@ftp_chdir( $conn_id , "Recv" ) ;
+				
+				// アップロード前に同じファイル名があれば削除する
+				@ftp_delete( $conn_id , $filename ) ;
+				
+				// ファイルをアップロードする
+				$upload = ftp_put( $conn_id , $src_file , $filename , FTP_BINARY ) ;
+				
+				// アップロード状況を確認する
+				if ( !$upload )
+				{
+					echo date( "Y/m/d H:n:s\t" ) . "FTP upload has failed!";
+				}
+				else
+				{
+					echo date( "Y/m/d H:n:s\t" ) . "Uploaded $src_file to $ftp_server as $src_file";
+					echo date( "Y/m/d H:n:s\t" ) . "Rename $src_file to $ftp_server as $destination_file";
+					@ftp_rename( $conn_id , $src_file , $destination_file ) ;
+					
+					// 出庫指示を正常に出したので、生産計画を出庫中に更新
+					UpdateSchedule( $lotno , DEF_SCHEDULE_SHIPPING ) ;
+				}
+			}
+			// FTP ストリームを閉じる
+			ftp_close( $conn_id ) ;
+		}
+		// テンポラリファイルを削除する
+		unlink( $filename ) ;
+	}
+}
+
+// 出庫予約のものをタイマー監視して TOYOTA L&F社製の倉庫管理端末へ要求を送信する
+function	ToyotaTimer()
+{
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+		// 出庫予約を取り出す（塗工機以外で、同日以前のもの）
+		$where  = sprintf( "WHERE status = 1 " ) ;
+		$where .= sprintf( "AND shippingplace != 6 " ) ;
+		$where .= sprintf( "AND ( storage_status & %d ) != 0 " , DEF_STORAGE_STATUS_IN ) ;
+		$where .= sprintf( "AND ( storage_status & %d ) = 0 " , DEF_STORAGE_STATUS_REQUEST | DEF_STORAGE_STATUS_RESERVE ) ;
+		$where .= sprintf( "AND ( shipped_status & %d ) != 0 " , DEF_SHIPPED_STATUS_REQUEST | DEF_SHIPPED_STATUS_RESERVE ) ;
+		$where .= sprintf( "AND shipping_date <= to_timestamp( '%s 235959' , 'YYYYMMDD HH24MISS' ) " , date( "Ymd" ) ) ;
+		$sql  = "" ;
+		$sql .= "SELECT * FROM stock_data " ;
+		$sql .= $where ;
+		$sql .= sprintf( "ORDER BY shipping_date , " ) ;
+		$sql .= sprintf( "priority desc , shipping , plant " ) ;
+		$record = ExecuteSQL( $conn , $sql ) ;
+		if ( $record )
+		{
+			$cnt = GetDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = GetValues( $record , $i ) ;
+				$depositorytype		= $arData[ "depositorytype"		] ;
+				$depository			= $arData[ "depository"			] ;
+				$subdepository		= $arData[ "subdepository"		] ;
+				$subdepository1		= $arData[ "subdepository1"		] ;
+				$paletteid			= $arData[ "paletteid"			] ;
+				
+				$shipping			= $arData[ "shipping"			] ;
+				$shipping_date		= $arData[ "shipping_date"		] ;
+				$shipping_date		= date( "Ymd" , strtotime2( $shipping_date ) ) ;
+				
+				if ( $paletteid != -1 )
+				{
+					$arPalette = GetPaletteInfo( $paletteid , $conn ) ;
+					$depositorytype		= $arPalette[ "depositorytype"		] ;
+					$depository			= $arPalette[ "depository"			] ;
+					$subdepository		= $arPalette[ "subdepository"		] ;
+					$subdepository1		= $arPalette[ "subdepository1"		] ;
+				}
+
+				// 保管場所が 自動倉庫でかつ場所が７桁の場合
+				if ( $depositorytype == DEF_DEPOSITORY_AUTO && strlen( $depository ) == 7 )
+				{
+					// 便指定が 指定なし より大きい場合、無条件で出庫依頼
+					if ( $shipping >= DEF_SHIPPINGTIME_NONE )
+					{
+						$cmd = sprintf( "%s toyota '%s' '%s' %d '002' '%s' %d '%s' %d &" ,
+											SELF_FULLCOMMAND ,
+											date( 'YmdHis' )  ,
+											"" ,				// コメント
+											1 ,
+											$depository ,
+											1 ,
+											date( 'YmdHis' ) ,
+											0 ) ;
+										
+						echo date( "Y/m/d H:n:s\t" ) . "COMMAND : " . $cmd . "\n" ;
+						exec( $cmd ) ;
+						sleep( 2 ) ;
+					}
+					
+					// 便指定が 過去のものの場合、無条件で出庫依頼
+					else if ( $shipping_date < date( "Ymd" ) )
+					{
+						$cmd = sprintf( "%s toyota '%s' '%s' %d '002' '%s' %d '%s' %d &" ,
+											SELF_FULLCOMMAND ,
+											date( 'YmdHis' )  ,
+											"" ,				// コメント
+											1 ,
+											$depository ,
+											1 ,
+											date( 'YmdHis' ) ,
+											0 ) ;
+										
+						echo date( "Y/m/d H:n:s\t" ) . "COMMAND : " . $cmd . "\n" ;
+						exec( $cmd ) ;
+						sleep( 2 ) ;
+					}
+					
+					// 便指定が 当日で且つ 現在時刻が 超えている場合 出庫依頼
+					else
+					{
+						global	$arShippingTime ;
+
+						// 出荷便指定より 時間を取得する。
+						$shipping_time = $arShippingTime[ $shipping - 1 ] ;
+						if ( $shipping_time == $arShippingTime[ $shipping ] )
+							$shipping_time = $arShippingTime[ $shipping - 2 ] ;
+							
+						// 現在時刻を取得する
+						$time = date( "Hi" ) ;
+						
+//						echo "NORMAL AUTOMOVING : " ;
+//						echo $depository . " : " ;
+//						echo $shipping . " : " ;
+//						echo $shipping_time . " : " ;
+//						echo $time . "\n" ;
+						
+						if ( $time > $shipping_time )
+						{
+							$cmd = sprintf( "%s toyota '%s' '%s' %d '002' '%s' %d '%s' %d &" ,
+												SELF_FULLCOMMAND ,
+												date( 'YmdHis' )  ,
+												"" ,				// コメント
+												1 ,
+												$depository ,
+												1 ,
+												date( 'YmdHis' ) ,
+												0 ) ;
+											
+							echo date( "Y/m/d H:n:s\t" ) . "COMMAND : " . $cmd . "\n" ;
+							exec( $cmd ) ;
+							sleep( 2 ) ;
+						}
+					}
+				}
+			}
+		}
+		DisconnectDatabase( $conn ) ;
+	}
+}
+
+// トヨタ自動倉庫 実績ファイル削除機能
+function	ToyotaResult()
+{
+	$ftp_server		= TOYOTA_IPADDR ;
+	$ftp_user_name	= TOYOTA_USER ;
+	
+	echo date( "Y/m/d H:n:s\t" ) . "Try Connect ...\n" ;
+	$conn_id = ftp_connect( TOYOTA_IPADDR ) ;
+	if ( $conn_id )
+	{
+		$login_result = ftp_login( $conn_id , TOYOTA_USER , TOYOTA_PASS ) ;
+		
+		// 接続できたか確認する
+		if ( ( !$conn_id ) || ( !$login_result ) )
+		{
+		       echo date( "Y/m/d H:n:s\t" ) . "FTP connection has failed!";
+		       echo "Attempted to connect to $ftp_server for user $ftp_user_name\n";
+		}
+		else
+		{
+			echo date( "Y/m/d H:n:s\t" ) . "Connected to $ftp_server, for user $ftp_user_name\n";
+			
+			// ディレクトリの一覧を取得して削除する
+			$arDir = ftp_nlist( $conn_id , "Send" ) ;
+			for ( $i = 0 ; $i < sizeof( $arDir ) ; $i ++ )
+			{
+				$arDir[ $i ] = str_replace( "Send/" , "" , $arDir[ $i ] ) ;
+				if ( substr( $arDir[ $i ] , 0 , 3 ) == "F04" )
+					@ftp_delete( $conn_id , "Send/" . $arDir[ $i ] ) ;
+				if ( substr( $arDir[ $i ] , 0 , 3 ) == "F05" )
+					@ftp_delete( $conn_id , "Send/" . $arDir[ $i ] ) ;
+			}
+		}
+		// FTP ストリームを閉じる
+		ftp_close( $conn_id ) ;
+	}
+	else
+	{
+       echo date( "Y/m/d H:n:s\t" ) . "FTP connection has failed!\n";
+	}
+}
+
+// LINTEC龍野工場のCUSTOMERIDを取得する
+function	GetCustomerID_LINTEC()
+{
+	$customerid = -1 ;
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+		$sql  = sprintf( "SELECT * from customer_data " ) ;
+		$sql .= sprintf( "WHERE name = '%s' " , DEF_CUSTOMER_LINTEC ) ;
+		$sql .= sprintf( "AND title = '%d' " , DEF_CUSTOMER_LINTEC_TYPE ) ;
+		$sql .= sprintf( "AND department = '%s' " , DEF_CUSTOMER_LINTEC_DEPT ) ;
+		$sql .= sprintf( "AND ( type & %d ) != 0 " , DEF_CUSTOMER_TYPE_OWNER ) ;
+
+		$record = ExecuteSQL( $conn , $sql ) ;
+		if ( $record )
+		{
+			$customerid = GetValue( $record , "customerid" ) ;
+			CloseRecord( $record ) ;
+		}
+		DisconnectDatabase( $conn ) ;
+	}
+	
+	return $customerid ;
+}
+
+// LINTEC龍野工場のCUSTOMERIDを取得する
+function	GetCustomerID_LINTEC_MULTI()
+{
+	$arCustomer = array() ;
+	$customerid = -1 ;
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+		$sql  = sprintf( "SELECT * from customer_data " ) ;
+		$sql .= sprintf( "WHERE name = '%s' "			, DEF_CUSTOMER_LINTEC ) ;
+		$sql .= sprintf( "AND title = '%d' "			, DEF_CUSTOMER_LINTEC_TYPE ) ;
+		$sql .= sprintf( "AND department like '%s%%' "	, DEF_CUSTOMER_LINTEC_DEPT ) ;
+		$sql .= sprintf( "AND ( type & %d ) != 0 "		, DEF_CUSTOMER_TYPE_OWNER ) ;
+		$sql .= sprintf( "ORDER BY customerid "			) ;
+
+		$record = ExecuteSQL( $conn , $sql ) ;
+		if ( $record )
+		{
+			$cnt = GetDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$customerid = GetValue( $record , "customerid" , $i ) ;
+				$arCustomer[] = $customerid ;
+			}
+			CloseRecord( $record ) ;
+		}
+		DisconnectDatabase( $conn ) ;
+	}
+	
+	return $arCustomer ;
+}
+
+// 入庫予定 及び 生産計画から製品Noを更新する
+function	MaintenanceStockAtSchedule()
+{
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+/*
+		// 入庫予定からの更新
+		$sql = sprintf( "SELECT * FROM storageplan_data" ) ;
+		$record = ExecuteSQL( $conn , $sql ) ;
+		if ( $record )
+		{
+			$cnt = GetDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = GetValues( $record , $i ) ;
+				$lotno		= $arData[ "lotno"		] ;
+				$productno	= $arData[ "productno"	] ;
+				$name		= $arData[ "name"		] ;
+				UpdateProductAtStock( $lotno , $productno , $name , $conn ) ;
+			}
+			CloseRecord( $record ) ;
+		}
+
+		// 生産計画からの更新
+		$sql = sprintf( "SELECT * FROM schedule_data" ) ;
+		$record = ExecuteSQL( $conn , $sql ) ;
+		if ( $record )
+		{
+			$cnt = GetDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = GetValues( $record , $i ) ;
+				$lotno		= $arData[ "lotno"		] ;
+				$productno	= $arData[ "productno"	] ;
+				$name		= $arData[ "name"		] ;
+				UpdateProductAtStock( $lotno , $productno , $name , $conn ) ;
+			}
+			CloseRecord( $record ) ;
+		}
+
+		// 生産計画と在庫の関連付け
+		$sql = sprintf( "SELECT * FROM schedule_data WHERE stockid = -1 " , DEF_SCHEDULE_CANCEL ) ;
+		$record = ExecuteSQL( $conn , $sql ) ;
+		
+		if ( $record )
+		{
+			$cnt = GetDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = GetValues( $record , $i ) ;
+				$scheduleid		= $arData[ "scheduleid"		] ;
+				$lotno			= $arData[ "lotno"			] ;
+				$schedule_date	= $arData[ "schedule_date"	] ;
+			
+				// 最新の在庫を関連つける
+				$stockid = -1 ;
+				$sql  = sprintf( "SELECT * FROM stock_data " ) ;
+				$sql .= sprintf( "WHERE lotno = '%s' " , $lotno ) ;
+				$sql .= sprintf( "AND status = 1 " ) ;
+				$sql .= sprintf( "AND storage_date <= to_timestamp( '%s' , 'YYYYMMDD' ) " , date( "Ymd" , strtotime2( $schedule_date ) ) ) ;
+				$sql .= sprintf( "ORDER BY update_date desc " ) ;
+				$stock = ExecuteSQL( $conn , $sql ) ;
+//				echo $sql . "\n" ;
+				if ( $stock )
+				{
+					if ( GetDataCount( $stock ) > 0 )
+					{
+//						echo "hit" . "\n" ;
+						$stockid = GetValue( $stock , "stockid" ) ;
+					}
+					CloseRecord( $stock ) ;
+				}
+				
+				if ( $stockid != -1 )
+				{
+//					printf( "Lotno : %s StockID = %d : ScheduleID = %d \n" , $lotno , $stockid , $scheduleid ) ;
+					$sql = sprintf( "UPDATE schedule_data SET stockid = %d WHERE scheduleid = %d " , $stockid , $scheduleid ) ;
+					$update = ExecuteSQL( $conn , $sql ) ;
+					if ( $update )
+						CloseRecord( $update ) ;
+				}
+			
+			}
+			CloseRecord( $record ) ;
+		}
+*/
+		// 生産計画と在庫の関連付け
+		$sql = sprintf( "SELECT * FROM schedule_data WHERE status = %d OR status = %d " , DEF_SCHEDULE_CREATE , DEF_SCHEDULE_SHIPPING ) ;
+//		echo $sql . "\n" ;
+		$record = ExecuteSQL( $conn , $sql ) ;
+		
+		if ( $record )
+		{
+			$cnt = GetDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = GetValues( $record , $i ) ;
+				$stockid		= $arData[ "stockid"		] ;
+				$scheduleno		= $arData[ "scheduleno"		] ;
+			
+				// 最新の在庫を関連つける
+				$sql  = sprintf( "UPDATE stock_data " ) ;
+				$sql .= sprintf( "SET shipping = %d " , $scheduleno * 100 ) ;
+				$sql .= sprintf( "WHERE stockid = %d " , $stockid ) ;
+				$sql .= sprintf( "AND status = 1 " ) ;
+				$sql .= sprintf( "AND ( shipped_status & %d ) != 0 " , DEF_SHIPPED_STATUS_REQUEST ) ;
+				$stock = ExecuteSQL( $conn , $sql ) ;
+//				echo $sql . "\n" ;
+				if ( $stock )
+				{
+					CloseRecord( $stock ) ;
+				}
+			}
+			CloseRecord( $record ) ;
+		}
+		DisconnectDatabase( $conn ) ;
+	}
+}
+
+// 自動出庫指示
+function	AutoMoveout()
+{
+	$conn = ConnectDatabase() ;
+
+	$stockid = -1 ;
+	if ( $conn )
+	{
+		$result = FALSE ;
+	
+		// 生産計画の先頭を取得する。
+		$sql  = sprintf( "SELECT * FROM schedule_data WHERE status = %d AND stockid != -1 " , DEF_SCHEDULE_CREATE ) ;
+		$sql .= sprintf( "ORDER BY schedule_date , scheduleno " ) ;
+//		echo $sql . "\n" ;
+		$record = ExecuteSQL( $conn , $sql ) ;
+		if ( $record )
+		{
+			if ( GetDataCount( $record ) > 0 )
+			{
+				$arData = GetValues( $record ) ;
+				
+				$stockid	= $arData[ "stockid"		] ;
+				$lotno		= $arData[ "lotno"			] ;
+				$date		= $arData[ "schedule_date"	] ;
+				$scheduleno	= $arData[ "scheduleno"		] ;
+				
+				$date = date( "Ymd" , strtotime2( $date ) ) ;
+				$lotno = str_replace( " " , "" , $lotno ) ;
+				if ( $lotno != "" )
+					$result = TRUE ;
+			}
+			CloseRecord( $record ) ;
+		}
+	
+//		echo $stockid . "\n" ;
+//		echo $lotno . "\n"  ;
+//		echo $date . "\n"  ;
+//		echo $scheduleno . "\n"  ;
+//		echo $result . "\n"  ;
+		
+		// 在庫より指定のロットの保存場所を求める
+		if ( $result == TRUE )
+		{
+			$result = FALSE ;
+
+			$sql  = sprintf( "SELECT * FROM stock_data " ) ;
+			$sql .= sprintf( "WHERE status = %d " , 1 ) ;
+			$sql .= sprintf( "AND stockid = %d " , $stockid ) ;
+/*			$sql .= sprintf( "AND ( stock_data.type = %d OR stock_data.type = %d OR stock_data.type = %d ) " , 
+							DEF_STOCKTYPE_MATERIAL ,
+							DEF_STOCKTYPE_TEMPORARY ,
+							DEF_STOCKTYPE_OTHER
+							) ;
+			$sql .= sprintf( "AND ( storage_status & %d ) != 0 " , DEF_STORAGE_STATUS_IN ) ;
+			$sql .= sprintf( "AND ( storage_status & %d ) = 0 " , DEF_STORAGE_STATUS_REQUEST | DEF_STORAGE_STATUS_RESERVE ) ;
+			$sql .= sprintf( "AND ( shipped_status & %d ) != 0 " , DEF_SHIPPED_STATUS_REQUEST ) ;
+*/
+//			echo $sql . "\n" ;
+			$record = ExecuteSQL( $conn , $sql ) ;
+			if ( $record )
+			{
+				if ( GetDataCount( $record ) > 0 )
+				{
+					$paletteid = GetValue( $record , "paletteid" ) ;
+					$depositorytype = GetValue( $record , "depositorytype" ) ;
+					$depository = GetValue( $record , "depository" ) ;
+					$warehouseid = GetValue( $record , "warehouseid" ) ;
+					$result = TRUE ;
+				}
+				CloseRecord( $record ) ;
+			}
+		}
+
+		if ( $result == TRUE )
+		{
+//			WriteSyslog( "Hit Stock Data " ) ;
+			// パレットの場合
+			if ( $depositorytype == DEF_DEPOSITORY_PALETTE )
+			{
+				WriteSyslog( "DAIFUKU Automove" ) ;
+				$arPalatte = GetPaletteInfo( $paletteid , $conn ) ;
+				// パレット番号が6桁の場合は、ダイフク倉庫へ
+				$paletteno = $arPalatte[ "paletteno" ] ;
+				if ( strlen( $paletteno ) == 6 )
+				{
+					// DAIFUKU自動倉庫の場合
+					$cmd = sprintf( "%s client %d '%s' '%s' '%s' %d &" ,
+									SELF_FULLCOMMAND ,
+									AWC_AUTOMOVE_REQ ,
+									$paletteno ,
+									$lotno ,
+									$date ,
+									$scheduleno
+								) ;
+										
+					echo "COMMAND : " . $cmd . "\n" ;
+					exec( $cmd ) ;
+				}
+			}
+			// 自動倉庫でかつトヨタL&F倉庫の場合、出庫依頼を行う
+			else if ( $depositorytype == DEF_DEPOSITORY_AUTO && strlen( $depository ) == 7 )
+			{
+				WriteSyslog( "TOYOTA Automove" ) ;
+				$cmd = sprintf( "%s toyota '%s' '%s' %d '006' '%s' %d '%s' %d &" ,
+								SELF_FULLCOMMAND ,
+								date( 'YmdHis' )  ,
+								"" ,				// コメント
+								1 ,
+								$depository ,
+								1 ,
+								date( 'YmdHis' ) ,
+								0 ) ;
+									
+				echo "COMMAND : " . $cmd . "\n" ;
+				exec( $cmd ) ;
+			}
+
+			// 指示後に 生産計画状態を変更する
+			UpdateSchedule( $lotno , DEF_SCHEDULE_SHIPPING , $conn ) ;
+		}
+		DisconnectDatabase( $conn ) ;
+	}
+}
+
+// syslog 登録
+function	WriteSyslog( $szMsg )
+{
+	define_syslog_variables() ;
+	
+	$szMsg = mb_convert_kana( $szMsg , "KV" , "sjis-win" ) ;
+	$szMsg = mb_convert_encoding( $szMsg , "utf8" , "sjis-win" ) ;
+	openlog( "MAKITA Uplink", LOG_PID , LOG_LOCAL7 ) ;
+	
+	syslog( LOG_INFO , $szMsg ) ;
+	
+	closelog() ;
+}
+
+?>

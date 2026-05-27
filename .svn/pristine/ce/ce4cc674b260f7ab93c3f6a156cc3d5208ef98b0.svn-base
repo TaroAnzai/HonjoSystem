@@ -1,0 +1,261 @@
+<?php
+/**
+* BLAMS 基本関数郡 電力使用量クラス
+*
+* 電力使用量クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+ini_set( "display_errors" ,1 ) ;
+
+$arPowerCorp	= array(
+	1	=> array( "北海道電力"	, "http://denkiyoho.hepco.co.jp/data/juyo_hokkaidou.csv" ) ,
+	2	=> array( "東北電力"	, "http://setsuden.tohoku-epco.co.jp/common/demand/juyo_tohoku.csv" ) ,
+	3	=> array( "東京電力"	, "http://www.tepco.co.jp/forecast/html/images/juyo-j.csv" ) ,
+	4	=> array( "中部電力"	, "http://denki-yoho.chuden.jp/denki_yoho_content_data/juyo_cepco003.csv" ) ,
+	5	=> array( "北陸電力"	, "http://www.setsuden-rikuden.jp/csv/juyo-rikuden.csv" ) ,
+	6	=> array( "関西電力"	, "http://www.kepco.co.jp/yamasou/juyo1_kansai.csv" ) ,
+	7	=> array( "中国電力"	, "http://www.energia.co.jp/jukyuu/sys/juyo-j.csv" ) ,
+	8	=> array( "四国電力"	, "http://www.yonden.co.jp/denkiyoho/juyo_yonden.csv" ) ,
+	9	=> array( "九州電力"	, "http://www.kyuden.co.jp/power_usages/csv/juyo-hourly-%s.csv" ) ,
+	10	=> array( "沖縄電力"	, "" ) ,
+) ;
+
+define( "NUMBER_PER_POWER"			,	count( $arPowerCorp )	) ;		// 行数／ページ
+
+require_once( 'blams_service.ini.php' ) ;
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Power extends DB_Common
+{
+	var	$arPowerCorp ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "power_data" ;
+		$alias		= "pwr" ;
+		$primarykey	= "powerid" ;
+
+		parent::__construct( DB_SERVICE_NAME , DB_SERVICE_USER , DB_SERVICE_PASSWD , DB_SERVICE_HOST , DB_SERVICE_PORT , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_POWER ;
+
+		$this -> searchkey = array(
+		) ;
+
+		global	$arPowerCorp ;
+		$this -> arPowerCorp		= $arPowerCorp ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+			$this -> arData = $arData ;
+
+			$cnt = count( $arData ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData[ $i ][ $alias . "_log_timestamp"	] = trim( $arData[ $i ][ $alias . "_log_timestamp"	] , "{}" ) ;
+				$arData[ $i ][ $alias . "_log_current"		] = trim( $arData[ $i ][ $alias . "_log_current"	] , "{}" ) ;
+				$arData[ $i ][ $alias . "_log_prev"			] = trim( $arData[ $i ][ $alias . "_log_prev"		] , "{}" ) ;
+				
+				$arLogTime		= explode( "," , $arData[ $i ][ $alias . "_log_timestamp"	] ) ;
+				$arLogCurrent	= explode( "," , $arData[ $i ][ $alias . "_log_current"		] ) ;
+				$arLogPrev		= explode( "," , $arData[ $i ][ $alias . "_log_prev"		] ) ;
+
+				unset( $arData[ $i ][ $alias . "_log_timestamp"	] ) ;
+				unset( $arData[ $i ][ $alias . "_log_current"	] ) ;
+				unset( $arData[ $i ][ $alias . "_log_prev"		] ) ;
+				
+				$arData[ $i ][ $alias . "_log" ] = array() ;
+				$lcnt = count( $arLogTime ) ;
+				for ( $l = 0 ; $l < $lcnt ; $l ++ )
+				{
+					$arData[ $i ][ $alias . "_log" ][ $l ][ $alias . "_log_timestamp"	] = $arLogTime[ $l ] ;
+					$arData[ $i ][ $alias . "_log" ][ $l ][ $alias . "_log_current"		] = $arLogCurrent[ $l ] ;
+					$arData[ $i ][ $alias . "_log" ][ $l ][ $alias . "_log_prev"		] = $arLogPrev[ $l ] ;
+				}
+			}
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		if ( $corpid != -1 )
+			$sql .= sprintf( "AND %s.corpid = '%d' " , $this -> alias , $corpid ) ;
+
+		if ( $date != -1 )
+			$sql .= sprintf( "AND %s.date = '%s' " , $this -> alias , $date ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.corpid " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		return $sql ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$result = "" ;
+		return $result ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam , $groupflg , $groupparentid )
+	{
+		parent::initData( $arParam ) ;
+	}
+
+	//
+	// 新規データ登録
+	//
+	function insertData( &$arParam )
+	{
+		$result = false ;
+	
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+	
+		// LogデータをDBフォーマットに変換する
+		$arLog = $arParam[ $alias . "_log" ] ;
+		$log_timestamp	= "" ;
+		$log_current	= "" ;
+		$log_prev		= "" ;
+		if( is_array( $arLog ) )
+		{
+			foreach( $arLog as $key => $value )
+			{
+				if ( empty( $log_timestamp ) === false )
+					$log_timestamp .= sprintf( ", " ) ;
+				$log_timestamp .= sprintf( "\"%s\" " , $value[ $alias . "_log_timestamp" ] ) ;
+
+				if ( empty( $log_current ) === false )
+					$log_current .= sprintf( ", " ) ;
+				$log_current .= sprintf( "%d " , $value[ $alias . "_log_current" ] ) ;
+
+				if ( empty( $log_prev ) === false )
+					$log_prev .= sprintf( ", " ) ;
+				$log_prev .= sprintf( "%d " , $value[ $alias . "_log_prev" ] ) ;
+			}
+			
+			$arParam[ $alias . "_log_timestamp"	] = $log_timestamp	;
+			$arParam[ $alias . "_log_current"	] = $log_current	;
+			$arParam[ $alias . "_log_prev"		] = $log_prev		;
+		}
+
+		$result = parent::insertData( $arParam ) ;
+		
+		$arParam[ $alias . "_log"	] = $arLog ;
+
+		return $result ;
+	}
+
+	//
+	// 新規データ登録
+	//
+	function updateData( $arParam )
+	{
+		$result = false ;
+	
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+	
+		// LogデータをDBフォーマットに変換する
+		$arLog = $arParam[ $alias . "_log" ] ;
+		$log_timestamp	= "" ;
+		$log_current	= "" ;
+		$log_prev		= "" ;
+		if( is_array( $arLog ) )
+		{
+			foreach( $arLog as $key => $value )
+			{
+				if ( empty( $log_timestamp ) === false )
+					$log_timestamp .= sprintf( ", " ) ;
+				$log_timestamp .= sprintf( "\"%s\" " , $value[ $alias . "_log_timestamp" ] ) ;
+
+				if ( empty( $log_current ) === false )
+					$log_current .= sprintf( ", " ) ;
+				$log_current .= sprintf( "%d " , $value[ $alias . "_log_current" ] ) ;
+
+				if ( empty( $log_prev ) === false )
+					$log_prev .= sprintf( ", " ) ;
+				$log_prev .= sprintf( "%d " , $value[ $alias . "_log_prev" ] ) ;
+			}
+			
+			$arParam[ $alias . "_log_timestamp"	] = $log_timestamp	;
+			$arParam[ $alias . "_log_current"	] = $log_current	;
+			$arParam[ $alias . "_log_prev"		] = $log_prev		;
+		}
+
+		$result = parent::updateData( $arParam ) ;
+		
+		$arParam[ $alias . "_log"	] = $arLog ;
+
+		return $result ;
+	}
+
+}
+?>

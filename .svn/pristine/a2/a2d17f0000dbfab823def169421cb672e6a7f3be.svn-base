@@ -1,0 +1,1185 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	$mode = "" ;
+	$func = "" ;
+
+	// 登録ボタン名によって処理を分ける
+	$arMode = array( "append" , "update" , "delete" , "delete_image" ) ;
+	GetSystemMode( $mode , $func , $arMode ) ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams		= new BLAMS() ;
+	$obM		= new PARTS_Merchandise() ;
+	$obPhoto	= $obM -> obPhoto ;
+
+	$alias 		= $obM -> alias ;
+	$primarykey	= $obM -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// 編集データ保存
+	$arParam = array() ;
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obM -> assignGlobal( $additional , $arParam ) ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obM -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page			;
+
+	// データ取得時のキー初期化
+	$getdatakey = ${ $keyname } ;
+
+	// タイトル取得時のキー初期化
+	$menu = FUNC_MERCHANDISE ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	$error = "" ;
+	switch ( $mode )
+	{
+	// 新規登録モード
+	case "append" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "input" :
+		case "back" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データを初期化
+			if ( $func != "back" )
+			{
+				$obM -> initData( $arParam ) ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		// 新規確認画面
+		case "confrm" :
+
+			// 入力データ検査
+			$error = $obM -> checkData( $mode , $func , $arParam ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+
+				// 機能を「入力」に戻す
+				$func = "input" ;
+
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			}
+			break ;
+
+		// 新規完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 登録処理" , $funcname ) ;
+
+			// 新規登録実施
+			if ( $obM -> insertData( $arParam ) == TRUE )
+			{
+				$error = "正常に登録されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・登録に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+		}
+
+		break ;
+
+	// 更新モード
+	case "update" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "input" :
+		case "back" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 更新入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データをDBから再取得（初期化）
+			if ( $func != "back" )
+			{
+				// データをDBから再取得（初期化）
+				$arParam = GetData( $getdatakey ) ;
+
+				$now_date = new DateTime();
+				$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+				$arParam[ "update_date" ] = $now ;
+			}
+			else if( $func == "back" )
+			{
+				$obPhoto -> deleteWhenBack( $arParam , $obM ) ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			break ;
+
+		// 更新確認画面
+		case "confrm" :
+
+			// 入力データ検査
+			$error = $obM -> checkData( $mode , $func , $arParam ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 更新入力" , $funcname ) ;
+
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+
+				// 機能を「入力」に戻す
+				$func = "input" ;
+
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			break ;
+
+		// 更新完了画面
+		case "done" :
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 更新処理" , $funcname ) ;
+
+			// 更新登録実施
+			if ( $obM -> updateData( $arParam ) == TRUE )
+			{
+				$error = "正常に更新されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・更新に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+
+		// 初期画面、もしくはFunctionの指定がない場合
+		default :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			// データをDBから再取得（初期化）
+			$arParam = GetData( $getdatakey ) ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			break ;
+		}
+		break ;
+
+	// 削除モード
+	case "delete" :
+
+		// 機能分岐
+		switch( $func )
+		{
+
+		// 削除確認画面
+		case "confrm" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 削除確認" , $funcname ) ;
+
+			// 削除確認メッセージ表示
+			if ( $obM -> issetImage( $arParam ) )
+			{
+				$error  = "【重要】\n" ;
+				$error .= "・画像ファイルも同時に破棄されます。\n" ;
+			}
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			break ;
+
+		// 削除完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 削除処理" , $funcname ) ;
+
+			// 削除処理実施
+			if ( $obM -> deleteData( $arParam ) == TRUE )
+			{
+				$error = "正常に削除されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・削除に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+		}
+		break ;
+
+	// 削除モード
+	case "delete_image" :
+
+		// タイトルの表示
+		$subfuncname = sprintf( "%s 画像削除処理" , $funcname ) ;
+
+		$arParam[ "del_column"	] = $func ;
+//		$arParam[ "del_photoid"	] = ${ $func . "_org" } ;
+		$arParam[ "del_photoid"	] = $arParam[ $func . "_org" ] ;
+
+		// 削除実行
+		if ( $obPhoto -> deleteEach( $arParam , $obM ) == TRUE )
+		{
+			$error = "正常に画像を削除しました。\n" ;
+		}
+		else
+		{
+			$error  = "【エラーがあります】\n" ;
+			$error .= "・画像の削除に失敗しました。\n" ;
+		}
+		$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+		break ;
+
+	}
+
+	// 「一覧に戻る」の表示
+	if ( $mode != "append" )
+		$pageback = $blams -> fetchPageback( "list.php" , $arParamFind ) ;
+	else
+		$pageback = "" ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $pageback . $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+	exit ;
+
+// ボタンの表示
+function	FetchButton( $blams , $mode , $func )
+{
+	$arProcess = array(
+		//					ボタン名								MODE							Action
+		"list"				=>	array( "value" => "一覧に戻る"		, "name" => "list"				, "action" => "list.php"	, "target" => "" , "org_action" => "" ) ,
+		"detail"			=>	array( "value" => "詳細に戻る"		, "name" => "update[default]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"append_confrm"		=>	array( "value" => "新規確認"		, "name" => "append[confrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_done"		=>	array( "value" => "登録します"		, "name" => "append[done]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_cancel"		=>	array( "value" => "キャンセル"		, "name" => "append[cancel]"	, "action" => "list.php"	, "target" => "" , "org_action" => "" ) ,
+		"append_back"		=>	array( "value" => "戻る"			, "name" => "append[back]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"update_input"		=>	array( "value" => "更新"			, "name" => "update[input]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_confrm"		=>	array( "value" => "更新確認"		, "name" => "update[confrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_done"		=>	array( "value" => "更新します"		, "name" => "update[done]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_cancel"		=>	array( "value" => "キャンセル"		, "name" => "update[default]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_back"		=>	array( "value" => "戻る"			, "name" => "update[back]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"delete_confrm"		=>	array( "value" => "削除"			, "name" => "delete[confrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"delete_done"		=>	array( "value" => "削除します"		, "name" => "delete[done]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"delete_cancel"		=>	array( "value" => "キャンセル"		, "name" => "update[default]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+	) ;
+
+	$arOperation = array() ;
+	switch( $mode )
+	{
+	case "append" :
+		switch( $func )
+		{
+		case "input" :
+		case "back" :
+			$arOperation = array( "append_confrm" , "append_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "append_done" , "append_back" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "list" ) ;
+			break ;
+		}
+		break ;
+
+	case "update" :
+		switch( $func )
+		{
+		case "input" :
+		case "back" :
+			$arOperation = array( "update_confrm" , "update_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "update_done" , "update_back" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "detail" ) ;
+			break ;
+		default :
+			$arOperation = array( "update_input" , "delete_confrm" ) ;
+			break ;
+		}
+		break ;
+
+	case "delete" :
+		switch( $func )
+		{
+		case "confrm" :
+			$arOperation = array( "delete_done" , "delete_cancel" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "list" ) ;
+			break ;
+		}
+		break ;
+
+	case "delete_image" :
+		$arOperation = array( "detail" ) ;
+		break ;
+	}
+
+	$arButton = array() ;
+	for ( $i = 0 ; $i < count( $arOperation ) ; $i ++ )
+		$arButton[] = $arProcess[ $arOperation[ $i ] ] ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "id"				, "edit_form"		) ;
+	$tmpl -> assign( "button_data"		, $arButton			) ;
+	$data = $tmpl -> fetch( "common/button.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+
+}
+
+// データ取得
+function	GetData( $getdatakey )
+{
+	global $obM ;
+	$arResult = $obM -> getAt( $getdatakey ) ;
+
+	$alias = $obM -> alias ;
+
+	// 発売開始日分解
+	$obSell_date = new DateTime( $arResult[ $alias . "_sell_date" ] );
+	$arResult[ $alias . "_sell_date_y"	] = $obSell_date -> format( "Y" ) ;
+	$arResult[ $alias . "_sell_date_m"	] = $obSell_date -> format( "n" ) ;
+	$arResult[ $alias . "_sell_date_d"	] = $obSell_date -> format( "j" ) ;
+
+	// 掲載開始日分解
+	$obStart_date = new DateTime( $arResult[ $alias . "_start_date" ] );
+	$arResult[ $alias . "_start_date_y"	] = $obStart_date -> format( "Y" ) ;
+	$arResult[ $alias . "_start_date_m"	] = $obStart_date -> format( "n" ) ;
+	$arResult[ $alias . "_start_date_d"	] = $obStart_date -> format( "j" ) ;
+
+	// 掲載終了日分解
+	$obEnd_date = new DateTime( $arResult[ $alias . "_end_date" ] );
+	$arResult[ $alias . "_end_date_y"		] = $obEnd_date -> format( "Y" ) ;
+	$arResult[ $alias . "_end_date_m"		] = $obEnd_date -> format( "n" ) ;
+	$arResult[ $alias . "_end_date_d"		] = $obEnd_date -> format( "j" ) ;
+
+	// 保存済み画像ファイルIDを保存
+	$arResult[ $alias . "_iconid_s_org"		] = $arResult[ $alias . "_iconid_s"		] ;
+	$arResult[ $alias . "_iconid_m_org"		] = $arResult[ $alias . "_iconid_m"		] ;
+	$arResult[ $alias . "_iconid_l_org"		] = $arResult[ $alias . "_iconid_l"		] ;
+	$arResult[ $alias . "_bannerid_s_org"	] = $arResult[ $alias . "_bannerid_s"	] ;
+	$arResult[ $alias . "_bannerid_l_org"	] = $arResult[ $alias . "_bannerid_l"	] ;
+	unset( $arResult[ $alias . "_iconid_s"		] ) ;
+	unset( $arResult[ $alias . "_iconid_m"		] ) ;
+	unset( $arResult[ $alias . "_iconid_l"		] ) ;
+	unset( $arResult[ $alias . "_bannerid_s"	] ) ;
+	unset( $arResult[ $alias . "_bannerid_l"	] ) ;
+
+	// テンポラリ画像ファイルIDを初期化
+	$arResult[ $alias . "_iconid_s_tmp"		] = -1 ;
+	$arResult[ $alias . "_iconid_m_tmp"		] = -1 ;
+	$arResult[ $alias . "_iconid_l_tmp"		] = -1 ;
+	$arResult[ $alias . "_bannerid_s_tmp"	] = -1 ;
+	$arResult[ $alias . "_bannerid_l_tmp"	] = -1 ;
+
+	// おすすめ月を配列に戻す
+	if( $arResult[ $alias . "_monthly_push" ] != "" )
+		$arResult[ $alias . "_monthly_push"	] = $obM -> obCategory -> makeArray( $arResult[ $alias . "_monthly_push" ] ) ;
+
+	unset( $arResult[ "relation_data" ] ) ;
+
+	return $arResult ;
+}
+
+// 詳細表示
+function	FetchDetail( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_adminid , $login_level )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+
+	global $obM ;
+	$alias = $obM -> alias ;
+
+	$szJanCode		= "" ;
+	$szProductName	= "" ;
+	$szCorpName		= "" ;
+	$szCategory		= "" ;
+	$szRelation		= "" ;
+	$obDB = new DB_Common() ;
+	if ( $obM -> isOpen() )
+	{
+		// 商品マスター取得
+		$prod_corpid		= -1 ;
+		$prod_categoryid	= -1 ;
+		$arMM = $obM -> obMaster -> getAt( ${ $alias . "_merchandise_masterid" } ) ;
+		if ( count( $arMM ) )
+		{
+			$prod_corpid		= $arMM[ $obM -> obMaster -> alias . "_corpid"				] ;
+			$szMerchandisecode	= $arMM[ $obM -> obMaster -> alias . "_merchandisecode"		] ;
+			$szJanCode			= $arMM[ $obM -> obMaster -> alias . "_jancode"				] ;
+			$szProductName		= $arMM[ $obM -> obMaster -> alias . "_name"				] ;
+			$prod_categoryid	= $arMM[ $obM -> obMaster -> alias . "_categoryid"			] ;
+			$szCorpName			= $arMM[ $obM -> obMaster -> obCorp -> alias . "_name"		] ;
+			$szCategory			= $arMM[ $obM -> obCategory -> alias . "_name"				] ;
+		}
+
+		// 関連カテゴリー
+		$szRelationid = "" ;
+		$checkcategory = $obM -> obCategory -> makeArray( ${ $alias . "_relationid" } ) ;
+		$cnt = count( $checkcategory ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			if( $checkcategory[ $i ] != -1 )
+			{
+				$szRelationid .= $obM -> obCategory -> getCategoryNameFromIDWithKind( $checkcategory[ $i ] , -1 , DEF_CATEGORY_ITEM ) . "\n" ;
+			}
+		}
+		if( $szRelationid == "" )
+			$szRelationid = "特になし" ;
+	}
+
+	if ( $szMerchandisecode == "" )
+		$szMerchandisecode = "不明" ;
+
+	if ( $szJanCode == "" )
+		$szJanCode = "不明" ;
+
+	if ( $szProductName == "" )
+		$szProductName = "不明" ;
+
+	if ( $szCorpName == "" )
+		$szCorpName = "不明" ;
+
+	if ( $szCategory == "" )
+		$szCategory = "不明" ;
+
+	if ( $szRelation == "" )
+		$szRelation = "不明" ;
+
+	// 限定数
+	if ( ${ $alias . "_number" } != 0 )
+		$szNumber = number_format( ${ $alias . "_number" } ) . "&nbsp;個" ;
+	else
+		$szNumber = "無制限" ;
+
+	// 発売開始日
+	$szSellDay  = "" ;
+	$obSell_date = new DateTime( ${ $alias . "_sell_date" } );
+	if ( ${ $alias . "_sell_date" } == DEF_DATE_MIN )
+		$szSellDay = "指定なし" ;
+	else
+		$szSellDay = $obSell_date -> format( "Y/m/d" ) ;
+
+	// 掲載日
+	$szPublishingDay  = "" ;
+	$obStart_date = new DateTime( ${ $alias . "_start_date" } );
+	$obEnd_date = new DateTime( ${ $alias . "_end_date" } );
+	if ( ${ $alias . "_start_date" } == DEF_DATE_MIN && ${ $alias . "_end_date" } == DEF_DATE_MAX )
+	{
+		$szPublishingDay = "指定なし" ;
+	}
+	else if( ${ $alias . "_start_date_y" } == DEF_DATE_LIMIT_YEAR )
+	{
+		$szPublishingDay  = $obStart_date -> format( "m/d" ) ;
+		$szPublishingDay .= "&nbsp;～&nbsp;" ;
+		if ( ${ $alias . "_end_date" } != DEF_DATE_MAX )
+			$szPublishingDay .= $obEnd_date -> format( "m/d" ) ;
+	
+	}
+	else if ( ${ $alias . "_start_date" } != "" && ${ $alias . "_end_date" } != "" )
+	{
+		if ( ${ $alias . "_start_date" } != DEF_DATE_MIN )
+			$szPublishingDay  = $obStart_date -> format( "Y/m/d" ) ;
+		$szPublishingDay .= "&nbsp;～&nbsp;" ;
+		if ( ${ $alias . "_end_date" } != DEF_DATE_MAX )
+			$szPublishingDay .= $obEnd_date -> format( "Y/m/d" ) ;
+	}
+	else
+	{
+		$szPublishingDay = "不明" ;
+	}
+
+	$szCoolpack = "指定なし" ;
+	// FORMから取得した場合
+	if( is_array( ${ $alias . "_coolpack" } ) )
+	{
+		if ( $coolpack[ 0 ] == 1 )
+		{
+			$szCoolpack = "クール便で配送します。" ;
+		}
+	}
+	// DBから取得した場合
+	else if ( ${ $alias . "_coolpack" } == 1 )
+	{
+		$szCoolpack = "クール便で配送します。" ;
+	}
+
+	// 優先度
+	$szPriority = sprintf( "トップ表示時の優先度：%d、通常表示時の優先度：%d" , ${ $alias . "_top_priority" } , ${ $alias . "_item_priority" } ) ;
+
+	$szMonth = "" ;
+	if( is_array( ${ $alias . "_monthly_push" } ) )
+	{
+		for( $i = 0 ; $i < count( ${ $alias . "_monthly_push" } ) ; $i++ )
+		{
+			$szMonth .= sprintf( "%s月," , ${ $alias . "_monthly_push" }[ $i ] ) ;
+		}
+		$szMonth = substr( $szMonth , 0 , -1 ) ;
+	}
+
+	// 編集状態
+	global $arEditStatus ;
+	$szEditStatus = $arEditStatus[ ${ $alias . "_edit_flg" } ] ;
+	if( $szEditStatus == "" )
+		$szEditStatus = "不明" ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "商品コード" , $szMerchandisecode , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "JANコード" , $szJanCode , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "商品名" , $szProductName , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_NONE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "製造元" , $szCorpName , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "商品カテゴリ" , $szCategory , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "関連商品カテゴリ" , $szRelationid , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NL2BR ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "商品説明（キャッチ）" , ${ $alias . "_info" } , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "商品説明（詳細）" , ${ $alias . "_info_detail" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_NL2BR , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "発売開始日" , $szSellDay , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "掲載日" , $szPublishingDay , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$szPrice = sprintf( "%d&nbsp;円" , ${ $alias . "_price" } ) ;
+	if ( ${ $alias . "_price" } == 0 )
+		$value .= $blams -> fetchTHTD( "税抜価格" , "（内税商品）" , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	else
+		$value .= $blams -> fetchTHTD( "税抜価格" , $szPrice , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$szTax = sprintf( "%d&nbsp;円" , ${ $alias . "_tax" } ) ;
+	$value .= $blams -> fetchTHTD( "税込価格" , $szTax  , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "限定数" , $szNumber , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NONE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+/*
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "クール便" , $szCoolpack , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	// 送料指定
+	$szCarriage = sprintf( "%d&nbsp;円" , ${ $alias . "_carriage" } ) ;
+	if ( ${ $alias . "_carriage" } == -1 )
+		$value .= $blams -> fetchTHTD( "送料"     , "自動計算" , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	else
+		$value .= $blams -> fetchTHTD( "送料"     , $szCarriage , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$arForm[] = $value ;
+*/
+	$value = "" ;
+	$value .= $blams -> fetchDetailImageTHTD( ${ $alias . "_iconid_m_tmp" } , ${ $alias . "_iconid_m_org" } , $alias . "_iconid_m_img" , ${ $alias . "_iconid_m_img" } , DEF_ITEM_ICON_M_WID , DEF_ITEM_ICON_M_HGT , "画像(中)" , $tsize , $vsize3 , "col1" , "left" , "top" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchDetailImageTHTD( ${ $alias . "_iconid_l_tmp" } , ${ $alias . "_iconid_l_org" } , $alias . "_iconid_l_img" , ${ $alias . "_iconid_l_img" } , DEF_ITEM_ICON_L_WID , DEF_ITEM_ICON_L_HGT , "画像(大)" , $tsize , $vsize3 , "col1" , "left" , "top" , "" , true , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchDetailImageTHTD( ${ $alias . "_bannerid_s_tmp" } , ${ $alias . "_bannerid_s_org" } , $alias . "_bannerid_s_img" , ${ $alias . "_bannerid_s_img" } , DEF_ITEM_BANNER_S_WID , DEF_ITEM_BANNER_S_HGT , "バナー(小)" , $tsize , $vsize3 , "col1" , "left" , "top" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchDetailImageTHTD( ${ $alias . "_bannerid_l_tmp" } , ${ $alias . "_bannerid_l_org" } , $alias . "_bannerid_l_img" , ${ $alias . "_bannerid_l_img" } , DEF_ITEM_BANNER_L_WID , DEF_ITEM_BANNER_L_HGT , "バナー(大)" , $tsize , $vsize3 , "col1" , "left" , "top" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "優先度" , $szPriority , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "月単位のおすすめ" , $szMonth , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_WORDWRAP | 80 | BLAMS_FORMAT_NL2BR , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "備考" , ${ $alias . "_notes" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_WORDWRAP | 80 | BLAMS_FORMAT_NL2BR , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "編集状態" , $szEditStatus , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "input_data"		, $arParam			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/confrm.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 入力フォームの表示
+function	FetchInput( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_level )
+{
+	global $obM ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$arProduct_local	= array() ;
+	$arCategory_local	= array() ;
+	$arSelectCategory	= array() ;
+	$arSelectCorp		= array() ;
+	$szCorpName			= "" ;
+	$szCategory			= "" ;
+	if ( $obM -> isOpen() )
+	{
+		$arWhereMM = array() ;
+		$arWhereMM[ "where" ] = "" ;
+
+		// 商品コードで検索
+		if ( $S_MERCHANDISECODE != "" )
+			$arWhereMM[ "merchandisecode" ] = $S_MERCHANDISECODE ;
+
+		// janコードで検索
+		if ( $S_JANCODE != "" )
+			$arWhereMM[ "jancode" ] = $S_JANCODE ;
+
+		// 商品名で検索
+		if ( $S_NAME != "" )
+			$arWhereMM[ "name" ] = $S_NAME ;
+		
+		// 製造元・蔵元IDで検索
+		if ( $S_CORPID != -1 )
+			$arWhereMM[ "corpid" ] = $S_CORPID ;
+
+		// 商品カテゴリで該当商品のみ抽出
+		// update時には自分自身のカテゴリーも入れる
+		// でないと関連カテゴリーでHITした商品から来た場合に
+		// 自分自身が見えない
+		if ( $S_CATEGORYID != -1 )
+		{
+			$arWhereCa = array() ;
+			$arWhereCa[ "categoryid"	] = $S_CATEGORYID ;
+			$arWhereCa[ "kind"			] = DEF_CATEGORY_ITEM ;
+			$arCategory = $obM -> obCategory -> getData( $arWhereCa ) ;
+			$arCategory = $arCategory[ 0 ] ;
+
+			$arTargetCategory = array() ;
+			$category1	= $arCategory[ $obM -> obCategory -> alias . "_category1" ] ;
+			$category2	= $arCategory[ $obM -> obCategory -> alias . "_category2" ] ;
+			$category3	= $arCategory[ $obM -> obCategory -> alias . "_category3" ] ;
+
+			// 該当するカテゴリを全て列挙する
+			$arCurrent = $obM -> obCategory -> createCategoryArray( $category1 , $category2 , $category3 , false , DEF_CATEGORY_ITEM ) ;
+
+			$start = 0 ;
+			if ( $category2 != 0 )
+				$start = 1 ;
+			if ( $category3 != 0 )
+				$start = 2 ;
+			for ( $c = $start ; $c < count( $arCurrent ) ; $c ++ )
+			{
+				$keys = array_keys( $arCurrent[ $c ] ) ;
+				$arTargetCategory[ $keys[ 0 ] ] = $arCurrent[ $c ][ $keys[ 0 ] ] ;
+			}
+	
+			$sql = "" ;
+			$keys = array_keys( $arTargetCategory ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			{
+				if ( $sql != "" )
+					$sql .= "OR " ;
+				$sql .= sprintf( "%s.categoryid = '%d' " , $obM -> obMaster -> alias , $keys[ $i ] ) ;
+			}
+			
+			if( $mode == "update" )
+			{
+				// マスターからカテゴリーIDを取得
+				// 戻ってきた場合の対処
+				if( ${ $obM -> alias . "_merchandiseid" } != -1 )
+				{
+					$arTempMaster = $obM -> getAt( ${ $obM -> alias . "_merchandiseid" } ) ;
+					$temp_categoryid = $arTempMaster[ $obM -> obMaster -> alias . "_categoryid" ] ;
+				}
+
+				$arWhereMM[ "where" ] .= sprintf( "AND ( ( %s ) OR ( %s.categoryid = '%d' ) ) " , $sql , $obM -> obMaster -> alias , $temp_categoryid ) ;
+			}
+			else
+			{
+				$arWhereMM[ "where" ] .= sprintf( "AND ( %s ) " , $sql ) ;
+			}
+
+		}
+
+		// 商品マスター情報テーブル作成
+		$arWhereMM[ "order" ] = sprintf( "%s.name , %s.jancode" , $obM -> obMaster -> alias , $obM -> obMaster -> alias ) ;
+
+		$arMM = $obM -> obMaster -> getData( $arWhereMM ) ;
+		for ( $i = 0 ; $i < count( $arMM ) ; $i ++ )
+		{
+			$prod_merchandise_masterid	= $arMM[ $i ][ $obM -> obMaster -> alias . "_merchandise_masterid"	] ;
+			$prod_merchandisecode		= $arMM[ $i ][ $obM -> obMaster -> alias . "_merchandisecode"		] ;
+			$prod_jancode				= $arMM[ $i ][ $obM -> obMaster -> alias . "_jancode"				] ;
+			$prod_name					= $arMM[ $i ][ $obM -> obMaster -> alias . "_name"					] ;
+			$select_categoryid			= $arMM[ $i ][ $obM -> obMaster -> alias . "_categoryid"			] ;
+			$select_categoryname		= $arMM[ $i ][ $obM -> obCategory -> alias . "_name"				] ;
+			$select_corpid				= $arMM[ $i ][ $obM -> obMaster -> alias . "_corpid"				] ;
+			$select_corpname			= $arMM[ $i ][ $obM -> obMaster -> obCorp -> alias . "_name"		] ;
+			$prod_name = sprintf( "%s ： %s" , $prod_merchandisecode , $prod_name ) ;
+			$arProduct_local[ $prod_merchandise_masterid ] = $prod_name ;
+			$arSelectCategory[ $prod_merchandise_masterid ] = $select_categoryname ;
+			$arSelectCorp[ $prod_merchandise_masterid ] = $select_corpname ;
+		}
+
+		// カテゴリテーブル作成
+		$arCategory = array() ;
+		$arCategory_local = array() ;
+		$arCategory_local = $obM -> obCategory -> createCategoryArray( 0 , 0 , 0 , false , DEF_CATEGORY_ITEM ) ;
+	
+		for( $i = 0 ; $i < count( $arCategory_local ) ; $i ++ )
+		{
+			$key = key( $arCategory_local[ $i ] ) ;
+			$value = $arCategory_local[ $i ][ $key ] ;
+			$arCategory[ $key ] = $value ;
+		}
+	}
+
+	// 編集状態
+	global $arEditStatus ;
+	unset( $arEditStatus[ DEF_EDITSTATUS_DELETED ] ) ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$isize	= $vsize - 16 ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+	$isize3	= $vsize3 - 16 ;
+
+	$alias = $obM -> alias ;
+
+	$arForm = array() ;
+
+	$function = "SetCategory(this.value);SetCorp(this.value);" ;
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $alias . "_merchandise_masterid" , ${ $alias . "_merchandise_masterid" } , $arProduct_local , $isize3 ,  "選択してください。" , FALSE , $function ) ;
+	$value .= $blams -> fetchTHTD( "商品情報 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( "dummy_corp" , ${ $alias . "_merchandise_masterid" } , $arSelectCorp , $isize ,  "---" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "製造元" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$form   = $blams -> fetchSelectbox( "dummy_category" , ${ $alias . "_merchandise_masterid" } , $arSelectCategory , $isize ,  "---" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "商品カテゴリ" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = "" ;
+	$arRelation = $obM -> obCategory -> makeArray( ${ $alias . "_relationid" } ) ;
+	for ( $i = 0 ; $i < 4 ; $i ++ )
+	{
+		if( empty( $arRelation[ $i ] ) == true || $arRelation[ $i ] == "" )
+			$tempid = -1 ;
+		else
+			$tempid = $arRelation[ $i ] ;
+
+		$form  .= $blams -> fetchSelectbox( $alias . "_checkcategory[]" , $tempid , $arCategory , $isize ,  "選択してください。" , FALSE , "" ) ;
+	}
+	$value .= $blams -> fetchTHTD( "関連商品カテゴリ" , $form , $tsize , $vsize , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_info" , ${ $alias . "_info" } , $isize3  , MAX_INFO_CATCH , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "商品説明（キャッチ） ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( $alias . "_info_detail" , ${ $alias . "_info_detail" } , $isize3 ) ;
+	$value .= $blams -> fetchTHTD( "商品説明（詳細）" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_NOTAB , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	if( ${ $alias . "_sell_date" } != DEF_DATE_MIN )
+	{
+		$form   = $blams -> fetchInputbox( $alias . "_sell_date_y" , ${ $alias . "_sell_date_y" } , 48  , 4 , IME_OFF ) ;
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_sell_date_m" , ${ $alias . "_sell_date_m" } , 32  , 2 , IME_OFF ) ;
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_sell_date_d" , ${ $alias . "_sell_date_d" } , 32  , 2 , IME_OFF ) ;
+	}
+	else
+	{
+		$form   = $blams -> fetchInputbox( $alias . "_sell_date_y" , "" , 48  , 4 , IME_OFF ) ;
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_sell_date_m" , "" , 32  , 2 , IME_OFF ) ;
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_sell_date_d" , "" , 32  , 2 , IME_OFF ) ;
+	}
+	$value .= $blams -> fetchTHTD( "発売開始日" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+
+	if( ${ $alias . "_start_date" } != DEF_DATE_MIN )
+	{
+		if( ${ $alias . "_start_date_y" } == DEF_DATE_LIMIT_YEAR )
+			$form   = $blams -> fetchInputbox( $alias . "_start_date_y" , "" , 32  , 4 , IME_OFF ) ;
+		else
+			$form   = $blams -> fetchInputbox( $alias . "_start_date_y" , ${ $alias . "_start_date_y" } , 32  , 4 , IME_OFF ) ;
+
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_start_date_m" , ${ $alias . "_start_date_m" } , 16  , 2 , IME_OFF ) ;
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_start_date_d" , ${ $alias . "_start_date_d" } , 16  , 2 , IME_OFF ) ;
+	}
+	else
+	{
+		$form   = $blams -> fetchInputbox( $alias . "_start_date_y" , "" , 32  , 4 , IME_OFF ) ;
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_start_date_m" , "" , 16  , 2 , IME_OFF ) ;
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_start_date_d" , "" , 16  , 2 , IME_OFF ) ;
+	}
+
+	$form  .= " ～ " ;
+
+	if( ${ $alias . "_end_date" } != DEF_DATE_MAX )
+	{
+		if( ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR || ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR + 1 )
+			$form  .= $blams -> fetchInputbox( $alias . "_end_date_y" , "" , 32  , 4 , IME_OFF ) ;
+		else
+			$form  .= $blams -> fetchInputbox( $alias . "_end_date_y" , ${ $alias . "_end_date_y" } , 32  , 4 , IME_OFF ) ;
+
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_end_date_m" , ${ $alias . "_end_date_m" } , 16  , 2 , IME_OFF ) ;
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_end_date_d" , ${ $alias . "_end_date_d" } , 16  , 2 , IME_OFF ) ;
+	}
+	else
+	{
+		$form  .= $blams -> fetchInputbox( $alias . "_end_date_y" , "" , 32  , 4 , IME_OFF ) ;
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_end_date_m" , "" , 16  , 2 , IME_OFF ) ;
+		$form  .= "/" ;
+		$form  .= $blams -> fetchInputbox( $alias . "_end_date_d" , "" , 16  , 2 , IME_OFF ) ;
+	}
+
+	$value .= $blams -> fetchTHTD( "掲載日" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_price" , ${ $alias . "_price" } , $vsize - 64 , MAX_PRICE , IME_OFF ) ;
+	$form  .= "円<br />※内税商品は 0 を入力" ;
+	$value .= $blams -> fetchTHTD( "税抜価格" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_tax" , ${ $alias . "_tax" } , $vsize - 64 , MAX_PRICE , IME_OFF ) ;
+	$form  .= "円" ;
+	$value .= $blams -> fetchTHTD( "税込価格" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	global $arCoolpack ;
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_number" , ${ $alias . "_number" } , 96 , MAX_UNIT , IME_OFF ) ;
+	$form  .= "個 (0=無制限)" ;
+	$value .= $blams -> fetchTHTD( "限定数" , $form , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NONE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+/*
+	$value = "" ;
+	$form   = $blams -> fetchCheckbox( $alias . "_coolpack" , ${ $alias . "_coolpack" } , $arCoolpack , $size ) ;
+	$value .= $blams -> fetchTHTD( "クール便指定" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_carriage" , ${ $alias . "_carriage" } , 96 , MAX_PRICE , IME_OFF ) ;
+	$form  .= "円 (-1=自動計算)" ;
+	$value .= $blams -> fetchTHTD( "送料" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+*/
+
+	$value = "" ;
+	$value .= $blams -> fetchInputImageTHTD( ${ $alias . "_iconid_m_tmp" } , ${ $alias . "_iconid_m_org" } , $alias . "_iconid_m" , ${ $alias . "_iconid_m_img" } , DEF_ITEM_ICON_M_WID , DEF_ITEM_ICON_M_HGT , "画像(中)" , $tsize , $isize3 , "col1" , "left" , "top" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchInputImageTHTD( ${ $alias . "_iconid_l_tmp" } , ${ $alias . "_iconid_l_org" } , $alias . "_iconid_l" , ${ $alias . "_iconid_l_img" } , DEF_ITEM_ICON_L_WID , DEF_ITEM_ICON_L_HGT , "画像(大)" , $tsize , $isize3 , "col1" , "left" , "top" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchInputImageTHTD( ${ $alias . "_bannerid_s_tmp" } , ${ $alias . "_bannerid_s_org" } , $alias . "_bannerid_s" , ${ $alias . "_bannerid_s_img" } , DEF_ITEM_BANNER_S_WID , DEF_ITEM_BANNER_S_HGT , "バナー(小)" , $tsize , $isize3 , "col1" , "left" , "top" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchInputImageTHTD( ${ $alias . "_bannerid_l_tmp" } , ${ $alias . "_bannerid_l_org" } , $alias . "_bannerid_l" , ${ $alias . "_bannerid_l_img" } , DEF_ITEM_BANNER_L_WID , DEF_ITEM_BANNER_L_HGT , "バナー(大)" , $tsize , $isize3 , "col1" , "left" , "top" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	global $arPriority ;
+	$value = "" ;
+	$form   = "低&nbsp;" ;
+	$form  .= $blams -> fetchRadio( $alias . "_top_priority" , ${ $alias . "_top_priority" } , $arPriority , "" ) ;
+	$form  .= "&nbsp;最高" ;
+	$value .= $blams -> fetchTHTD( "トップ表示時の優先度 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$form   = "低&nbsp;" ;
+	$form  .= $blams -> fetchRadio( $alias . "_item_priority" , ${ $alias . "_item_priority" } , $arPriority , "" ) ;
+	$form  .= "&nbsp;最高" ;
+	$value .= $blams -> fetchTHTD( "通常表示時の優先度 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$arMonthData = array() ;
+	for( $i = 1 ; $i <= 12 ; $i++ )
+		$arMonthData[ $i ] = $i."月" ;
+
+	$value = "" ;
+
+	$form   = $blams -> fetchCheckbox( $alias . "_monthly_push" , $arMonthData , ${ $alias . "_monthly_push" } , $isize3 ) ;
+	$value .= $blams -> fetchTHTD( "月単位のおすすめ" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( $alias . "_notes" , ${ $alias . "_notes" } , $isize3 ) ;
+	$value .= $blams -> fetchTHTD( "備考" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_NOTAB , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $alias . "_edit_flg" , ${ $alias . "_edit_flg" } , $arEditStatus , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "編集状態 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func ) ;
+
+	$arParamFind[ $alias . "_create_date" ] = ${ $alias . "_create_date" } ;
+	$arParamFind[ $alias . "_update_date" ] = ${ $alias . "_update_date" } ;
+
+	$script  = "" ;
+	$script .= "<script type=\"text/javascript\" src=\"/admin/js/merchandise.js\"></script>\n" ;
+	$script .= sprintf( "<script type=\"text/javascript\">SetCategory('%s');SetCorp('%s');</script>" , ${ $alias . "_merchandise_masterid" } , ${ $alias . "_merchandise_masterid" } ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, $alias . "_merchandiseid"			) ;
+	$tmpl -> assign( "idvalue"			, ${ $alias . "_merchandiseid" }	) ;
+	$tmpl -> assign( "add_script"		, $script			) ;
+	$data = $tmpl -> fetch( "common/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 詳細表示
+function	FetchDone( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam )
+{
+	global $obM ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$alias		= $obM -> alias ;
+
+	$button = FetchButton( $blams , $mode , $func ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, $alias . "_merchandiseid"			) ;
+	$tmpl -> assign( "idvalue"			, ${ $alias . "_merchandiseid" }	) ;
+	$data = $tmpl -> fetch( "common/done.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+
+// データの削除
+function	DeleteData( $arParam )
+{
+	$result = FALSE ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		// 商品名取得
+		$szProductName = "" ;
+		$sql = sprintf( "SELECT * FROM merchandise_master_data WHERE status = 1 AND merchandise_masterid = %d " , $merchandise_masterid ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+				$szProductName = $obDB -> getValue( $record , "name" ) ;
+			$obDB -> closeRecord( $record ) ;
+		}
+
+		// データ更新
+		if ( $szProductName != "" )
+		{
+			$sql  = sprintf( "UPDATE merchandise_data SET " ) ;
+			$sql .= sprintf( "status = -1 , " ) ;
+			$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+			$sql .= sprintf( "WHERE merchandiseid = %d " , $merchandiseid ) ;
+			$record = $obDB -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				$obDB -> closeRecord( $record ) ;
+
+				// 必要ならば、トピックスを更新する
+				$subject = sprintf( "【更新】%sが更新されました。" , $szProductName ) ;
+				InsertTopics( $conn , $subject , TOPICS_TYPE_MERCHANDISE , $start_date , DEF_EDITSTATUS_DELETED , $merchandiseid ) ;
+
+				// 既存画像ファイルがあれば削除する
+				if ( $iconid_s_org != -1 )
+					DeleteImageData( $conn , $iconid_s_org ) ;
+				if ( $iconid_m_org != -1 )
+					DeleteImageData( $conn , $iconid_m_org ) ;
+				if ( $iconid_l_org != -1 )
+					DeleteImageData( $conn , $iconid_l_org ) ;
+				if ( $bannerid_s_org != -1 )
+					DeleteImageData( $conn , $bannerid_s_org ) ;
+				if ( $bannerid_l_org != -1 )
+					DeleteImageData( $conn , $bannerid_l_org ) ;
+/*
+				// メールマガジン情報から当該商品IDを削除する
+				InsertAutoMailMag( $conn , $merchandiseid , $start_date , 1 ) ;
+*/
+				$result = TRUE ;
+			}
+		}
+		
+	}
+
+	return $result ;
+}
+
+?>

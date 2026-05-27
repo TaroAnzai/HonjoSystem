@@ -1,0 +1,391 @@
+<?php
+//ini_set( "display_errors" ,1 ) ;
+
+// カートを見るの表示
+function	fetchCartLookup( $func )
+{
+	$data = "" ;
+	
+	$obCart = new PARTS_Cart() ;
+	
+	if ( $obCart -> isOpen() == true )
+	{
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "func"			, $func ) ;
+		$data = $tmpl -> fetch( "cart/cart_lookup.tmpl" ) ;
+		unset( $tmpl ) ;
+	}
+	return $data ;
+}
+
+// カートの表示
+function	fetchCart( $func , $type = "" )
+{
+	$file = "cart/cart_index.tmpl" ;
+	if ( $type == "menu" )
+		$file = "cart/cart_menu.tmpl" ;
+
+	$memberid = -1 ;
+	$level = -1 ;
+
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	$max = 0 ;
+	$obMemberCorp = new PARTS_Member( $obSession -> conn ) ;
+	$arMemberCorp = $obMemberCorp -> getAt( $memberid ) ;
+	if ( count( $arMemberCorp ) > 0 && $memberid != -1 )
+	{
+		$ma = $obMemberCorp -> alias ;
+		$level = $arMemberCorp[ $ma . "_level" ] ;
+		$max = $obMemberCorp -> arDownloadLimit[ $level ] ;
+	}
+
+	$data = "" ;
+
+	$current = 0 ;
+	$obCart = new PARTS_Cart( $obSession -> conn ) ;
+	
+	if ( $obCart -> isOpen() == true )
+	{
+		$cartid = $obCart -> getID( $sessionid , $memberid , DF_BILLSTATUS_BUYING ) ;
+
+		$sdate = new DateTime( date( "Y-m-01 00:00:00" ) ) ;
+		$edate = new DateTime( $sdate -> format( "Y-m-t 23:59:59" ) ) ;
+
+		$current	= $obCart -> obCartItem -> getDlCount( $memberid , $sdate -> format( "Y-m-d" ) , $edate -> format( "Y-m-d" ) ) ;
+
+		$arCart[ "cartitem_data" ] = array() ;
+		$arCartOrder[ "cart_order" ] = array() ;;
+		if ( $cartid != -1 )
+		{
+			$arCrtData	= $obCart -> arData ;
+
+			if ( count( $arCrtData ) > 0 )
+			{
+				$arCart = $arCrtData[ 0 ] ;
+				$arCartOrder = $arCart[ "cart_order" ] ;
+			}
+		}
+
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "func"			, $func ) ;
+		$tmpl -> assign( "max"			, $max ) ;
+		$tmpl -> assign( "memberid"		, $memberid ) ;
+		$tmpl -> assign( "current"		, $current ) ;
+		$tmpl -> assign( "cart_data"	, $arCart ) ;
+		$tmpl -> assign( "cart_order"	, $arCartOrder ) ;
+		$data = $tmpl -> fetch( $file ) ;
+		unset( $tmpl ) ;
+	}
+	
+	return $data ;
+}
+
+// カート管理情報ID取得（請求状態が購入中のみ）
+// sessionid      .. セッションID（≠ -1）
+// memberid       .. 会員ID（-1：非会員 その他：会員ID）
+function	GetCartID( $conn , $sessionid , $memberid )
+{
+	$cartid = -1 ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		// カート管理情報IDを検索
+		$sql  = sprintf( "SELECT * FROM cart_data WHERE status = 1 " ) ;
+		$sql .= sprintf( "AND billing_status = %d " , DF_BILLSTATUS_BUYING ) ;
+		if ( $memberid != -1 )
+		{
+			// 会員なら会員IDで検索する
+			$sql .= sprintf( "AND member_flg = 1 " ) ;
+			$sql .= sprintf( "AND memberid = %d " , $memberid ) ;
+		}
+		else
+		{
+			// 非会員ならセッションIDで検索する
+			$sql .= sprintf( "AND member_flg = 0 " ) ;
+			$sql .= sprintf( "AND sessionid = '%s' " , $sessionid ) ;
+		}
+
+		$sql .= sprintf( "ORDER BY update_date DESC " ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+				$cartid = $obDB -> getValue( $record , "cartid" ) ;
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+
+	return $cartid ;
+}
+
+// カート内のデータ数を取得する
+function	GetCartItemCount( $arParam , $conn = -1 )
+{
+	$arParamList = GetFieldsOnTable( "cart_data" , $conn ) ;
+	$arParamList[] = "merchandiseid" ;
+	$arParamList[] = "where_item" ;
+	for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+	{
+		if ( isset( $arParam[ $arParamList[ $i ] ] ) != TRUE )
+			$arParam[ $arParamList[ $i ] ] = -1 ;
+	}
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$cnt = 0 ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT count(*) " ) ;
+		$sql .= sprintf( "FROM cartitem_data ci " ) ;
+		$sql .= sprintf( "WHERE ci.status = 1 " ) ;
+		$sql .= sprintf( "AND ci.cartid = %d " , $cartid ) ;
+		if ( $merchandiseid != -1 )
+			$sql .= sprintf( "AND ci.merchandiseid = %d " , $merchandiseid ) ;
+
+		if ( $where_item != -1 )
+			$sql .= sprintf( "%s " , $where_item ) ;
+
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+				$cnt = $obDB -> getValue( $record , "count" ) ;
+			
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+	
+	return $cnt ;
+}
+
+// カート内のデータ数を取得する
+function	GetCartCount( $arParam , $conn = -1 )
+{
+	$arParamList = GetFieldsOnTable( "cart_data" , $conn ) ;
+	$arParamList[] = "mb_tel" ;
+	$arParamList[] = "where_cart" ;
+	for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+	{
+		if ( isset( $arParam[ $arParamList[ $i ] ] ) != TRUE )
+			$arParam[ $arParamList[ $i ] ] = -1 ;
+	}
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$cnt = 0 ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT count(*) " ) ;
+		$sql .= sprintf( "FROM cart_data ct " ) ;
+		$sql .= sprintf( "LEFT JOIN member_data             mb ON ct.memberid = mb.memberid " ) ;
+		$sql .= sprintf( "WHERE ct.status = 1 " ) ;
+		
+		if ( $cartid != -1 )
+			$sql .= sprintf( "AND ct.cartid = %d " , $cartid ) ;
+		else
+			$limit = sprintf( "LIMIT %d OFFSET %d " , NUMBER_PER_CART , ( $page * NUMBER_PER_CART ) ) ;
+
+		if ( $sessionid != -1 )
+			$sql .= sprintf( "AND ct.sessionid = %d " , $sessionid ) ;
+
+		if ( $memberid != -1 )
+			$sql .= sprintf( "AND ct.memberid = %d " , $memberid ) ;
+
+		if ( $shipped_status == -1 )
+			$sql .= sprintf( "AND ct.shipped_status = %d " , $shipped_status ) ;
+
+		if ( $sessionid != -1 )
+			$sql .= sprintf( "AND ct.sessionid = %d " , $sessionid ) ;
+
+		if ( $memberid != -1 )
+			$sql .= sprintf( "AND ct.memberid = %d " , $memberid ) ;
+
+		if ( $shipped_status != -1 )
+			$sql .= sprintf( "AND ct.shipped_status = %d " , $shipped_status ) ;
+
+		if ( $sheetno != -1 )
+			$sql .= sprintf( "AND ct.sheetno = '%s' " , $sheetno ) ;
+
+		if ( $mb_tel != -1 )
+			$sql .= sprintf( "AND ( mb.tel_home = '%s' OR mb.tel_port = '%s' ) " , $mb_tel , $mb_tel ) ;
+
+		if ( $where_cart != -1 )
+			$sql .= sprintf( "%s " , $where_cart ) ;
+
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+				$cnt = $obDB -> getValue( $record , "count" ) ;
+			
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+	
+	return $cnt ;
+}
+
+// カート情報のSQL文を作成する
+function	MakeSqlCart( $arParam , &$link )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$where = "" ;
+
+	// 検索条件初期化
+	$where = "" ;
+
+	$now = date( "Y-m-d H:i:s" ) ;
+
+	if( $S_ID != -1 )
+	{
+		$where .= sprintf( "AND ci.merchandiseid = %d " , $S_ID ) ;
+		$link .= sprintf( "/I%s" , $S_ID ) ;
+	}
+
+	return $where ;
+}
+
+// カート商品情報変更
+// action：
+//   remove     .. cartitemidで指定した商品を、カートから取り消す
+//   remove_all .. カート内の全商品をクリア（カーとを空にする）
+//   chgwrap    .. cartitemidで指定した商品の包装有無を反転する
+function	UpdateOrder( $conn , $action , $cartitemid )
+{
+	$error = "" ;
+
+	// ログイン情報の取得
+	$memberid	= -1 ;
+
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		// カート管理情報を検索
+		$cartid = GetCartID( $conn , $sessionid , $memberid ) ;
+
+		if ( $cartid != -1 )
+		{
+			$result = FALSE ;
+
+			// カートが既に存在していれば、カート商品情報変更
+			if ( $action == "remove" || $action == "remove_all" )
+			{
+				// 指定カート内商品を削除する
+				$sql  = sprintf( "UPDATE cartitem_data SET " ) ;
+				$sql .= sprintf( "status = -1 , " ) ;
+				$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+				$sql .= sprintf( "WHERE cartid = %d " , $cartid ) ;
+
+				if ( $action == "remove" )
+					$sql .= sprintf( "AND merchandiseid = %d " , $cartitemid ) ;
+
+				$record = $obDB -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					$obDB -> closeRecord( $record ) ;
+					$result = TRUE ;
+				}
+			}
+			else
+			if ( $action == "chgwrap" || $action == "chgdecor" || $action == "chgpackage" || $action == "chgcoolpack" )
+			{
+				// 指定カート内商品の包装・のしあり／なしを反転する
+				$sql  = sprintf( "SELECT wrapping , decoration , package , coolpack FROM  cartitem_data WHERE status = 1 " ) ;
+				$sql .= sprintf( "AND cartid = %d " , $cartid ) ;
+				$sql .= sprintf( "AND merchandiseid = %d " , $cartitemid ) ;
+				$record = $obDB -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					if ( $obDB -> getDataCount( $record ) > 0 )
+					{
+						$wrapping	= $obDB -> getValue( $record , "wrapping"	) ;
+						$decoration	= $obDB -> getValue( $record , "decoration"	) ;
+						$package	= $obDB -> getValue( $record , "package"		) ;
+						$coolpack	= $obDB -> getValue( $record , "coolpack"	) ;
+
+						$obDB -> closeRecord( $record ) ;
+
+						if ( $action == "chgwrap" )
+						{
+							// 包装しない場合は、のしも付けられない
+							$wrapping = ( $wrapping != 0 ? 0 : 1 ) ;
+							if ( $wrapping == 0 && $decoration == 1 )
+							{
+								$error .= sprintf( "・包装しない場合は、のしもお付けできません。<br>" ) ;
+								$error .= sprintf( "&emsp;（のしを付けるのチェックを解除しました）<br>" ) ;
+								$decoration = 0 ;
+							}
+						}
+						else if ( $action == "chgdecor" )
+						{
+							// 包装していない場合は、のしは付けられない
+							$decoration = ( $decoration != 0 ? 0 : 1 ) ;
+							if ( $decoration == 1 && $wrapping == 0 )
+							{
+								$error .= sprintf( "・のしをお付けする場合は、包装が必要となります。<br>" ) ;
+								$error .= sprintf( "&emsp;（包装するのチェックを設定しました）<br>" ) ;
+								$wrapping = 1 ;
+							}
+						}
+						else if ( $action == "chgpackage" )
+						{
+							$package = ( $package != 0 ? 0 : 1 ) ;
+						}
+						else if ( $action == "chgcoolpack" )
+						{
+							$coolpack = ( $coolpack != 0 ? 0 : 1 ) ;
+						}
+						
+						$sql  = sprintf( "UPDATE cartitem_data SET " ) ;
+						$sql .= sprintf( "wrapping = %d , " , $wrapping ) ;
+						$sql .= sprintf( "decoration = %d , " , $decoration ) ;
+						$sql .= sprintf( "package = %d , " , $package ) ;
+						$sql .= sprintf( "coolpack = %d , " , $coolpack ) ;
+						$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+						$sql .= sprintf( "WHERE cartid = %d " , $cartid ) ;
+						$sql .= sprintf( "AND merchandiseid = %d " , $cartitemid ) ;
+						$record = $obDB -> executeSQL( $sql ) ;
+						if ( $record )
+						{
+							$obDB -> closeRecord( $record ) ;
+							$result = TRUE ;
+						}
+					}
+				}
+			}
+
+			if ( $result != TRUE )
+				$cartid = -1 ;
+		}
+		else
+		{
+			// カートが存在していなかったら、エラー終了
+		}
+	}
+
+	return $error ;
+}
+
+?>

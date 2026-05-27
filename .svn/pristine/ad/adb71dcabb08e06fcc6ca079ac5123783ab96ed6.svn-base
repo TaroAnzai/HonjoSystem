@@ -1,0 +1,27 @@
+@import "/admin/css/common.css" ;
+@import "/admin/css/figure.css" ;
+
+body
+{
+	font-size: 83% ;
+	color: #333 ;
+	text-align : center ;
+	background: #fff ;
+}
+
+#contents h3
+{
+	height : 20px ;
+	line-height : 20px ;
+	color : #333 ;
+	font-size : 1.0em ;
+	font-weight : normal ;
+	text-align : left ;
+	text-shadow : #999 1px 1px 1px ;
+	vertical-align : middle ;
+	background : url("/admin/img/label.gif") no-repeat left top ;
+	padding-left : 4px ;
+	margin : auto ;
+	margin-bottom : 8px ;
+	border-bottom : 3px double #009 ;
+}

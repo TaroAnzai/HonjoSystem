@@ -1,0 +1,19 @@
+// カテゴリーをセットする
+function	SetCategory( id )
+{
+	var objForm = document.getElementById( "edit_form" ) ;
+	var obCategory = objForm.dummy_category ;
+
+	obCategory.value = id ;
+	obCategory.disabled = true ;
+}
+
+// 製造元
+function	SetCorp( id )
+{
+	var objForm = document.getElementById( "edit_form" ) ;
+	var obCorp = objForm.dummy_corp ;
+
+	obCorp.value = id ;
+	obCorp.disabled = true ;
+}

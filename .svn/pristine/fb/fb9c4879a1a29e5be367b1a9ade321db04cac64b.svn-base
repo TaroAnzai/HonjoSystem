@@ -1,0 +1,86 @@
+/*
+-------------------------------------------------------------------------------
+	集計リスト figure
+-------------------------------------------------------------------------------
+*/
+div.figure
+{
+	text-align : left ;
+	font-size : 0.9em ;
+	padding : 0px 8px 0px ;
+	margin-bottom : 16px ;
+}
+
+div.figure th.col1	{	color : #000 ;	background-color : #aaa ;	}
+div.figure th.col2	{	color : #000 ;	background-color : #999 ;	}
+div.figure td.col1	{	color : #000 ;	background-color : #eee ;	}
+div.figure td.col2	{	color : #000 ;	background-color : #ddd ;	}
+div.figure .total	{	color : #fff ;	background-color : #666 ;		}
+div.figure .border	{	border : #333 solid 1px ;	}
+
+div.figure table
+{
+	margin-top : 4px ;
+	margin-bottom : 8px ;
+}
+
+div.figure th
+{
+	vertical-align : middle ;
+	background-color : #aaa ;
+	color : #333 ;
+	border : #333 solid 1px ;
+}
+
+div.figure th	div ,
+div.figure td	div ,
+div.figure th	p ,
+div.figure td	p
+{
+	white-space : normal ;
+	padding : 4px 4px 0px ;
+}
+
+div.figure:after
+{
+	content : "." ;
+	display : block ;
+	height : 0px ;
+	clear : both ;
+	visibility : hidden ;
+}
+
+div.figure dl ,
+div.figure dd ,
+div.figure ol ,
+div.figure ul
+{
+	margin: 0 0 0 2em ;
+	padding: 0 ; 
+	padding : 2px 4px 4px 4px ;
+}
+
+div.figure li
+{
+	padding-bottom : 4px ;
+}
+
+div.figure ol li ol
+{
+	list-style-type : upper-roman ;
+}
+
+/*
+-------------------------------------------------------------------------------
+	Note
+-------------------------------------------------------------------------------
+*/
+p.note
+{
+	color : #cc6633 ;
+	background : #ffffee ;
+	border : 1px dashed #999999 ;
+	text-align : left ;
+	padding : 4px ;
+	margin : 0px 16px 8px ;
+}

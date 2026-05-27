@@ -1,0 +1,117 @@
+<?php
+	require_once( "../../../lib/system.php") ;
+
+	ChkLogin() ;
+
+	// セッションからログイン者情報を取得する
+	$arr = GetAdmin( $_SESSION[ 'S_ID' ] ) ;
+	$login_adminid	= $arr[ "adminid" ] ;
+	$login_level	= $arr[ "level" ] ;
+
+	// 検索用パラメータの保存
+	$arParam = array() ;
+	$arParam[ "S_LOGINID"			] = $S_LOGINID			;
+	$arParam[ "S_FIRSTNAME"			] = $S_FIRSTNAME		;
+	$arParam[ "S_LASTNAME"			] = $S_LASTNAME			;
+	$arParam[ "S_STATE"				] = $S_STATE			;
+	$arParam[ "S_TEL1"				] = $S_TEL1				;
+	$arParam[ "S_TEL2"				] = $S_TEL2				;
+	$arParam[ "S_TEL3"				] = $S_TEL3				;
+	$arParam[ "S_EMAIL"				] = $S_EMAIL			;
+	$arParam[ "S_CREATE_DATE_S_y"	] = $S_CREATE_DATE_S_y	;
+	$arParam[ "S_CREATE_DATE_S_m"	] = $S_CREATE_DATE_S_m	;
+	$arParam[ "S_CREATE_DATE_S_d"	] = $S_CREATE_DATE_S_d	;
+	$arParam[ "S_CREATE_DATE_E_y"	] = $S_CREATE_DATE_E_y	;
+	$arParam[ "S_CREATE_DATE_E_m"	] = $S_CREATE_DATE_E_m	;
+	$arParam[ "S_CREATE_DATE_E_d"	] = $S_CREATE_DATE_E_d	;
+	$arParam[ "S_BILLING_COUNT"		] = $S_BILLING_COUNT	;
+	$arParam[ "page"				] = $page				;
+
+	$blams		= new BLAMS() ;
+	$obMember	= new PARTS_Member() ;
+
+	$menu = FUNC_MEMBER ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+
+	if ( $S_FINISH != "" )
+	{
+		$buf = "" ;
+		$fp = fopen( $S_FINISH , "r" ) ;
+		if ( $fp )
+		{
+			while ( !feof( $fp ) )
+			{
+				$buf .= fread( $fp , 8192 ) ;
+			}
+			fclose( $fp ) ;
+			
+			$filename = sprintf( $funcname . "一覧-%s.xls" , date( "Ymd" , time() ) ) ;
+
+			$len = strlen( $buf ) ;
+			header( "Content-Type: application/vnd.ms-excel" ) ;
+			header( "Content-Length: " + $len ) ;
+			header( sprintf( "Content-Disposition: attachment; filename=\"%s\"" , $filename ) ) ;
+
+			print $buf ;
+			
+			unlink( $S_FINISH ) ;
+		}
+	}
+	else
+	{
+		$cmd  = "/usr/local/bin/php " ;
+		$cmd .= "./csvout_background.php " ;
+		$cmd .= sprintf( "'%s' " , SITE_INCLUDE_DIR ) ;
+		
+		$tmp = $obMember -> alias . "_" . date( Y.m.d ) ;
+		$tmp = tempnam( "/tmp" , $tmp . '_' ) ;
+		$file = $tmp . ".xls" ;
+
+		$cmd .= sprintf( "'%s' " , $S_LOGINID			) ;
+		$cmd .= sprintf( "'%s' " , $S_FIRSTNAME			) ;
+		$cmd .= sprintf( "'%s' " , $S_LASTNAME			) ;
+		$cmd .= sprintf( "'%s' " , $S_STATE				) ;
+		$cmd .= sprintf( "'%s' " , $S_TEL1				) ;
+		$cmd .= sprintf( "'%s' " , $S_TEL2				) ;
+		$cmd .= sprintf( "'%s' " , $S_TEL3				) ;
+		$cmd .= sprintf( "'%s' " , $S_EMAIL				) ;
+
+		$cmd .= sprintf( "'%s' " , $S_CREATE_DATE_S_y	) ;
+		$cmd .= sprintf( "'%s' " , $S_CREATE_DATE_S_m	) ;
+		$cmd .= sprintf( "'%s' " , $S_CREATE_DATE_S_d	) ;
+		$cmd .= sprintf( "'%s' " , $S_CREATE_DATE_E_y	) ;
+		$cmd .= sprintf( "'%s' " , $S_CREATE_DATE_E_m	) ;
+		$cmd .= sprintf( "'%s' " , $S_CREATE_DATE_E_d	) ;
+		$cmd .= sprintf( "'%d' " , $S_BILLING_COUNT		) ;
+
+		$cmd .= sprintf( "'%d' " , $login_level			) ;
+
+		$cmd .= sprintf( "%s " , $tmp ) ;
+		$cmd .= sprintf( "%s " , $file ) ;
+		$cmd .= "> /dev/null & " ;
+
+		exec( $cmd ) ;
+
+		$screentype = "default" ;
+		$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+		$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+		$url  = "csvout_inline.php?" ;
+		$url .= MakeParamLink( $arParam , "GET" ) ;
+		$url .= sprintf( "&tmp=%s" , $tmp ) ;
+		$url .= sprintf( "&xls=%s" , $file ) ;
+
+		$tmpl = $blams -> tmpl ;
+		$tmpl -> assign( "funcname"		, $funcname		) ;
+		$tmpl -> assign( "url"			, $url			) ;
+		$tmpl -> assign( "file"			, $file			) ;
+		$data = $tmpl -> fetch( "common/csv.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+
+		$contents = $blams -> FetchContents( $data ) ;
+
+		$blams -> PrintBody( $header , $footer , $contents ) ;
+	}
+
+	exit ;
+?>

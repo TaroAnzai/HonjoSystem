@@ -1,0 +1,42 @@
+<?php
+	ini_set("memory_limit","2048M");
+	ini_set( "display_errors" ,1 ) ;
+
+	define( "DEF_INTERNAL_ENCODE"	, "UTF-8" ) ;
+	define( "DEF_SHEET_ENCODE"		, "UTF-8" ) ;
+
+	require_once( "server.ini.php" ) ;
+	require_once( "conf/user.ini.php" ) ;
+	require_once( "class/blams.class.php" ) ;
+	require_once( "class/terminal.class.php" ) ;
+
+	// Excel出力
+	
+	ob_implicit_flush() ;
+	
+	//print_r( $argv ) ;
+
+	// データを保存するフォルダの作成
+	$date	= new DateTime() ;
+	$date -> modify ( "-1 day" ) ;
+	$date -> modify ( "-2 year" ) ;
+	$year	= intval( $date -> format( "Y" ) ) ;
+	$month	= intval( $date -> format( "m" ) ) ;
+	$day	= intval( $date -> format( "d" ) ) ;
+
+	// 該当する日付のデータを取得する
+	$obTerminal = new PARTS_Terminal() ;
+	$alias = $obTerminal -> alias ;
+	
+	$arWhere = array() ;
+	$arWhere[ "where"	] = sprintf( "date_trunc( 'day' , %s.create_date ) < '%s' " , $alias , $date -> format( "Y-m-d 00:00:00" ) ) ;
+
+	print $arWhere[ "where"	] ;
+
+exit ;
+	
+	$arResult = $obTerminal -> getData( $arWhere ) ;
+
+exit ;
+
+?>

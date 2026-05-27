@@ -1,0 +1,520 @@
+<?php
+
+// お勧め商品の表示
+function	fetchFeatureMerchandise( $func )
+{
+	$memberid = -1 ;
+	$level = -1 ;
+
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+	$mon = date( "m" ) ;
+	
+	$arParam	= array() ;
+	$arCart		= array() ;
+	$link		= "/merchandise" ;
+	$page		= 0 ;
+	$mode		= "feature" ;
+
+	CreateParamFromPath( $arParam ) ;
+	$where  = MakeSqlMerchandise( $arParam , $link ) ;
+	$where .= sprintf( "AND m.monthly_push LIKE '%%[%d]%%' " , $mon ) ;
+
+	$merchandise = "" ;
+	$obMerchandise = new PARTS_Merchandise() ;
+	if ( $obMerchandise -> isOpen() == true )
+	{
+		$arWhere = array() ;
+		$arWhere[ "monthly_push"	] = $mon ;
+		$arWhere[ "edit_flg"		] = DEF_EDITSTATUS_OPENED ;
+		$arWhere[ "start_date"		] = sprintf( "<= '%s 00:00:00'" , date( "Y-m-d" ) ) ;
+		$arWhere[ "end_date"		] = sprintf( ">= '%s 23:59:59'" , date( "Y-m-d" ) ) ;
+
+		$arMerchandise = $obMerchandise -> getData( $arWhere ) ;
+		
+		$obCart = new PARTS_Cart() ;
+		if ( $obCart -> isOpen() == true )
+		{
+			$cartid = $obCart -> getID( $sessionid , $memberid , DF_BILLSTATUS_BUYING ) ;
+	
+			$arCart = array() ;
+			if ( $cartid != -1 )
+			{
+				$arCart	= $obCart -> arData ;
+			
+				if ( count( $arCart ) > 0 )
+					$arCart = $arCart[ 0 ] ;
+			
+				for ( $m = 0 ; $m < count( $arMerchandise ) ; $m ++ )
+					$obCart -> inCart( $arMerchandise[ $m ] ) ;
+			}
+		}
+		
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+
+		$tmpl -> assign( "merchandise_data"	, $arMerchandise ) ;
+		$tmpl -> assign( "link"				, $link ) ;
+		$tmpl -> assign( "mode"				, $mode ) ;
+		$tmpl -> assign( "param_data"		, $arParam ) ;
+		$merchandise = $tmpl -> fetch( "merchandise/merchandise_feature.tmpl" ) ;
+	}
+	return $merchandise ;
+}
+
+// お勧め商品の表示
+function	fetchFeatureMerchandiseTopPriority( $func , $priority , $type = "" )
+{
+	$file = "merchandise/merchandise_feature_toppriority.tmpl" ;
+	if ( $type == "sub" )
+		$file = "merchandise/merchandise_feature_sub.tmpl" ;
+		
+	$corpid = -1 ;
+	$memberid = -1 ;
+	$level = -1 ;
+
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	$obCorp = new PARTS_Corp( $obSession -> conn ) ;
+	$arCorp = $obCorp -> getSiteOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$corpid = $arCorp[ 0 ][ $obCorp -> alias . "_corpid" ] ;
+
+	$mon = date( "m" ) ;
+	
+	$arParam	= array() ;
+	$arCart		= array() ;
+	$link		= "/merchandise" ;
+	$page		= 0 ;
+	$mode		= "feature" ;
+
+	CreateParamFromPath( $arParam ) ;
+
+	$merchandise = "" ;
+	$obMerchandise = new PARTS_Merchandise( $obSession -> conn ) ;
+	if ( $obMerchandise -> isOpen() == true )
+	{
+		$arWhere = array() ;
+		$arWhere[ "corpid"			] = $corpid ;
+		$arWhere[ "top_priority"	] = $priority ;
+		$arWhere[ "edit_flg"		] = DEF_EDITSTATUS_OPENED ;
+		$arWhere[ "start_date"		] = sprintf( "<= '%s 00:00:00'" , date( "Y-m-d" ) ) ;
+		$arWhere[ "end_date"		] = sprintf( ">= '%s 23:59:59'" , date( "Y-m-d" ) ) ;
+
+		$arWhere[ "order"			] = sprintf( "random() " ) ;
+		$arWhere[ "limit"			] = sprintf( "limit 4 " ) ;
+		
+		$arMerchandise = $obMerchandise -> getData( $arWhere ) ;
+		
+		$obCart = new PARTS_Cart( $obSession -> conn ) ;
+		if ( $obCart -> isOpen() == true )
+		{
+			$cartid = $obCart -> getID( $sessionid , $memberid , DF_BILLSTATUS_BUYING ) ;
+	
+			$arCart = array() ;
+			if ( $cartid != -1 )
+			{
+				$arCart	= $obCart -> arData ;
+			
+				if ( count( $arCart ) > 0 )
+					$arCart = $arCart[ 0 ] ;
+			
+				for ( $m = 0 ; $m < count( $arMerchandise ) ; $m ++ )
+					$obCart -> inCart( $arMerchandise[ $m ] ) ;
+			}
+		}
+		
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	
+		$tmpl -> assign( "merchandise_data"	, $arMerchandise ) ;
+		$tmpl -> assign( "link"				, $link ) ;
+		$tmpl -> assign( "mode"				, $mode ) ;
+		$tmpl -> assign( "param_data"		, $arParam ) ;
+		$merchandise = $tmpl -> fetch( $file ) ;
+	}
+	return $merchandise ;
+}
+
+// お勧め商品の表示
+function	fetchFeatureMerchandiseFavorite( $func , $priority , $type = "" )
+{
+	$file = "merchandise/merchandise_favorite.tmpl" ;
+	if ( $type == "sub" )
+		$file = "merchandise/merchandise_favorite_sub.tmpl" ;
+		
+	$corpid = -1 ;
+	$memberid = -1 ;
+	$level = -1 ;
+
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	$obCorp = new PARTS_Corp( $obSession -> conn ) ;
+	$arCorp = $obCorp -> getSiteOwner( ) ;
+	if ( count( $arCorp ) > 0 )
+		$corpid = $arCorp[ 0 ][ $obCorp -> alias . "_corpid" ] ;
+
+	$mon = date( "m" ) ;
+	
+	$arParam	= array() ;
+	$arCart		= array() ;
+	$link		= "/merchandise" ;
+	$page		= 0 ;
+	$mode		= "feature" ;
+
+	CreateParamFromPath( $arParam ) ;
+
+	$merchandise = "" ;
+	$obMerchandise = new PARTS_Merchandise( $obSession -> conn ) ;
+	if ( $obMerchandise -> isOpen() == true )
+	{
+		$arWhere = array() ;
+		$arWhere[ "corpid"			] = $corpid ;
+		$arWhere[ "top_priority"	] = $priority ;
+		$arWhere[ "edit_flg"		] = DEF_EDITSTATUS_OPENED ;
+		$arWhere[ "start_date"		] = sprintf( "<= '%s 00:00:00'" , date( "Y-m-d" ) ) ;
+		$arWhere[ "end_date"		] = sprintf( ">= '%s 23:59:59'" , date( "Y-m-d" ) ) ;
+
+		$arWhere[ "order"			] = sprintf( "random() " ) ;
+		$arWhere[ "limit"			] = sprintf( "limit 4 " ) ;
+		
+		$arMerchandise = $obMerchandise -> getData( $arWhere ) ;
+		
+		$obCart = new PARTS_Cart( $obSession -> conn ) ;
+		if ( $obCart -> isOpen() == true )
+		{
+			$cartid = $obCart -> getID( $sessionid , $memberid , DF_BILLSTATUS_BUYING ) ;
+	
+			$arCart = array() ;
+			if ( $cartid != -1 )
+			{
+				$arCart	= $obCart -> arData ;
+			
+				if ( count( $arCart ) > 0 )
+					$arCart = $arCart[ 0 ] ;
+			
+				for ( $m = 0 ; $m < count( $arMerchandise ) ; $m ++ )
+					$obCart -> inCart( $arMerchandise[ $m ] ) ;
+			}
+		}
+		
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	
+		$tmpl -> assign( "merchandise_data"	, $arMerchandise ) ;
+		$tmpl -> assign( "link"				, $link ) ;
+		$tmpl -> assign( "mode"				, $mode ) ;
+		$tmpl -> assign( "param_data"		, $arParam ) ;
+		$merchandise = $tmpl -> fetch( $file ) ;
+	}
+	return $merchandise ;
+}
+
+// 新着商品の表示
+function	fetchFeatureMerchandiseNewItem( $func )
+{
+	$corpid = -1 ;
+	$memberid = -1 ;
+	$level = -1 ;
+
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	$obCorp = new PARTS_Corp( $obSession -> conn ) ;
+	$arCorp = $obCorp -> getSiteOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$corpid = $arCorp[ 0 ][ $obCorp -> alias . "_corpid" ] ;
+
+	$mon = date( "m" ) ;
+	
+	$arParam	= array() ;
+	$arCart		= array() ;
+	$link		= "/merchandise" ;
+	$page		= 0 ;
+	$mode		= "feature" ;
+
+	CreateParamFromPath( $arParam ) ;
+
+	$merchandise = "" ;
+	$obMerchandise = new PARTS_Merchandise( $obSession -> conn ) ;
+	if ( $obMerchandise -> isOpen() == true )
+	{
+		$alias = $obMerchandise -> alias ;
+		
+		// 14日前の日付を取得する
+		$obDate = new DateTime() ;
+		$obDate -> sub( new DateInterval('P14D') ) ;
+
+		$arWhere = array() ;
+		$arWhere[ "corpid"			] = $corpid ;
+		$arWhere[ "edit_flg"		] = DEF_EDITSTATUS_OPENED ;
+		$arWhere[ "start_date"		] = sprintf( "<= '%s 00:00:00'" , date( "Y-m-d" ) ) ;
+		$arWhere[ "end_date"		] = sprintf( ">= '%s 23:59:59'" , date( "Y-m-d" ) ) ;
+		$arWhere[ "where"			]  = sprintf( "AND ( %s.create_date >= '%s 00:00:00' " , $alias , $obDate -> format( "Y-m-d" ) ) ;
+		$arWhere[ "where"			] .= sprintf( "OR %s.update_date  >= '%s 00:00:00' " , $alias , $obDate -> format( "Y-m-d" ) ) ;
+		$arWhere[ "where"			] .= sprintf( "OR %s.start_date   >= '%s 00:00:00' " , $alias , $obDate -> format( "Y-m-d" ) ) ;
+		$arWhere[ "where"			] .= sprintf( "OR %s.sell_date   >= '%s 00:00:00' " , $alias , $obDate -> format( "Y-m-d" ) ) ;
+		$arWhere[ "where"			] .= sprintf( ") " ) ;
+
+		$arWhere[ "order"			] = sprintf( "random() " ) ;
+		$arWhere[ "limit"			] = sprintf( "limit 4 " ) ;
+
+		$arMerchandise = $obMerchandise -> getData( $arWhere ) ;
+
+		$obCart = new PARTS_Cart( $obSession -> conn ) ;
+		if ( $obCart -> isOpen() == true )
+		{
+			$cartid = $obCart -> getID( $sessionid , $memberid , DF_BILLSTATUS_BUYING ) ;
+	
+			$arCart = array() ;
+			if ( $cartid != -1 )
+			{
+				$arCart	= $obCart -> arData ;
+			
+				if ( count( $arCart ) > 0 )
+					$arCart = $arCart[ 0 ] ;
+			
+				for ( $m = 0 ; $m < count( $arMerchandise ) ; $m ++ )
+					$obCart -> inCart( $arMerchandise[ $m ] ) ;
+			}
+		}
+		
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	
+		$tmpl -> assign( "merchandise_data"	, $arMerchandise ) ;
+		$tmpl -> assign( "link"				, $link ) ;
+		$tmpl -> assign( "mode"				, $mode ) ;
+		$tmpl -> assign( "param_data"		, $arParam ) ;
+		$merchandise = $tmpl -> fetch( "merchandise/merchandise_feature_newitem.tmpl" ) ;
+	}
+	return $merchandise ;
+}
+
+// 商品情報のSQL文を作成する
+function	MakeSqlMerchandise( $arParam , &$link )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$where = "" ;
+
+	// 検索条件初期化
+	$where  = sprintf( "FROM merchandise_data             m " ) ;
+	$where .= sprintf( "LEFT JOIN merchandise_master_data mm ON m.merchandise_masterid = mm.merchandise_masterid " ) ;
+	$where .= sprintf( "LEFT JOIN category_data           c  ON mm.categoryid          = c.categoryid " ) ;
+	$where .= sprintf( "WHERE m.status = 1 " ) ;
+	$where .= sprintf( "AND mm.status = 1 " ) ;
+
+	$now = date( "Y-m-d H:i:s" ) ;
+
+	if( $S_ID != -1 )
+	{
+		$where .= sprintf( "AND m.merchandiseid = %d " , $S_ID ) ;
+		$link .= sprintf( "/I%s" , $S_ID ) ;
+	}
+
+	if( $S_NAME != "" )
+	{
+		$where .= sprintf( "AND m.name LIKE '%%%s%%' " , $S_NAME ) ;
+		$link .= sprintf( "/N%s" , urlencode( $S_NAME ) ) ;
+	}
+
+	if( $S_KEYWORD != "" )
+	{
+		$where .= sprintf( "AND ( m.info LIKE '%%%s%%' " , $S_KEYWORD ) ;
+		$where .= sprintf( "OR m.info_detail LIKE '%%%s%%' ) " , $S_KEYWORD ) ;
+		$link .= sprintf( "/K%s" , urlencode( $S_KEYWORD ) ) ;
+	}
+
+	if ( is_array( $S_CATEGORY ) == TRUE )
+	{
+		$sql = "" ;
+		$arCategory = array() ;
+		$obDB = new DB_Common() ;
+		if ( $obDB -> isOpen() )
+		{
+			for ( $i = 0 ; $i < count( $S_CATEGORY ) ; $i ++ )
+			{
+				$link .= sprintf( "/C%d" , $S_CATEGORY[ $i ] ) ;
+				$categoryid = $S_CATEGORY[ $i ] ;
+				$arCurrent = GetCategoryDataFromID( $conn , $categoryid ) ;
+				$category1 = $arCurrent[ "category1" ] ;
+				$category2 = $arCurrent[ "category2" ] ;
+				$category3 = $arCurrent[ "category3" ] ;
+				
+				$arCurrent = CreateCategoryArray( $odDB -> conn , $category1 , $category2 , $category3 , TRUE , DEF_CATEGORY_ITEM ) ;
+
+				$start = 0 ;
+				if ( $category2 != 0 )
+					$start = 1 ;
+				if ( $category3 != 0 )
+					$start = 2 ;
+				for ( $c = $start ; $c < count( $arCurrent ) ; $c ++ )
+				{
+					$keys = array_keys( $arCurrent[ $c ] ) ;
+					$arCategory[ $keys[ 0 ] ] = $arCurrent[ $c ][ $keys[ 0 ] ] ;
+				}
+			}
+			
+			
+		}
+	
+		$keys = array_keys( $arCategory ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		{
+			if ( $sql != "" )
+				$sql .= "OR " ;
+			$sql .= sprintf( " mm.categoryid = %d " , $keys[ $i ] ) ;
+		}
+		$where .= sprintf( "AND (%s) " , $sql ) ;
+	}
+
+	return $where ;
+}
+
+
+// 検索条件よりデータを取得する。
+function GetMerchandiseFromWord( $where , $page , $arCart , $conn = -1 )
+{
+	$now = date( "Y-m-d" ) ;
+	$blams = new BLAMS() ;
+	$arMerchandise = array() ;
+
+	if( $where != "" )
+	{
+		$obDB = new DB_Common() ;
+		if ( $obDB -> isOpen() )
+		{
+			$sql  = sprintf( "SELECT " ) ;
+			$sql .= sprintf( "m.merchandiseid				AS m_merchandiseid			, " ) ;
+			$sql .= sprintf( "m.merchandise_masterid		AS m_merchandise_masterid	, " ) ;
+			$sql .= sprintf( "m.top_priority				AS m_top_priority			, " ) ;
+			$sql .= sprintf( "m.item_priority				AS m_item_priority			, " ) ;
+			$sql .= sprintf( "m.relationid					AS m_relationid				, " ) ;
+			$sql .= sprintf( "m.price						AS m_price					, " ) ;
+			$sql .= sprintf( "m.tax							AS m_tax					, " ) ;
+			$sql .= sprintf( "m.number						AS m_number					, " ) ;
+			$sql .= sprintf( "m.coolpack					AS m_coolpack				, " ) ;
+			$sql .= sprintf( "m.iconid_s					AS m_iconid_s				, " ) ;
+			$sql .= sprintf( "m.iconid_m					AS m_iconid_m				, " ) ;
+			$sql .= sprintf( "m.iconid_l					AS m_iconid_l				, " ) ;
+			$sql .= sprintf( "m.bannerid_s					AS m_bannerid_s				, " ) ;
+			$sql .= sprintf( "m.bannerid_l					AS m_bannerid_l				, " ) ;
+			$sql .= sprintf( "m.monthly_push				AS m_monthly_push			, " ) ;
+			$sql .= sprintf( "m.info						AS m_info					, " ) ;
+			$sql .= sprintf( "m.info_detail					AS m_info_detail			, " ) ;
+			$sql .= sprintf( "m.sell_date					AS m_sell_date				, " ) ;
+			$sql .= sprintf( "m.start_date					AS m_start_date				, " ) ;
+			$sql .= sprintf( "m.end_date					AS m_end_date				, " ) ;
+			$sql .= sprintf( "m.notes						AS m_notes					, " ) ;
+			$sql .= sprintf( "m.status						AS m_status					, " ) ;
+			$sql .= sprintf( "m.create_date					AS m_create_date			, " ) ;
+			$sql .= sprintf( "m.update_date					AS m_update_date			, " ) ;
+
+			$sql .= sprintf( "mm.merchandise_masterid		AS mm_merchandise_masterid	, " ) ;
+			$sql .= sprintf( "mm.corpid						AS mm_corpid				, " ) ;
+			$sql .= sprintf( "mm.merchandisecode			AS mm_merchandisecode		, " ) ;
+			$sql .= sprintf( "mm.jancode					AS mm_jancode				, " ) ;
+			$sql .= sprintf( "mm.name						AS mm_name					, " ) ;
+			$sql .= sprintf( "mm.kana						AS mm_kana					, " ) ;
+			$sql .= sprintf( "mm.categoryid					AS mm_categoryid			, " ) ;
+			$sql .= sprintf( "mm.fixed_price				AS mm_fixed_price			, " ) ;
+			$sql .= sprintf( "mm.categoryid					AS mm_categoryid			, " ) ;
+			$sql .= sprintf( "mm.standard					AS mm_standard				, " ) ;
+			$sql .= sprintf( "mm.unit						AS mm_unit					, " ) ;
+			$sql .= sprintf( "mm.net						AS mm_net					, " ) ;
+			$sql .= sprintf( "mm.tag						AS mm_tag					, " ) ;
+			$sql .= sprintf( "mm.iconid						AS mm_iconid				, " ) ;
+			$sql .= sprintf( "mm.status						AS mm_status				, " ) ;
+			$sql .= sprintf( "mm.create_date				AS mm_create_date			, " ) ;
+			$sql .= sprintf( "mm.update_date				AS mm_update_date			, " ) ;
+
+			$sql .= sprintf( "c.categoryid					AS c_categoryid				, " ) ;
+			$sql .= sprintf( "c.kind						AS c_kind					, " ) ;
+			$sql .= sprintf( "c.name						AS c_name					, " ) ;
+			$sql .= sprintf( "c.category1					AS c_c1						, " ) ;
+			$sql .= sprintf( "c.category2					AS c_c2						, " ) ;
+			$sql .= sprintf( "c.category3					AS c_c3						, " ) ;
+			$sql .= sprintf( "c.status						AS c_status					, " ) ;
+
+			$sql .= sprintf( "( STRING_TO_ARRAY( TRANSLATE( TRIM( BOTH '[]' FROM m.relationid ) , '][' , ',' ) , ',' ) )[1] AS m_categoryid " ) ;
+//			$sql .= sprintf( "LEFT JOIN category_data ON category_data.categoryid " ) ;
+//			$sql .= sprintf( "= CAST( ( STRING_TO_ARRAY( TRANSLATE( TRIM( BOTH '[]' FROM merchandise_data.relationid ) , '][' , ',' ) , ',' ) )[1] as INT8 ) " ) ;
+			$sql .= $where ;
+			$sql .= sprintf( "AND m.start_date <= '%s 23:59:59' " , date( "Y-m-d" ) ) ;
+			$sql .= sprintf( "AND m.end_date >= '%s 00:00:00' " , date( "Y-m-d" ) ) ;
+			$sql .= sprintf( "ORDER BY " ) ;
+			$sql .= sprintf( "m.item_priority DESC , " ) ;
+			$sql .= sprintf( "m.top_priority DESC , " ) ;
+			$sql .= sprintf( "c.category1 , c.category2 , c.category3 , " ) ;
+			$sql .= sprintf( "mm.merchandisecode , " ) ;
+			$sql .= sprintf( "mm.jancode " ) ;
+			$sql .= sprintf( "LIMIT %d OFFSET %d " , NUMBER_PER_MERCHANDISE , ( $page * NUMBER_PER_MERCHANDISE ) ) ;
+			$record = $obDB -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				$cnt = $obDB -> getDataCount( $record ) ;
+				for ( $i = 0 ; $i < $cnt ; $i ++ )
+				{
+					$arData	= $obDB -> getValues( $record , $i ) ;
+					
+					$arData[ "category" ] = $blams -> MakeCategoryListWithKind( $conn , $arData[ "c_categoryid" ] , -1 , DEF_CATEGORY_ITEM ) ;
+					$arData[ "relation" ] = $blams -> MakeCategoryListWithKind( $conn , $arData[ "relationid" ] , -1 , DEF_CATEGORY_ITEM ) ;
+					
+					// カートの確認
+					$arData[ "cart" ] = FALSE ;
+					$arData[ "registered" ] = FALSE ;
+					$arData[ "ci_number" ] = 1 ;
+					$arItem = $arCart[ "cartitem_data" ] ;
+					if ( is_array( $arItem ) == TRUE )
+					{
+						for ( $c = 0 ; $c < count( $arItem ) ; $c ++ )
+						{
+							if ( $arItem[ $c ][ "m_merchandiseid" ] == $arData[ "m_merchandiseid" ] )
+							{
+								$arData[ "registered" ] = TRUE ;
+								break ;
+							}
+						}
+					}
+					
+					$arMerchandise[] = $arData ;
+				}
+				$obDB -> closeRecord( $record ) ;
+			}
+		}
+	}
+	return $arMerchandise ;
+}
+
+// 検索条件よりデータの総数を取得する
+function	GetMerchandiseCount( $where , $conn = -1 )
+{
+	$count = 0 ;
+	if( $where != "" )
+	{
+		$obDB = new DB_Common() ;
+		if ( $obDB -> isOpen() )
+		{
+			$sql  = sprintf( "SELECT count(*) " ) ;
+			$sql .= $where ;
+			$sql .= sprintf( "AND m.start_date <= '%s 23:59:59' " , date( "Y-m-d" ) ) ;
+			$sql .= sprintf( "AND m.end_date >= '%s 00:00:00' " , date( "Y-m-d" ) ) ;
+			$record = $obDB -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				if ( $obDB -> getDataCount( $record ) > 0 )
+					$count = $obDB -> getValue( $record , "count" ) ;
+				$obDB -> closeRecord( $record ) ;
+			}
+		}
+	}
+	return $count ;
+}
+
+?>

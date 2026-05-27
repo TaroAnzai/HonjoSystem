@@ -1,0 +1,83 @@
+<?php
+	ini_set( "display_errors" , 1 ) ;
+	require_once( "server.ini" ) ;
+	
+	ob_implicit_flush() ;
+	
+	//print_r( $argv ) ;
+	
+
+	if ( empty( $argv[ 1 ] )
+	{
+		// コマンド解析
+		$cmd = $argv[ 1 ] ;
+		$func = $argv[ 2 ] ;
+	
+		if ( $cmd == "CL" )
+		{
+			WriteSyslog( "client mode:" . $func ) ;
+		
+			// 機能種別
+			switch ( $func )
+			{
+			// 在庫情報
+			case	NAC_STORAGE_LIST :
+				NacStorageList() ;
+				break ;
+			
+			// 空棚情報
+			case	NAC_FREE_LOCATION :
+				NacFreeLocation() ;
+				break ;
+			}
+		}
+		else if ( $cmd == "SV" )
+		{
+			SeqRecvData() ;
+		}
+	}
+exit ;
+
+// 在庫情報
+function	NacStorageList()
+{
+}
+
+// 空棚情報
+function	NacFreeLocation()
+{
+}
+
+// 電文解析
+function	SeqRecvData()
+{
+	// 標準入力からシーケンサーからの電文受信
+	$stdin = trim(fgets(STDIN));
+			
+	// 標準出力へ電文送信
+	echo $stdin ;
+	echo "\r\n" ;
+}
+
+// 入庫要求（製品ライン）
+function	SeqStorageProduct( $data )
+{
+}
+
+// 入庫要求（洗浄ライン）
+function	SeqStorageProduct( $data )
+{
+}
+
+// BCR読み取り
+function	SeqStorageProduct( $data )
+{
+}
+
+// BCU取り出し
+function	Seq( $data )
+{
+}
+
+
+?>

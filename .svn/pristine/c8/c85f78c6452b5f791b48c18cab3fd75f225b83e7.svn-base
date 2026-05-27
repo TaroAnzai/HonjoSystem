@@ -1,0 +1,22 @@
+<?php
+	require_once( "../../../lib/system.php") ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションから自分のIDを取得する。
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level = $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	if ( $login_adminid != -1 )
+	{
+		$cookie = sha1( DB_USER .' ' . DB_PASSWD . ' ' . $_SERVER['REMOTE_ADDR'] ) ;
+		@setcookie( 'slimstatuser', $cookie, time() + 31536000, '/', '' ) ;
+	
+		$location = sprintf( "Location: /utility/slimstat/" ) ;
+		header( $location ) ;
+	}
+	
+	exit ;
+?>

@@ -1,0 +1,360 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+	require_once( "class/cart.class.php" )  ;
+	require_once( "class/member.class.php" )  ;
+	require_once( "class/member_corp.class.php" )  ;
+
+	$blams	= new BLAMS() ;
+	$obCart	= new PARTS_Cart() ;
+	$alias	= $obCart -> alias ;
+
+	// 基本パラメータ変換
+	if( !isset( $mode ) )
+		$mode = "update" ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$arSearch = array() ;
+	$arSearch[] = "page" ;
+	$obCart -> assignGlobal( $arSearch ) ;
+
+	// 検索用パラメータ変換
+	if ( $S_BILL_STATUS == "" )
+		$S_BILL_STATUS = -1 ;
+
+	if ( $S_SHIP_STATUS == "" )
+		$S_SHIP_STATUS = DF_STATETRANS_OTHER ;
+
+	if ( $S_MEMBER_FLG == "" )
+		$S_MEMBER_FLG = -1 ;
+
+	// 検索用パラメータの保存
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obCart -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page			;
+
+	// WHERE句の初期化
+	$arWhere = array() ;
+	$arWhere[ "where" ] = "" ;
+
+	// 伝票番号
+	if ( $S_SHEETNO != "" )
+		$arWhere[ "sheetno" ] = $S_SHEETNO ;
+
+	$arWhere[ "where" ] .= sprintf( "AND %s.billing_status not in ( %d , %d ) " , $alias , DF_BILLSTATUS_BUYING , DF_BILLSTATUS_ADMINBUYING ) ;
+/*
+	// 請求状態
+	if ( $S_BILL_STATUS != -1 )
+		$arWhere[ "billing_status" ] = $S_BILL_STATUS ;
+	else
+		$arWhere[ "where" ] .= sprintf( "AND %s.billing_status not in ( %d , %d ) " , $alias , DF_BILLSTATUS_BUYING , DF_BILLSTATUS_ADMINBUYING ) ;
+
+	// 出庫状態
+	if ( $S_SHIP_STATUS != -1 )
+		$arWhere[ "shipped_status" ] = $S_SHIP_STATUS ;
+*/
+	// 会員判定フラグ
+	if ( $S_MEMBER_FLG != -1 )
+		$arWhere[ "member_flg" ] = $S_MEMBER_FLG ;
+
+	// 電話番号
+	if ( $S_TEL1 != "" && $S_TEL2 != "" && $S_TEL3 != "" )
+		$arWhere[ "mb_tel" ] = sprintf( "%s-%s-%s" , $S_TEL1 , $S_TEL2 , $S_TEL3 ) ;
+
+	// メールアドレス
+	if ( $S_MAIL != "" )
+		$arWhere[ "mail_address" ] = $S_MAIL ;
+
+	// 受注年月日
+	if( $S_S_y != "" && $S_S_m != "" && $S_S_d != "" )
+		$arWhere[ "s_order_date" ] = sprintf( "%04d-%02d-%02d 00:00:00" , $S_S_y , $S_S_m , $S_S_d ) ;
+
+	if( $S_E_y != "" && $S_E_m != "" && $S_E_d != "" )
+		$arWhere[ "e_order_date" ] = sprintf( "%04d-%02d-%02d 23:59:59" , $S_E_y , $S_E_m , $S_E_d ) ;
+
+	$menu = FUNC_ORDER ;
+
+	$blams = new BLAMS() ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $arWhere , true ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+	exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $arWhere , $list_flg )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 該当データ数取得
+	$obCart = new PARTS_Cart() ;
+	$arCart = $obCart -> getData( $arWhere , -1 , NUMBER_PER_PAGE , false ) ;
+	$cnt = count( $arCart ) ;
+
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$arList = array() ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $arWhere ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = FetchSearch( $blams , $arParamFind , $funcname ) ;
+	}
+	$arHeader = array(
+		array( "caption" => "伝票番号"			, "class" => "w128 left" ) ,
+		array( "caption" => "お名前"			, "class" => "w264 left" ) ,
+		array( "caption" => "フリガナ"			, "class" => "w264 left" ) ,
+		array( "caption" => "会員"				, "class" => "w064 left" ) ,
+//		array( "caption" => "申込方法"			, "class" => "w064 left" ) ,
+//		array( "caption" => "D/L状態"			, "class" => "w128 left" ) ,
+//		array( "caption" => "出庫状態"			, "class" => "w128 left" ) ,
+		array( "caption" => "購入日"			, "class" => "w128 left" ) ,
+	) ;
+
+	if( empty( $search ) == true )
+		$search = "" ;
+
+	if( empty( $paging ) == true )
+		$paging = "" ;
+
+	if( empty( $pageJump ) == true )
+		$pageJump = "" ;
+
+	if( empty( $funcname ) == true )
+		$funcname = "" ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind , $funcname )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 請求状態
+	global	$arBillStatus ;
+	$arBillStatus_local = $arBillStatus ;
+	unset( $arBillStatus_local[ DF_BILLSTATUS_BUYING ] ) ;
+
+	// 出庫状態
+	global	$arShipStatus ;
+	$arShipStatus_local = $arShipStatus ;
+	$arShipStatus_local[ DF_STATETRANS_OTHER ] = "未発送" ;
+	
+	// 会員判定フラグ
+	$arMemberFlg = array( 0 => "非会員" , 1 => "会員" ) ;
+
+	$arFoem = array() ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_SHEETNO" , $S_SHEETNO , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "伝票番号" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form	= $blams -> fetchSelectbox( "S_MEMBER_FLG" , $S_MEMBER_FLG , $arMemberFlg , 120 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "会員／非会員" , $form , 120 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputPhone( "S_TEL" , $S_TEL1 , $S_TEL2 , $S_TEL3 ) ;
+	$value .= $blams -> FetchTDTD( "電話番号" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form   = $blams -> FetchInputbox( "S_MAIL" , $S_MAIL , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> FetchTDTD( "メールアドレス" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputDate( "S_S" , $S_S_y , $S_S_m , $S_S_d , true , true , true ) ;
+	$form  .= "&nbsp;～&nbsp;" ;
+	$form  .= $blams -> fetchInputDate( "S_E" , $S_E_y , $S_E_m , $S_E_d , true , true , true ) ;
+	$value .= $blams -> FetchTDTD( "購入年月日" , $form , 128 , 640 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER , 1 , 1 , 3 ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"				, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"				, $funcname			) ;
+	$tmpl -> assign( "list_url"				, "list.php"		) ;
+	$tmpl -> assign( "form_data"			, $arForm			) ;
+	$tmpl -> assign( "edit_url"				, "edit.php"		) ;
+	$tmpl -> assign( "page"					, $page				) ;
+	$tmpl -> assign( "search_data"			, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"		, FALSE				) ;
+	$tmpl -> assign( "change_append_name"	, "電話受付"		) ;
+	$tmpl -> assign( "append_comment"		, "※受注を管理画面から作成する場合は電話受付をクリックしてください"	) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $page , $arParamFind , $arWhere )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	$obCart		= new PARTS_Cart() ;
+	$obMember	= new PARTS_Member() ;
+
+	$arWhere[ "order" ] = sprintf( "%s.order_date DESC , %s.sheetno" , $obCart -> alias , $obCart -> alias ) ;
+	$arCart = $obCart -> getData( $arWhere , $page , NUMBER_PER_PAGE , false ) ;
+	$cnt = count( $arCart ) ;
+
+	for ( $index = 0 ; $index < $cnt ; $index ++ )
+	{
+		// データの取得
+		$arData		= $arCart[ $index ] ;
+		
+		$cartid				= $arData[ $obCart -> alias . "_cartid"			] ;
+		$memberid			= $arData[ $obCart -> alias . "_memberid"		] ;
+		$member_flg			= $arData[ $obCart -> alias . "_member_flg"		] ;
+		$orderway			= $arData[ $obCart -> alias . "_orderway"		] ;
+		$sheetno			= $arData[ $obCart -> alias . "_sheetno"		] ;
+		$billing_status		= $arData[ $obCart -> alias . "_billing_status"	] ;
+		$shipped_status		= $arData[ $obCart -> alias . "_shipped_status"	] ;
+		$order_date			= $arData[ $obCart -> alias . "_order_date"		] ;
+		$update_date		= $arData[ $obCart -> alias . "_update_date"	] ;
+		$name				= $arData[ $obMember -> alias . "_name"			] ;
+		$kana				= $arData[ $obMember -> alias . "_kana"			] ;
+
+		// 伝票番号
+		if ( $sheetno == "" )
+			$sheetno = "不明" ;
+
+		// お名前
+		$szGuestName = sprintf( "%s" , $name ) ;
+		if ( $szGuestName != "不明" )
+			$szGuestName .= " 様" ;
+
+		// お名前
+		$szGuestKana = sprintf( "%s" , $kana ) ;
+
+		// 会員判定
+		if ( $member_flg == 1 )
+			$szMemFlg = "○" ;
+		else
+			$szMemFlg = "－" ;
+
+		// 申込方法
+		if ( $orderway == DEF_ORDER_ONLINE )
+			$szOrderWay = "オンライン" ;
+		elseif ( $orderway == DEF_ORDER_FAX )
+			$szOrderWay = "FAX" ;
+		else
+			$szOrderWay = "不明" ;
+/*
+		// 請求状態
+		global	$arBillStatus ;
+		$szBillStatus = $arBillStatus[ $billing_status ] ;
+		if ( $szBillStatus == "" )
+			$szBillStatus = "不明" ;
+
+		// 出庫状態
+		global	$arShipStatus ;
+		$szShipStatus = $arShipStatus[ $shipped_status ] ;
+		if ( $szShipStatus == "" )
+			$szShipStatus = "不明" ;
+*/
+		$arAnchor[ "url" 			] = "edit.php"		;
+		$arAnchor[ "idname"			] = sprintf( "%s_cartid" , $obCart -> alias ) ;
+		$arAnchor[ "id"				] = $cartid			;
+		$arAnchor[ "param"			] = $param			;
+		$arAnchor[ "anchor"			] = $sheetno		;
+		$arAnchor[ "caption"		] = $sheetno		;
+		$arAnchor[ "class"			] = "border left"	;
+		$arAnchor[ "script"			] = ""				;
+		$arAnchor[ "date_format"	] = ""				;
+
+		$arData = array() ;
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $szGuestName ,		"class" => "border left"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szGuestKana ,		"class" => "border left"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szMemFlg ,			"class" => "border left"	, "date_format" => ""			, "anchor" => "" ) ;
+//		$arData[] = array( "caption" => $szOrderWay ,		"class" => "border left"	, "date_format" => ""			, "anchor" => "" ) ;
+//		$arData[] = array( "caption" => $szBillStatus ,		"class" => "border left"	, "date_format" => ""			, "anchor" => "" ) ;
+//		$arData[] = array( "caption" => $szShipStatus ,		"class" => "border left"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $order_date ,		"class" => "border center"	, "date_format" => "%Y/%m/%d"	, "anchor" => "" ) ;
+		$arList[] = $arData ;
+	}
+
+	return $arList ;
+}
+
+?>

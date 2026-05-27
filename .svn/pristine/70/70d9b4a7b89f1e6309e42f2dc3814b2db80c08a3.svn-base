@@ -1,0 +1,178 @@
+<?php
+//ini_set( "display_errors" , On ) ;
+	require_once( "common.php" )  ;
+	require_once( "system.ini.php" ) ;
+
+	GetPermission() ;
+
+// ƒƒOƒCƒ“ƒ`ƒFƒbƒN
+function ChkLogin()
+{
+	ChkLoginCommon( SESSION_ADMIN ) ;
+}
+
+function	PrintHeader( $screentype , $func = -1 )
+{
+	$blams = new BLAMS() ;
+	$blams -> init() ;
+	$blams -> PrintHeader( $screentype , $func ) ;
+}
+
+function	PrintFooter( $func )
+{
+	$blams = new BLAMS() ;
+	$blams -> init() ;
+	$blams -> PrintFooter( $func ) ;
+}
+
+// Š¿ŽšƒR[ƒh‚Ì•ÏŠ·
+function ConvertLineID( $id )
+{
+	// SJIS ‚©‚ç EUC ‚Ö
+	$id = mb_convert_encoding( $id , "EUC-JP" , "SJIS" ) ;
+
+	// ‘SŠp ‚©‚ç ”¼Šp‚Ö
+	$id = mb_convert_kana( $id , "a" , "EUC-JP" ) ;
+
+	// ¬•¶Žš‚©‚ç ‘å•¶Žš‚Ö
+	$id = mb_strtoupper( $id , "EUC-JP" ) ;
+
+	// EUC ‚©‚ç SJIS‚Ö
+	$id = mb_convert_encoding( $id , "SJIS" , "EUC-JP" ) ;
+
+	return $id ;
+}
+
+// ‚s‚n‚oî•ñ‚ÌŽæ“¾
+function GetTop( $topid )
+{
+	$sql = "SELECT * FROM top_data WHERE topid = '" . $topid . "'" ;
+
+	$arr = array() ;
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+		$result = ExecuteSQL( $conn , $sql ) ;
+		if ( $result )
+		{
+			if ( GetDataCount( $result ) )
+				$arr = pg_fetch_array( $result , 0 , PGSQL_ASSOC ) ;
+			CloseRecord( $result ) ;
+		}
+		DisconnectDatabase( $conn ) ;
+	}
+
+	return $arr;
+}
+
+// ‚¨‹q—l‚Ìº‚ÌŽæ“¾
+function GetVoice( $voiceid )
+{
+	$sql = "SELECT * FROM voice_data WHERE voiceid = '" . $voiceid . "'" ;
+
+	$arr = array() ;
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+		$result = ExecuteSQL( $conn , $sql ) ;
+		if ( $result )
+		{
+			if ( GetDataCount( $result ) )
+				$arr = pg_fetch_array( $result , 0 , PGSQL_ASSOC ) ;
+			CloseRecord( $result ) ;
+		}
+		DisconnectDatabase( $conn ) ;
+	}
+
+	return $arr;
+}
+
+// ’ÊMî•ñ‚ÌŽæ“¾
+function GetReport( $reportid )
+{
+	$sql = "SELECT * FROM report_data WHERE reportid = '" . $reportid . "'" ;
+
+	$arr = array() ;
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+		$result = ExecuteSQL( $conn , $sql ) ;
+		if ( $result )
+		{
+			if ( GetDataCount( $result ) )
+				$arr = pg_fetch_array( $result , 0 , PGSQL_ASSOC ) ;
+			CloseRecord( $result ) ;
+		}
+		DisconnectDatabase( $conn ) ;
+	}
+
+	return $arr;
+}
+
+// NEWSî•ñ‚ÌŽæ“¾
+function GetNews( $newsid )
+{
+	$sql = "SELECT * FROM news_data WHERE newsid = '" . $newsid . "'" ;
+
+	$arr = array() ;
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+		$result = ExecuteSQL( $conn , $sql ) ;
+		if ( $result )
+		{
+			if ( GetDataCount( $result ) )
+				$arr = pg_fetch_array( $result , 0 , PGSQL_ASSOC ) ;
+			CloseRecord( $result ) ;
+		}
+		DisconnectDatabase( $conn ) ;
+	}
+
+	return $arr;
+}
+
+// ‚l‚`‚h‚kî•ñ‚ÌŽæ“¾
+function GetMail( $mailid )
+{
+	$sql = "SELECT * FROM mail_data WHERE mailid = '" . $mailid . "'" ;
+
+	$arr = array() ;
+	$conn = ConnectDatabase() ;
+	if ( $conn )
+	{
+		$result = ExecuteSQL( $conn , $sql ) ;
+		if ( $result )
+		{
+			if ( GetDataCount( $result ) )
+				$arr = pg_fetch_array( $result , 0 , PGSQL_ASSOC ) ;
+			CloseRecord( $result ) ;
+		}
+		DisconnectDatabase( $conn ) ;
+	}
+
+	return $arr;
+}
+
+function	GetProductCorpName( $prod_corpid )
+{
+	if( $prod_corpid == -2 )
+	{
+		$szCorpName = "Žw’è‚È‚µ" ;
+	}
+	else
+	{
+		$obCorp = new PARTS_Corp() ;
+		
+		$arWhere = array() ;
+		$arWhere[ $obCorp -> primarykey ] = $prod_corpid ;
+		$arResult = $obCorp -> getData( $arWhere , 0 , false ) ;
+
+		if ( count( $arResult ) > 0 )
+		{
+			$szCorpName = $arResult[ 0 ][ $obCorp -> alias . "_name" ] ;
+		}
+	}
+	return $szCorpName ;
+}
+
+?>

@@ -1,0 +1,53 @@
+<?php
+// ‘——¿î•ñ
+function	fetchCarriage( $corpid = -1 )
+{
+	$mode		= "" ;
+
+	if ( $corpid == -1 )
+	{
+		$obCorp = new PARTS_Corp() ;
+		if ( $obCorp -> isOpen() == true )
+		{
+			$arCorp = $obCorp -> getOwner() ;
+			if ( count( $arCorp ) > 0 )
+				$corpid = $obCorp -> getID() ;
+		}
+	}
+
+	$price = "" ;
+	global	$arState ;
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "mode"			, $mode ) ;
+	$tmpl -> assign( "state_data"	, $arState ) ;
+	$tmpl -> assign( "carriage_data"	, $arCarriage ) ;
+	
+	$obPrice = new PARTS_Price() ;
+	if ( $obPrice -> isOpen() )
+	{
+		// ŒfÚ‰Â”\‚È‘——¿î•ñ‚ª‚ ‚é‚©H
+		$arWhere = array() ;
+		$arWhere[ "where"	] = sprintf( "AND type in ( %d , %d ) " , DEF_PRICE_CARRIAGE , DEF_PRICE_COOLPACK ) ;
+//		$arWhere[ "corpid"	] = $corpid ;
+		$arPrice = $obPrice -> getData( $arWhere , 0 , false ) ;
+		
+		$cnt = count( $arPrice ) ;
+		if ( $cnt != 0 )
+			$tmpl -> assign( "price_data"	, $arPrice ) ;
+	}
+	
+	$obConfig = new PARTS_Config() ;
+	$arConfig = $obConfig -> getConfig( $corpid ) ;
+	$cnt = count( $arConfig ) ;
+	if ( $cnt > 0 )
+	{
+		$tmpl -> assign( "config_data"	, $arConfig ) ;
+	}
+
+	$price = $tmpl -> fetch( "carriage.tmpl" ) ;
+	unset( $tmpl ) ;
+	
+	return $price ;
+}
+
+?>

@@ -1,0 +1,10 @@
+<?php
+
+	global	$_SERVER ;
+
+	// 接続形式を含むサーバURL
+	$server_url = "http://" ;
+	if ( empty( $_SERVER[ "HTTPS" ] ) == false && $_SERVER[ "HTTPS" ] == "on" )
+		$server_url = "https://" ;
+	$server_url .= $_SERVER[ "SERVER_NAME" ] ;
+?>

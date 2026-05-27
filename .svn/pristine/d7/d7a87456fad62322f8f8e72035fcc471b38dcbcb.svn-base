@@ -1,0 +1,81 @@
+<?php
+/**
+* BLAMS 基本関数郡 諸設定用クラス
+*
+* シリアルNO用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+//
+// シリアルNoタイプ
+//
+$_FUNC = 1 ;
+define( "SERIALNO_TYPE_MEMBER"	,	$_FUNC ++	) ;		// 仮会員ログインID作成
+define( "SERIALNO_TYPE_CORP"	,	$_FUNC ++	) ;		// 企業会員ログインID作成
+define( "SERIALNO_TYPE_SHEETNO"	,	$_FUNC ++	) ;		// 伝票番号作成
+
+require_once(	'class/db.class.php' ) ;
+
+class PARTS_Serialno extends DB_Common
+{
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "serialno_data" ;
+		$alias		= "sn" ;
+		$primarykey	= "serialnoid" ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+	}
+
+	// シリアルNoの自動生成
+	// type .. シリアルNo生成タイプ（0：仮会員ログインID作成、1：伝票番号作成）
+	function createSerialNo( $type , $count = 1 )
+	{
+		// シリアルの最大値を取得する。
+		$date = date( "ymd" ) ;
+		$serial = sprintf( "%s%04d" , $date , 0 ) ;
+	
+		$new_serial = "" ;
+		$sql  = sprintf( "SELECT max(serialno) FROM serialno_data WHERE type = %d " , $type ) ;
+		$sql .= sprintf( "AND serialno > '%s'" , $serial ) ;
+
+		$arData = parent::getData( $sql ) ;
+		$cnt = count( $arData ) ;
+
+		if ( $cnt > 0 )
+		{
+			$now = $arData[ 0 ][ "max" ] ;
+			$now = ( $now % 10000 ) ;
+			$new_serial = sprintf( "%s%04d" , $date , $now + 1 ) ;
+		}
+
+		// 最大値を登録
+		if ( $now + $count < 10000 )
+		{
+			$sql  = sprintf( "INSERT INTO serialno_data ( " ) ;
+			$sql .= sprintf( "type , " ) ;
+			$sql .= sprintf( "serialno " ) ;
+			$sql .= sprintf( ") VALUES ( " ) ;
+			$sql .= sprintf( "'%d' , "		, $type ) ;
+			$sql .= sprintf( "'%s' "		, $new_serial ) ;
+			$sql .= sprintf( " )" ) ;
+
+			$record = $this -> executeSQL( $sql ) ;
+			if ( $record )
+				$this -> closeRecord( $record ) ;
+			else
+				$new_serial = 0 ;
+		}
+
+		return $new_serial ;
+	}
+
+}
+?>

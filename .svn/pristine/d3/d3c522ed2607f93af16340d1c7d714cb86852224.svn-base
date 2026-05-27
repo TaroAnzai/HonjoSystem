@@ -1,0 +1,12 @@
+--//
+--// 通信情報
+--//
+DROP TABLE terminal_data ;
+CREATE TABLE terminal_data(
+	terminalid			serial primary key ,								--// index
+	command				int4 not null ,										--// コマンド名
+	filename			text not null ,										--// ファイル名
+	data				text not null ,										--// 電文
+	create_date			timestamp not null default( LOCALTIMESTAMP(0) ) ,	--// 作成日付
+	update_date			timestamp not null default( LOCALTIMESTAMP(0) )		--// 更新日付
+) ;

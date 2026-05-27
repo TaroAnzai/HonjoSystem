@@ -1,0 +1,80 @@
+function recalc()
+{
+	var id ;
+	var m_name ;
+	var n_name ;
+	var m = new Array() ;
+	// FORMの数だけループ
+	for( i = 0 ; i < document.forms.length ; i++ )
+	{
+		// FormIDを取得
+		id = document.forms[i].id ;
+		if( id != "" )
+		{
+			// FormIDを - で分割(merchandise-n の形式を期待)
+			m = new Array() ;
+			m = id.split( "-" ) ;
+			
+			// 分割文字の先頭が merchandise の場合
+			if( m[0] == "merchandise" )
+			{
+				// 再計算FORMの購入数量(num_n)に代入
+				n_name = "num_" + m[1] ;
+				document.getElementById(n_name).value = document.getElementById(id).ci_number.value ;
+			}
+		}
+	}
+	document.getElementById('recalc').submit() ;
+}
+
+function recalcs()
+{
+	var id ;
+	var m_name ;
+	var n_name ;
+	var m = new Array() ;
+	// FORMの数だけループ
+	for( i = 0 ; i < document.forms.length ; i++ )
+	{
+		// FormIDを取得
+		id = document.forms[i].id ;
+		if( id != "" )
+		{
+			// FormIDを - で分割(merchandise-n の形式を期待)
+			m = new Array() ;
+			m = id.split( "-" ) ;
+			
+			// 分割文字の先頭が merchandise の場合
+			if( m[0] == "merchandise" )
+			{
+				// 再計算FORMの購入数量(num_n)に代入
+				n_name = "num_" + m[1] ;
+				document.getElementById(n_name).value = document.getElementById(id).ci_number.value ;
+			}
+		}
+	}
+	document.getElementById('recalc').submit() ;
+}
+
+function	downloadCountUpdate( cid , dlcnt , dltotal )
+{
+	var objParent = window.parent.document ;
+	
+	if ( objParent )
+	{
+		var spanid = "dlcnt-" + cid ;
+		var objSpan = objParent.getElementById( spanid ) ;
+		if ( objSpan )
+		{
+			objSpan.innerHTML = dlcnt ;
+		}
+
+		var spanid = "dltotal" ;
+		var objSpan = objParent.getElementById( spanid ) ;
+		if ( objSpan )
+		{
+			objSpan.innerHTML = dltotal ;
+		}
+	}
+	
+}

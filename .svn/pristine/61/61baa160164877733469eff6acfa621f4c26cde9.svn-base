@@ -1,0 +1,188 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+//
+//	引数
+//		$photoid
+//		$specify_wid
+//		$specify_hgt
+//
+	$color	= 0 ;
+	$scolor	= 0 ;
+	$font	= 0 ;
+
+	$corpid	= -1 ;
+	$specify_wid	= 0 ;
+	$specify_hgt	= 0 ;
+
+	// パスよりパラメータを取得する
+	$path = $_SERVER['PATH_INFO'] ;
+	$path = str_replace( ".png" , "" , $path ) ;
+	$path = str_replace( ".gif" , "" , $path ) ;
+	$path = str_replace( ".jpg" , "" , $path ) ;
+	$arList = explode( "/" , $path ) ;
+
+	$notitle = FALSE ;
+	for ( $i = 1 ; $i < count( $arList ) ; $i ++ )
+	{
+		$flg   = substr( $arList[ $i ] , 0 , 1 ) ;
+		$value = substr( $arList[ $i ] , 1 ) ;
+		switch( $flg )
+		{
+		case	"I" :	// color
+			$corpid = $value ;
+			break ;
+		case	"W" :	// width
+			$specify_wid = intval( $value ) ;
+			break ;
+		case	"H" :	// height
+			$specify_hgt = intval( $value ) ;
+			break ;
+		case	"C" :	// color
+			$color = hexdec( $value ) ;
+			break ;
+		case	"D" :	// shadow color
+			$scolor = hexdec( $value ) ;
+			break ;
+		case	"F" :	// shadow color
+			$font = hexdec( $value ) ;
+			break ;
+		}
+		
+		if ( $arList[ $i ]  == "notitle" )
+			$notitle = TRUE ;
+	}
+
+	if ( $corpid == "" )
+		$corpid = -1 ;
+		
+	if ( $specify_wid == "" )
+		$specify_wid = 360 ;
+
+	$imgh = FALSE ;
+
+	// 背景画像の取り込み
+	$path = sprintf( "./sys_back.png" ) ;
+	$path = realpath( $path ) ;
+	$base = ImageCreateFromPNG( $path ) ;
+	if ( $base != FALSE )
+	{
+		if ( $specify_hgt == "" )
+			$specify_hgt = ImageSy( $base ) ;
+
+		// 画像の作成
+		$maxX = $specify_wid ;
+		$maxY = $specify_hgt ;
+		$imgh = ImageCreateTrueColor( $maxX , $maxY ) ;
+
+		ImageCopyReSized( $imgh , $base , 0 , 0 , 0 , 0 , $specify_wid , $specify_hgt , ImageSx( $base ) , ImageSy( $base ) ) ;
+		ImageDestroy( $base ) ;
+	}
+	else
+	{
+		if ( $specify_hgt == "" )
+			$specify_hgt = 80 ;
+	
+		// 画像の作成
+		$maxX = $specify_wid ;
+		$maxY = $specify_hgt ;
+		$imgh = ImageCreateTrueColor( $maxX , $maxY ) ;
+	}
+
+	if ( $notitle == FALSE )
+	{
+		// 会社情報の読み込み
+		$szCorpName		= "" ;
+		$szCorpName_en	= "" ;
+		
+		$obCorp = new PARTS_Corp ;
+		$arData = $obCorp -> getOwner() ;
+		if ( count( $arData ) > 0 )
+			$arData = $arData[ 0 ] ;
+
+		if ( count( $arData ) != 0 )
+		{
+			// 社名
+			$szCorpName = $arData[ sprintf( "%s_lname" , $obCorp -> alias ) ] ;
+	
+			// 社名
+			$szCorpName_en	 = $arData[ sprintf( "%s_lname_en" , $obCorp -> alias ) ] ;
+		}
+	
+		if ( $szCorpName == "" )
+			$szCorpName = TITLE_CORPORATION ;
+	
+		if ( $szCorpName_en == "" )
+			$szCorpName_en = TITLE_CORPORATION_EN ;
+			
+		
+		$color = 0xffffff ;
+		$scolor = 0x333333 ;
+		ImageDrawText( $imgh , $szCorpName		, 4 , 8 , $color , $scolor , 15 , TRUE ) ;
+		ImageDrawText( $imgh , $szCorpName_en	, 4 , 30 , $color , $scolor , 9 , TRUE ) ;
+	
+		$color = 0x333333 ;
+		$scolor = 0x000000 ;
+		ImageDrawText( $imgh , "コンテンツ管理画面" , 4 , 44 , $color , $scolor , 11 ) ;
+	}
+	
+	header( "Content-type: image/x-png" ) ;
+	header( "Cache-control: no-cache" ) ;
+	imagePNG( $imgh ) ;
+
+	ImageDestroy( $imgh );
+	
+	exit ;
+
+// 文字の表示
+function	ImageDrawText( $img , $text , $x , $y , $color , $scolor , $size , $bShadow = FALSE , $font = 0 )
+{
+	// 文字列をUTF-8に変換する
+	$text = mb_convert_encoding( $text , "UTF-8" , "sjis-win" ) ;
+
+	$arFont = array( DEF_FONT_FILE_JP_KAILUNA , DEF_FONT_FILE_JP_KAILUNA ) ;
+	$font = $arFont[ $font ] ;
+	
+	$fc_r = ( $color >> 16 ) & 0xff ;
+	$fc_g = ( $color >>  8 ) & 0xff ;
+	$fc_b = ( $color       ) & 0xff ;
+
+	$sc_r = ( $scolor >> 16 ) & 0xff ;
+	$sc_g = ( $scolor >>  8 ) & 0xff ;
+	$sc_b = ( $scolor       ) & 0xff ;
+
+	$y = $y + $size ;
+
+	$font_color = ImageColorAllocate( $img , $fc_r , $fc_g , $fc_b ) ;
+	$shadow_color = ImageColorAllocate( $img , $sc_r , $sc_g , $sc_b ) ;
+
+	if ( $bShadow == TRUE )
+	{
+		$min = 0 ;
+		$max = 2 ;
+		if ( $size < 11 )
+		{
+			$min = 0 ;
+			$max = 1 ;
+		}
+	
+		for ( $sx = $min ; $sx <= $max ; $sx ++ )
+		{
+			for ( $sy = $min ; $sy <= $max ; $sy ++ )
+			{
+			ImageTTFText(	$img , $size, 0 ,
+							$x + $sx ,
+							$y + $sy ,
+							$shadow_color , $font , $text ) ;
+			}
+		}
+	}
+	
+	ImageTTFText(	$img , $size, 0 ,
+					$x ,
+					$y ,
+					$font_color , $font , $text ) ;
+}
+
+?>

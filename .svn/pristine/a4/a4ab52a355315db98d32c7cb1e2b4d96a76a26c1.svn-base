@@ -1,0 +1,596 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+	require_once( "class/sale.class.php") ;
+
+	$blams	= new BLAMS() ;
+	$obSale	= new PARTS_Sale() ;
+	$alias	= $obSale -> alias ;
+
+	// 基本パラメータ変換
+	if ( empty( $mode ) == true )
+		$mode = "update" ;
+
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$arSearch = array() ;
+	$arSearch[] = "page" ;
+	$obSale -> assignGlobal( $arSearch ) ;
+
+	// 検索用パラメータ変換
+	if ( ( is_numeric( $S_DATE_Y ) != TRUE ) ||
+		 ( is_numeric( $S_DATE_M ) != TRUE ) )
+	{
+		// 正常値でない場合は、現在年月を該当月にする
+		$S_DATE_Y	= date( 'Y' ) ;
+		$S_DATE_M	= date( 'n' ) ;
+	}
+
+	if ( checkdate( $S_DATE_M , 1 , $S_DATE_Y ) == TRUE )
+	{
+		$tmp_date	= mktime( 0 , 0 , 0 , $S_DATE_M , 1 , $S_DATE_Y ) ;
+		$S_DATE_D	= date( 't' , $tmp_date ) ;
+		$S_DATE		= sprintf( "%04d-%02d-%02d 00:00:00" , $S_DATE_Y , $S_DATE_M , $S_DATE_D ) ;
+	}
+	else
+	{
+		// 正常値でない場合は、現在年月を該当月にする
+		$S_DATE_Y	= date( 'Y' ) ;
+		$S_DATE_M	= date( 'n' ) ;
+		$S_DATE_D	= date( 't' ) ;
+		$S_DATE		= sprintf( "%04d-%02d-%02d 00:00:00" , $S_DATE_Y , $S_DATE_M , $S_DATE_D ) ;
+	}
+
+	if ( $S_MEMBER_FLG == "" )
+		$S_MEMBER_FLG = -1 ;
+
+	$arParamFind = array() ;
+	foreach( $obSale -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page			;
+
+	// WHERE句の初期化
+	$where  = sprintf( "WHERE cart_data.status = 1 " ) ;
+	$where .= sprintf( "AND cart_data.cartid = cartitem_data.cartid " ) ;
+	$where .= sprintf( "AND ( cart_data.billing_status = %d ) " , DF_BILLSTATUS_SETTLED ) ;
+//	$where .= sprintf( "AND ( cart_data.billing_status = %d " , DF_BILLSTATUS_SETTLING ) ;
+//	$where .= sprintf( "OR cart_data.billing_status = %d ) " , DF_BILLSTATUS_SETTLED ) ;
+
+	// 該当月
+	$obTarget = new DateTime( $S_DATE ) ;
+	$where .= sprintf( "AND cart_data.order_date >= to_timestamp( '%s01 000000' , 'YYYYMMDD HH24MISS' ) " , $obTarget -> format( "Ym" ) ) ;
+	$where .= sprintf( "AND cart_data.order_date <= to_timestamp( '%s 235959' , 'YYYYMMDD HH24MISS' ) " , $obTarget -> format( "Ymd" ) ) ;
+
+	// 会員判定フラグ
+//	if ( $S_MEMBER_FLG != -1 )
+//		$where .= sprintf( "AND cart_data.member_flg = '%d' " , $S_MEMBER_FLG ) ;
+
+	$menu = FUNC_SALES ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $where , true ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+
+exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $where , $list_flg )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 該当データ数取得
+	$cnt = 0 ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = sprintf( "SELECT " ) ;
+		$sql .= sprintf( "key_itemid , " ) ;
+		$sql .= sprintf( "SUM( sum_number * merchandise_data.tax ) AS sum_tax " ) ;
+		$sql .= sprintf( "FROM ( " ) ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "cartitem_data.merchandiseid AS key_itemid , " ) ;
+		$sql .= sprintf( "SUM( cartitem_data.number ) AS sum_number " ) ;
+		$sql .= sprintf( "FROM cart_data , cartitem_data " ) ;
+		$sql .= $where ;
+		$sql .= sprintf( "GROUP BY key_itemid " ) ;
+		$sql .= sprintf( ") AS tmp , merchandise_data " ) ;
+		$sql .= sprintf( "WHERE merchandise_data.merchandiseid = key_itemid " ) ;
+		$sql .= sprintf( "GROUP BY key_itemid " ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search  = FetchSearch( $blams , $arParamFind ) ;
+		$search .= FetchMonthly( $blams , $arParamFind ) ;
+	}
+
+	// 登録データがある場合
+	$arList = array() ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $where ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+
+	$arHeader = array(
+		array( "caption" => "商品名"					, "class" => "w256 left" ) ,
+		array( "caption" => "税込価格(円)（税込）"		, "class" => "w192 left" ) ,
+		array( "caption" => "売上個数"					, "class" => "w192 left" ) ,
+		array( "caption" => "売上金額(円)（税込）"		, "class" => "w192 left" ) ,
+	) ;
+
+	if( empty( $search ) == true )
+		$search = "" ;
+
+	if( empty( $paging ) == true )
+		$paging = "" ;
+
+	if( empty( $pageJump ) == true )
+		$pageJump = "" ;
+
+	if( empty( $funcname ) == true )
+		$funcname = "" ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "noanchor_flg"		, true				) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$arFoem = array() ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_DATE_Y" , $S_DATE_Y , 64 - 16  , 4 , IME_OFF ) ;
+	$form  .= $blams -> fetchInputbox( "S_DATE_M" , $S_DATE_M , 48 - 16  , 2 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "該当月" , $form , 128 , 256 , "" , "left" , "middle no-wrap" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, ""				) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, TRUE				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+function	FetchMonthly( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	if ( $S_DATE_M != 1 )
+	{
+		$S_DATE_PREV_Y = $S_DATE_Y ;
+		$S_DATE_PREV_M = $S_DATE_M - 1 ;
+	}
+	else
+	{
+		$S_DATE_PREV_Y = $S_DATE_Y - 1;
+		$S_DATE_PREV_M = 12 ;
+	}
+
+	if ( $S_DATE_M != 12 )
+	{
+		$S_DATE_NEXT_Y = $S_DATE_Y ;
+		$S_DATE_NEXT_M = $S_DATE_M + 1 ;
+	}
+	else
+	{
+		$S_DATE_NEXT_Y = $S_DATE_Y + 1;
+		$S_DATE_NEXT_M = 1 ;
+	}
+
+	unset( $arParamFind[ "S_DATE_Y" ] ) ;
+	unset( $arParamFind[ "S_DATE_M" ] ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "S_DATE_PREV_Y"	, $S_DATE_PREV_Y	) ;
+	$tmpl -> assign( "S_DATE_PREV_M"	, $S_DATE_PREV_M	) ;
+	$tmpl -> assign( "S_DATE_NEXT_Y"	, $S_DATE_NEXT_Y	) ;
+	$tmpl -> assign( "S_DATE_NEXT_M"	, $S_DATE_NEXT_M	) ;
+
+	$data = $tmpl -> fetch( "common/monthly.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $page , $arParamFind , $where )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	// 表示に必要な個数だけデータを取得する
+	$limit  = sprintf( " LIMIT %d OFFSET %d" , NUMBER_PER_PAGE , ( $page * NUMBER_PER_PAGE ) ) ;
+
+	$sql  = sprintf( "SELECT " ) ;
+	$sql .= sprintf( "key_itemid , " ) ;
+	$sql .= sprintf( "SUM( sum_number * merchandise_data.tax ) AS sum_tax " ) ;
+	$sql .= sprintf( "FROM ( " ) ;
+	$sql .= sprintf( "SELECT " ) ;
+	$sql .= sprintf( "cartitem_data.merchandiseid AS key_itemid , " ) ;
+	$sql .= sprintf( "SUM( cartitem_data.number ) AS sum_number " ) ;
+	$sql .= sprintf( "FROM cart_data , cartitem_data " ) ;
+	$sql .= $where ;
+	$sql .= sprintf( "GROUP BY key_itemid " ) ;
+	$sql .= sprintf( ") AS tmp , merchandise_data " ) ;
+	$sql .= sprintf( "WHERE merchandise_data.merchandiseid = key_itemid " ) ;
+	$sql .= sprintf( "GROUP BY key_itemid , merchandise_data.merchandise_masterid " ) ;
+	$sql .= sprintf( "ORDER BY merchandise_data.merchandise_masterid " ) ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			// 総受注金額を表示する
+			$total_tax		= 0 ;
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $index = 0 ; $index < $cnt ; $index ++ )
+			{
+				$sum_tax	= $obDB -> getValue( $record , "sum_tax"		, $index ) ;
+				$total_tax   += $sum_tax ;
+			}
+			$note = sprintf( "<br>&emsp;&emsp;総受注金額：%s&nbsp;円（税込）<br><br>" , number_format( $total_tax ) ) ;
+//			PrintNote( $note ) ;
+
+			// リスト表示
+			$index = $page * NUMBER_PER_PAGE ;
+			for ( $i = 0 ; $i < NUMBER_PER_PAGE ; $i ++ , $index ++ )
+			{
+				if ( $index >= $cnt )
+					break ;
+				$arData		= $obDB -> getValues( $record , $index ) ;
+
+				// データの取得
+				$key_itemid			= $arData[ "key_itemid"			] ;
+				$sum_tax			= $arData[ "sum_tax"			] ;
+
+				$szProductName	= "" ;
+				$szTax			= "" ;
+				$szNumber		= "" ;
+				$sql  = sprintf( "SELECT * FROM merchandise_data , merchandise_master_data " ) ;
+				$sql .= sprintf( "WHERE merchandise_data.status = 1 " ) ;
+				$sql .= sprintf( "AND merchandise_data.merchandise_masterid = merchandise_master_data.merchandise_masterid " ) ;
+				$sql .= sprintf( "AND merchandise_data.merchandiseid = %d " , $key_itemid ) ;
+				$record2 = $obDB -> executeSQL( $sql ) ;
+				if ( $record2 )
+				{
+					if ( $obDB -> getDataCount( $record2 ) > 0 )
+					{
+						// 商品名
+						$szProductName = $obDB -> getValue( $record2 , "name" ) ;
+
+						// 税込価格
+						$tax = $obDB -> getValue( $record2 , "tax" ) ;
+						$szTax = number_format( $tax ) ;
+
+						// 売上個数
+						if ( $tax != 0 )
+							$szNumber = number_format( $sum_tax / $tax ) ;
+						else
+							$szNumber = number_format( 0 ) ;
+					}
+					$obDB -> closeRecord( $record2 ) ;
+				}
+				if ( $szProductName == "" )
+					$szProductName = "不明" ;
+
+				if ( $szTax == "" )
+					$szTax = "不明" ;
+
+				if ( $szNumber == "" )
+					$szNumber = "不明" ;
+
+				// 売上金額
+				$szSumTax = number_format( $sum_tax ) ;
+
+				$arAnchor[ "anchor"			] = $szProductName		;
+				$arAnchor[ "caption"		] = $szProductName		;
+				$arAnchor[ "class"			] = "border left"		;
+				$arAnchor[ "date_format"	] = ""					;
+
+				$arData = array() ;
+				$arData[] = $arAnchor ;
+				$arData[] = array( "caption" => $szTax ,			"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+				$arData[] = array( "caption" => $szNumber ,			"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+				$arData[] = array( "caption" => $szSumTax ,			"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+				$arList[] = $arData ;
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+	
+	return $arList ;
+}
+
+// 検索フォームの表示
+function	PrintSearch( $page , $arParamFind )
+{
+	$S_DATE_Y		= $arParamFind[ "S_DATE_Y"		] ;
+	$S_DATE_M		= $arParamFind[ "S_DATE_M"		] ;
+	$S_MEMBER_FLG	= $arParamFind[ "S_MEMBER_FLG"	] ;
+
+	// 会員判定フラグ
+	$arMemberFlg = array( 0 => "非会員" , 1 => "会員" ) ;
+
+	printf( "	<form action=\"list.php\" method=\"post\">\n" ) ;
+	printf( "	<table class=\"contents\">\n" ) ;
+	printf( "	<tr>\n" ) ;
+
+	// 該当月
+	printf( "		<td>該当月</td>\n" ) ;
+	printf( "		<td>\n" ) ;
+	PrintInputbox( "S_DATE_Y" , $S_DATE_Y , 48 , MAX_YEAR , IME_OFF ) ;
+	printf( "		/\n" ) ;
+	PrintInputbox( "S_DATE_M" , $S_DATE_M , 32 , MAX_MONTH , IME_OFF ) ;
+	printf( "		<td>\n" ) ;
+
+	// 会員判定フラグ
+//	printf( "		<td>会員／非会員</td>\n" ) ;
+//	printf( "		<td>\n" ) ;
+//	PrintSelectbox( "S_MEMBER_FLG" , $S_MEMBER_FLG , $arMemberFlg , 120 , "すべて選択" ) ;
+//	printf( "		<td>\n" ) ;
+
+	printf( "	</tr>\n" ) ;
+	printf( "	</table>\n" ) ;
+
+	printf( "	<table class=\"contents\">\n" ) ;
+	printf( "	<tr>\n" ) ;
+	printf( "		<td>\n" ) ;
+	printf( "			<input type=\"submit\" value=\"検索\" class=\"button\">\n" ) ;
+	printf( "			&nbsp;\n" ) ;
+	printf( "			<input type=\"button\" value=\"前月\" class=\"button\" onClick=\"search_prev.submit();\">\n" ) ;
+	printf( "			<input type=\"button\" value=\"翌月\" class=\"button\" onClick=\"search_next.submit();\">\n" ) ;
+	printf( "		</td>\n" ) ;
+	printf( "	</tr>\n" ) ;
+	printf( "	</table>\n" ) ;
+	printf( "	</form>\n" ) ;
+	printf( "	<br>\n" ) ;
+
+	if ( $S_DATE_M != 1 )
+	{
+		$S_DATE_PREV_Y = $S_DATE_Y ;
+		$S_DATE_PREV_M = $S_DATE_M - 1 ;
+	}
+	else
+	{
+		$S_DATE_PREV_Y = $S_DATE_Y - 1;
+		$S_DATE_PREV_M = 12 ;
+	}
+	printf( "	<form name=\"search_prev\" action=\"list.php\" method=\"post\">\n" ) ;
+	printf( "		<input type=\"hidden\" name=\"S_DATE_Y\" value=\"%s\">\n" , $S_DATE_PREV_Y ) ;
+	printf( "		<input type=\"hidden\" name=\"S_DATE_M\" value=\"%s\">\n" , $S_DATE_PREV_M ) ;
+	printf( "		<input type=\"hidden\" name=\"S_MEMBER_FLG\" value=\"%d\">\n" , $S_MEMBER_FLG ) ;
+	printf( "	</form>\n" ) ;
+
+	if ( $S_DATE_M != 12 )
+	{
+		$S_DATE_NEXT_Y = $S_DATE_Y ;
+		$S_DATE_NEXT_M = $S_DATE_M + 1 ;
+	}
+	else
+	{
+		$S_DATE_NEXT_Y = $S_DATE_Y + 1;
+		$S_DATE_NEXT_M = 1 ;
+	}
+	printf( "	<form name=\"search_next\" action=\"list.php\" method=\"post\">\n" ) ;
+	printf( "		<input type=\"hidden\" name=\"S_DATE_Y\" value=\"%s\">\n" , $S_DATE_NEXT_Y ) ;
+	printf( "		<input type=\"hidden\" name=\"S_DATE_M\" value=\"%s\">\n" , $S_DATE_NEXT_M ) ;
+	printf( "		<input type=\"hidden\" name=\"S_MEMBER_FLG\" value=\"%d\">\n" , $S_MEMBER_FLG ) ;
+	printf( "	</form>\n" ) ;
+}
+
+// 一覧表示
+function	PrintList( $page , $arParamFind , $where )
+{
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = sprintf( "SELECT " ) ;
+		$sql .= sprintf( "key_itemid , " ) ;
+		$sql .= sprintf( "SUM( sum_number * item_data.tax ) AS sum_tax " ) ;
+		$sql .= sprintf( "FROM ( " ) ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "cartitem_data.itemid AS key_itemid , " ) ;
+		$sql .= sprintf( "SUM( cartitem_data.number ) AS sum_number " ) ;
+		$sql .= sprintf( "FROM cart_data , cartitem_data " ) ;
+		$sql .= $where ;
+		$sql .= sprintf( "GROUP BY key_itemid " ) ;
+		$sql .= sprintf( ") AS tmp , item_data " ) ;
+		$sql .= sprintf( "WHERE item_data.itemid = key_itemid " ) ;
+		$sql .= sprintf( "GROUP BY key_itemid , item_data.productid " ) ;
+		$sql .= sprintf( "ORDER BY item_data.productid " ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			// 総受注金額を表示する
+			$total_tax		= 0 ;
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $index = 0 ; $index < $cnt ; $index ++ )
+			{
+				$sum_tax	= $obDB -> getValue( $record , "sum_tax"		, $index ) ;
+				$total_tax   += $sum_tax ;
+			}
+			$note = sprintf( "<br>&emsp;&emsp;総受注金額：%s&nbsp;円（税込）<br><br>" , number_format( $total_tax ) ) ;
+			PrintNote( $note ) ;
+
+			// リストタイトル表示
+			if ( $cnt != 0 )
+			{
+				printf( "	<!-- 表示開始  -->\n" ) ;
+				printf( "	<table class=\"contents\">\n" ) ;
+				printf( "	<tr class=\"list_title\">\n" ) ;
+				printf( "		<td class=\"list_line\"><span class=\"sales_id\">No</span></td>\n" ) ;
+				printf( "		<td class=\"list_line\"><span class=\"sales_name\">商品名</span></td>\n" ) ;
+				printf( "		<td class=\"list_line\"><span class=\"sales_price\">税込価格(円)（税込）</span></td>\n" ) ;
+				printf( "		<td class=\"list_line\"><span class=\"sales_number\">売上個数</span></td>\n" ) ;
+				printf( "		<td class=\"list_line\"><span class=\"sales_sumprice\">売上金額(円)<br>（税込）</span></td>\n" ) ;
+				printf( "	</tr>\n" ) ;
+			}
+
+			// リスト表示
+			$index = $page * NUMBER_PER_PAGE ;
+			for ( $i = 0 ; $i < NUMBER_PER_PAGE ; $i ++ , $index ++ )
+			{
+				if ( $index >= $cnt )
+					break ;
+
+				$clr = $index % 2 ;
+
+				// データの取得
+				$key_itemid	= $obDB -> getValue( $record , "key_itemid"	, $index ) ;
+				$sum_tax	= $obDB -> getValue( $record , "sum_tax"		, $index ) ;
+
+				$szProductName	= "" ;
+				$szTax			= "" ;
+				$szNumber		= "" ;
+				$sql  = sprintf( "SELECT * FROM item_data , product_data " ) ;
+				$sql .= sprintf( "WHERE item_data.status = 1 " ) ;
+				$sql .= sprintf( "AND item_data.productid = product_data.productid " ) ;
+				$sql .= sprintf( "AND item_data.itemid = %d " , $key_itemid ) ;
+				$record2 = $obDB -> executeSQL( $sql ) ;
+				if ( $record2 )
+				{
+					if ( $obDB -> getDataCount( $record2 ) > 0 )
+					{
+						// 商品名
+						$szProductName = $obDB -> getValue( $record2 , "name" ) ;
+
+						// 税込価格
+						$tax = $obDB -> getValue( $record2 , "tax" ) ;
+						$szTax = number_format( $tax ) ;
+
+						// 売上個数
+						if ( $tax != 0 )
+							$szNumber = number_format( $sum_tax / $tax ) ;
+						else
+							$szNumber = number_format( 0 ) ;
+					}
+					$obDB -> closeRecord( $record2 ) ;
+				}
+				if ( $szProductName == "" )
+					$szProductName = "不明" ;
+
+				if ( $szTax == "" )
+					$szTax = "不明" ;
+
+				if ( $szNumber == "" )
+					$szNumber = "不明" ;
+
+				// 売上金額
+				$szSumTax = number_format( $sum_tax ) ;
+
+				printf( "	<tr class=\"list_line%d\">\n" , $clr ) ;
+				printf( "		<td class=\"list_line\"><span class=\"sales_id\">%s</span></td>\n" , $index + 1 ) ;
+				printf( "		<td class=\"list_line\"><span class=\"sales_name\">%s</span></td>\n" , HTMLencode( $szProductName ) ) ;
+				printf( "		<td class=\"list_line\"><span class=\"sales_price\">%s</span></td>\n" , HTMLencode( $szTax ) ) ;
+				printf( "		<td class=\"list_line\"><span class=\"sales_number\">%s</span></td>\n" , HTMLencode( $szNumber ) ) ;
+				printf( "		<td class=\"list_line\"><span class=\"sales_sumprice\">%s</span></td>\n" , HTMLencode( $szSumTax ) ) ;
+				printf( "	</tr>\n" ) ;
+			}
+
+			if ( $cnt != 0 )
+			{
+				printf( "	</table>\n" ) ;
+				printf( "	<!-- 表示終了  -->\n" ) ;
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+}
+
+?>

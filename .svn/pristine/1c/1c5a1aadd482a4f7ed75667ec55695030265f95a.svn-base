@@ -1,0 +1,387 @@
+<?php
+/**
+* BLAMS 基本関数郡 送料用クラス
+*
+* 送料用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+//
+// 送料の価格種類
+//
+$_FUNC = 1 ;
+define( "DEF_PRICE_CARRIAGE"		,	$_FUNC ++	) ;		// 送料
+define( "DEF_PRICE_COOLPACK"		,	$_FUNC ++	) ;		// クール料金
+define( "DEF_PRICE_COD"				,	$_FUNC ++	) ;		// 代引き手数料
+define( "DEF_PRICE_PACKAGE"			,	$_FUNC ++	) ;		// 包装代金
+
+global $arCarriage ;
+$arCarriage = array(
+	DEF_PRICE_CARRIAGE	=> "送料" ,
+	DEF_PRICE_COOLPACK	=> "クール料金" ,
+) ;
+
+global $arCollectable ;
+$arCollectable = array(
+	DEF_PRICE_COD		=> "代引き手数料" ,
+	DEF_PRICE_PACKAGE	=> "包装代金"
+) ;
+
+define( "DEF_PRICE_COMMON"			,	999	) ;		// 全国一律
+
+require_once( "class/db.class.php" ) ;
+require_once( "class/campaign.class.php" ) ;
+require_once( "class/corp.class.php" ) ;
+
+class PARTS_Price extends DB_Common
+{
+	var	$db ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "price_data" ;
+		$alias		= "p" ;
+		$primarykey	= "priceid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> searchkey = array(
+				"S_STATE"			,
+				"S_CORPID"			,
+				"S_TYPE"			,
+			) ;
+	}
+
+	function	getData( $arParam , $page = 0 , $limit_flg = true )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$sql  = "" ;
+			$sql .= sprintf( "SELECT " ) ;
+			$sql .= sprintf( "* " ) ;
+			$sql .= sprintf( "FROM %s " , $this -> tname ) ;
+			$sql .= sprintf( "WHERE status = 1 " ) ;
+
+			$limit = "" ;
+			if ( $priceid != -1 )
+				$sql .= sprintf( "AND priceid = %d " , $priceid ) ;
+			else
+				if ( $limit_flg == true )
+					$limit = sprintf( "LIMIT %d OFFSET %d " , NUMBER_PER_PAGE , ( $page * NUMBER_PER_PAGE ) ) ;
+
+			if ( $corpid != -1 )
+				$sql .= sprintf( "AND corpid = %d " , $corpid ) ;
+
+			if ( $state != -1 )
+				$sql .= sprintf( "AND state = %d " , $state ) ;
+
+			if ( $city != -1 )
+				$sql .= sprintf( "AND city = '%s' " , $city ) ;
+
+			if ( $type != -1 )
+				$sql .= sprintf( "AND type = %d " , $type ) ;
+
+			if ( $where != -1 )
+				$sql .= sprintf( "%s " , $where ) ;
+
+			if ( $order != "" )
+			{
+				if ( $order != -1 )
+				{
+					$sql .= sprintf( "ORDER BY %s " , $order ) ;
+				}
+				else
+				{
+					$sql .= sprintf( "ORDER BY " ) ;
+					$sql .= sprintf( "state , " ) ;
+					$sql .= sprintf( "create_date " ) ;
+				}
+			}
+			$sql .= $limit ;
+			$arData = parent::getData( $sql ) ;
+		}
+		
+		return $arData ;
+	}
+
+	// 送料の計算
+	function	calcPriceTransport( $state , $order_date = "" , $city = "" , $corpid = -1 , $total_number = 0 , $total_tax = 0 , $arItems = array() )
+	{
+		$price = 0 ;
+		$campaign_flg = array() ;
+		$condition_flg = array() ;
+		$arPrice = array() ;
+		$arPrice2 = array() ;
+		$arEachPrice = array() ;
+
+		// 注文日が取得できたら送料キャンペーン中か調べ、キャンペーン中ならその送料を取得する
+		if( $order_date != "" )
+		{
+			$obCampaign = new PARTS_Campaign( $this -> conn ) ;
+
+			$arWhere = array() ;
+			$arWhere[ "edit_flg"	]  = DEF_EDITSTATUS_OPENED ;
+			$arWhere[ "kind"		]  = DEF_CAMPAIGN_TRANSPORT ;
+			$arWhere[ "where"		]  = "" ;
+			$arWhere[ "where"		] .= sprintf( "AND %s.start_date <= '%s' " , $obCampaign -> alias , $order_date ) ;
+			$arWhere[ "where"		] .= sprintf( "AND %s.end_date >= '%s' " , $obCampaign -> alias , $order_date ) ;
+			$arCampaign = $obCampaign -> getData( $arWhere , 0 , false ) ;
+			if( count( $arCampaign ) > 0 )
+			{
+				for( $i = 0 ; $i < count( $arCampaign ) ; $i ++ )
+				{
+					$key = sprintf( "%s_carriage" , $obCampaign -> alias ) ;
+					$condition_number	= $arCampaign[ $i ][ $obCampaign -> alias . "_condition_number" ] ;
+					$number				= $arCampaign[ $i ][ $obCampaign -> alias . "_number" ] ;
+					$condition_price	= $arCampaign[ $i ][ $obCampaign -> alias . "_condition_price" ] ;
+					$c_price			= $arCampaign[ $i ][ $obCampaign -> alias . "_price" ] ;
+					$merchandiseids		= $arCampaign[ $i ][ $obCampaign -> alias . "_merchandiseid" ] ;
+					$merchandiseids		= trim( $merchandiseids , "{}" ) ;
+					$arMerchandiseids	= array() ;
+					$arMerchandiseids	= split( "," , $merchandiseids ) ;
+
+					foreach( $arItems as $ikey => $value )
+					{
+						if( $condition_number > -1 )
+							$condition_flg[ $ikey ] = true ;
+						if( $condition_price > -1 )
+							$condition_flg[ $ikey ] = true ;
+
+						if( $condition_number == DEF_CAMPAIGN_CONDITION_OVER && $total_number >= $number )
+						{
+							$arPrice[ $ikey ][] = $arCampaign[ $i ][ $key ] ;
+						}
+						else if( $condition_number == DEF_CAMPAIGN_CONDITION_UNDER && $total_number <= $number )
+						{
+							$arPrice[ $ikey ][] = $arCampaign[ $i ][ $key ] ;
+						}
+						else if( $condition_price == DEF_CAMPAIGN_CONDITION_OVER && $total_tax >= $c_price )
+						{
+							$arPrice[ $ikey ][] = $arCampaign[ $i ][ $key ] ;
+						}
+						else if( $condition_price == DEF_CAMPAIGN_CONDITION_UNDER && $total_tax < $c_price )
+						{
+							$arPrice[ $ikey ][] = $arCampaign[ $i ][ $key ] ;
+						}
+						else if( count( $arMerchandiseids ) > 0 )
+						{
+							for( $j = 0 ; $j < count( $arItems[ $ikey ] ) ; $j ++ )
+							{
+								if( in_array( $arItems[ $ikey ][ $j ] , $arMerchandiseids ) )
+								{
+									$arPrice[ $ikey ][] = $arCampaign[ $i ][ $key ] ;
+									break ;
+								}
+							}
+						
+						}
+						else
+						{
+							$arPrice2[ $ikey ] = $arCampaign[ $i ][ $key ] ;
+						}
+					}
+				}
+
+				// 条件あり
+				foreach( $arItems as $ikey => $value )
+				{
+					if( $condition_flg[ $ikey ] == true )
+					{
+						if( count( $arPrice[ $ikey ] ) == 0 )
+							// 条件ありなのに該当しなかった場合
+							$arEachPrice[ $ikey ] = -1 ;
+						else
+							$arEachPrice[ $ikey ] = min( $arPrice[ $ikey ] ) ;
+					}
+					else
+					{
+						$arEachPrice[ $ikey ] = $arPrice2[ $ikey ] ;
+					}
+	
+					$campaign_flg[ $ikey ] = true ;
+				}
+			}
+		}
+
+		// キャンペーン送料が0円（無料）もありえるから、price では分岐させない
+		foreach( $arItems as $ikey => $value )
+		{
+			if( $campaign_flg[ $ikey ] == false || $arEachPrice[ $ikey ] == -1 )
+			{
+				if( $corpid == -1 )
+				{
+					$obCorp = new PARTS_Corp( $this -> conn ) ;
+					$arCorp = $obCorp -> getOwner() ;
+					if ( count( $arCorp ) > 0 )
+						$arCorp = $arCorp[ 0 ] ;
+					$corpid = $arCorp[ sprintf( "%s_corpid" , $obCorp -> alias ) ] ;
+				}
+				
+				if( $ikey == "cool" )
+				{
+					$arWhere = array() ;
+					$arWhere[ "corpid"	] = $corpid ;
+					$arWhere[ "state"	] = $state ;
+					$arWhere[ "city"	] = $city ;
+					$arWhere[ "type"	] = DEF_PRICE_COOLPACK ;
+					$arPrice = $this -> getData( $arWhere , 0 , false ) ;
+					
+					// クール料金がなければ通常料金を取得
+					if( count( $arPrice ) > 0 )
+					{
+						$arEachPrice[ $ikey ] = $arPrice[ 0 ][ "price" ] ;
+					}
+					else
+					{
+						$arWhere[ "type"	] = DEF_PRICE_CARRIAGE ;
+						$arPrice = $this -> getData( $arWhere , 0 , false ) ;
+						$arEachPrice[ $ikey ] = $arPrice[ 0 ][ "price" ] ;
+					}
+				}
+				else
+				{
+					$arWhere = array() ;
+					$arWhere[ "corpid"	] = $corpid ;
+					$arWhere[ "state"	] = $state ;
+					$arWhere[ "city"	] = $city ;
+					$arWhere[ "type"	] = DEF_PRICE_CARRIAGE ;
+					$arPrice = $this -> getData( $arWhere , 0 , false ) ;
+					$arEachPrice[ $ikey ] = $arPrice[ 0 ][ "price" ] ;
+				}
+			}
+//			else
+//			{
+//				$arEachPrice[ $ikey ] = $arEachPrice[ $ikey ] + $arEachPrice[ $ikey ] ;
+//			}
+		}
+		return $arEachPrice ;
+	}
+
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		if( ${ $alias . "_corpid" } == "" )
+			${ $alias . "_corpid" } = -1 ;
+
+		if( ${ $alias . "_state" } == "" )
+			${ $alias . "_state" } = -1 ;
+
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$arParam[ $alias . "_priceid"			] = -1 ;
+		$arParam[ $alias . "_corpid"			] = -1 ;
+		$arParam[ $alias . "_state"				] = -1 ;
+		$arParam[ $alias . "_city"				] = "" ;
+		$arParam[ $alias . "_type"				] = -1 ;
+		$arParam[ $alias . "_price"				] = 0 ;
+		$arParam[ $alias . "_tax"				] = 0 ;
+
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ $alias . "_create_date"		] = $now ;
+		$arParam[ $alias . "_update_date"		] = $now ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$blams = new BLAMS() ;
+
+		$error = "" ;
+		$obDate = new DateTime();
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// 会社
+			if ( ${ $alias . "_corpid" } == -1 )
+				$error .= "・会社が選択されていません。\n" ;
+
+			// 料金種類
+			if ( ${ $alias . "_type" } == -1 )
+				$error .= "・料金種類が選択されていません。\n" ;
+
+			// 重複検査
+			if( ${ $alias . "_corpid" } != -1 && ${ $alias . "_state" } != -1 )
+			{
+				$sql  = sprintf( "SELECT * FROM price_data WHERE status = 1 AND type = %d " , ${ $alias . "_type" } ) ;
+				$sql .= sprintf( "AND corpid = %d " , ${ $alias . "_corpid" } ) ;
+				$sql .= sprintf( "AND state = %d " , ${ $alias . "_state" } ) ;
+				if( ${ $alias . "_city" } != "" )
+					$sql .= sprintf( "AND city = '%s' " , ${ $alias . "_city" } ) ;
+				
+				// 修正の場合、異なるIDで、会社ID・都道府県ID・市町村が存在する際は、重複エラーとする。
+				if ( $mode == "update" )
+					$sql .= sprintf( " AND priceid <> %d " , ${ $alias . "_priceid" } ) ;
+
+				$record = $this -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					if ( $this -> getDataCount( $record ) > 0 )
+						$error .= "・同じ都道府県で既に登録されています。\n" ;
+					$this -> closeRecord( $record ) ;
+				}
+			}
+
+			// 送料の入力検査
+			if ( ${ $alias . "_price" } == "" )
+				$error .= "・送料が入力されていません。\n" ;
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+}
+?>

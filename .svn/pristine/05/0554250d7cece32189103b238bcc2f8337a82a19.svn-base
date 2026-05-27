@@ -1,0 +1,302 @@
+<?php
+//	ini_set( "display_errors" , 1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	// 基本パラメータ変換
+	if ( empty( $mode ) == true )
+		$mode = "update" ;
+
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$menu = FUNC_COLLECTABLE ;
+
+	$blams		= new BLAMS() ;
+	$obPrice	= new PARTS_Price() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obPrice -> assignGlobal( $additional ) ;
+
+	// 検索用パラメータ変換
+	if ( $S_CORPID == "" )
+		$S_CORPID = -1 ;
+
+	if ( $S_TYPE == "" )
+		$S_TYPE = -1 ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obPrice -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page			;
+
+	// WHERE句の初期化
+	$where  = sprintf( "WHERE status = 1 " ) ;
+
+	// 会社IDで検索
+	if ( $S_CORPID != -1 )
+		$where .= sprintf( "AND corpid = %d " , $S_CORPID ) ;
+
+	// 料金種類で検索
+	$szType = "" ;
+	global $arCollectable ;
+	foreach ( $arCollectable as $key => $value )
+	{
+		if ( empty( $szType ) === false )
+			$szType .= ", " ;
+		$szType .= sprintf( "%d " , $key ) ;
+	}
+	
+	if ( $S_TYPE != -1 )
+		$where .= sprintf( "AND type = %d " , $S_TYPE ) ;
+	else
+		$where .= sprintf( "AND type in ( %s ) " , $szType ) ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $where , true ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> FetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $where , $list_flg )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 該当データ数取得
+	$sql  = "" ;
+	$sql .= "SELECT count(*) FROM price_data " ;
+	$sql .= $where ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) != 0 )
+				$cnt = $obDB -> getValue( $record , "count" ) ;
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$arList = array() ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> FetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $where ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> FetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = FetchSearch( $blams , $arParamFind ) ;
+	}
+	$arHeader = array(
+		array( "caption" => "手数料"			, "class" => "w128 left" ) ,
+		array( "caption" => "購入金額"			, "class" => "w128 left" ) ,
+		array( "caption" => "社名"				, "class" => "w512 left" ) ,
+		array( "caption" => "手数料種類"		, "class" => "w128 left" ) ,
+	) ;
+
+	if( empty( $search ) == true )
+		$search = "" ;
+
+	if( empty( $paging ) == true )
+		$paging = "" ;
+
+	if( empty( $pageJump ) == true )
+		$pageJump = "" ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	global $arCollectable ;
+	$obCorp			= new PARTS_Corp() ;
+	$arWhere = array() ;
+	$arCorp = $obCorp -> getList( $arWhere ) ;
+
+	$arForm[] = array() ;
+
+	$value = "" ;
+	$form	= $blams -> FetchSelectbox( "S_CORPID" , $S_CORPID , $arCorp , 256 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> FetchTDTD( "社名" , $form , 96 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+	$form	= $blams -> FetchSelectbox( "S_TYPE" , $S_TYPE , $arCollectable , 120 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> FetchTDTD( "手数料種類" , $form , 96 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER , 1 , 1 , 3 ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, ""				) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $page , $arParamFind , $where )
+{
+	global $obPrice ;
+	$alias = $obPrice -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	// 表示に必要な個数だけデータを取得する
+	$limit  = sprintf( " LIMIT %d OFFSET %d" , NUMBER_PER_PAGE , ( $page * NUMBER_PER_PAGE ) ) ;
+
+	$sql  = "" ;
+	$sql .= sprintf( "SELECT * FROM price_data %s ORDER BY corpid , type , state %s" , $where ,  $limit ) ;
+
+	$obCorp	= new PARTS_Corp() ;
+	$obDB	= new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $index = 0 ; $index < $cnt ; $index ++ )
+			{
+				// データの取得
+				$arData		= $obDB -> getValues( $record , $index ) ;
+				
+				$priceid		= $arData[ "priceid"		] ;
+				$corpid			= $arData[ "corpid"			] ;
+				$type			= $arData[ "type"			] ;
+				$price			= $arData[ "price"			] ;
+				$tax			= $arData[ "tax"			] ;
+
+				// 社名
+				$szCorp = "" ;
+				$arCorp = array() ;
+				$arCorp = $obCorp -> getAt( $corpid ) ;
+				$szCorp = $arCorp[ $obCorp -> alias . "_lname" ] ;
+
+				if ( $szCorp == "" )
+					$szCorp = "不明" ;
+
+				// 料金種類
+				global	$arCollectable ;
+				$szCarriage  = $arCollectable[ $type ] ;
+				if ( empty( $szCarriage ) === true )
+					$szCarriage = "不明" ;
+
+				// 購入金額
+				$szPrice = sprintf( "%s円未満" , number_format( $price ) ) ;
+				if ( $tax == 0 )
+					$szTax = "一律" ;
+				
+				// 手数料
+				$szTax = sprintf( "%s円" , number_format( $tax ) ) ;
+
+				$arAnchor[ "url" 			] = "edit.php"		;
+				$arAnchor[ "idname"			] = $alias . "_priceid"		;
+				$arAnchor[ "id"				] = $priceid		;
+				$arAnchor[ "param"			] = $param			;
+				$arAnchor[ "anchor"			] = $szTax			;
+				$arAnchor[ "caption"		] = $szTax			;
+				$arAnchor[ "class"			] = "border right"	;
+				$arAnchor[ "script"			] = ""				;
+				$arAnchor[ "date_format"	] = ""				;
+
+				$arData = array() ;
+				$arData[] = $arAnchor ;
+				$arData[] = array( "caption" => $szPrice ,		"class" => "border right" , "date_format" => ""			, "anchor" => "" ) ;
+				$arData[] = array( "caption" => $szCorp ,		"class" => "border left" , "date_format" => ""			, "anchor" => "" ) ;
+				$arData[] = array( "caption" => $szCarriage ,	"class" => "border left" , "date_format" => ""			, "anchor" => "" ) ;
+				$arList[] = $arData ;
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+	
+	return $arList ;
+}
+
+
+?>

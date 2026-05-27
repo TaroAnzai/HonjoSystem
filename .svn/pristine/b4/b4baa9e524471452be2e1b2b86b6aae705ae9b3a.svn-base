@@ -1,0 +1,459 @@
+<?php
+	//ini_set( "display_errors" , 1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	$mode = "" ;
+	$func = "" ;
+
+	// 登録ボタン名によって処理を分ける
+	$arMode = array( "append" , "update" , "delete" , "copy" , "renumber" ) ;
+	GetSystemMode( $mode , $func , $arMode ) ;
+
+	// 基本パラメータ変換
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams	= new BLAMS() ;
+	$obMenu	= new PARTS_Menu() ;
+
+	$alias 		= $obMenu -> alias ;
+	$primarykey	= $obMenu -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// 編集データ保存
+	$arParam = array() ;
+
+	$additional = array() ;
+	$obMenu -> assignGlobal( $additional , $arParam ) ;
+
+	// タイトル取得時のキー初期化＆大中小項目で検索
+	global	$arFunctionTitle ;
+	$pageFunc = $arFunctionTitle[ $obMenu -> kind ] ;
+	if ( $pageFunc == "" )
+		$pageFunc = -1 ;
+
+	// 機能
+	$input_error = "" ;
+	$copy_error = "" ;
+	switch ( $mode )
+	{
+	case	"append" :
+		$input_error = $obMenu -> checkData( $mode , $func , $arParam ) ;
+		if ( $input_error == "" )
+			$obMenu -> insertData( $arParam , $input_error ) ;
+		break ;
+		
+	case	"update" :
+		$input_error = $obMenu -> checkData( $mode , $func , $arParam ) ;
+		if ( $input_error == "" )
+			$obMenu -> updateData( $arParam , $input_error ) ;
+		break ;
+		
+	case	"delete" :
+		$input_error = $obMenu -> checkData( $mode , $func , $arParam ) ;
+		if ( $input_error == "" )
+			$obMenu -> deleteData( $arParam , $input_error ) ;
+		break ;
+		
+	case	"copy" :
+		$copy_error = $obMenu -> checkData( $mode , $func , $arParam ) ;
+		if ( $copy_error == "" )
+		{
+			$obMenu -> copyData( $arParam , $copy_error ) ;
+			
+			$category1 = $destcategory1 ;
+			$category2 = $destcategory2 ;
+		}
+		break ;
+	}
+
+	$arError = array() ;
+	$arError[ "input" ] = $input_error ;
+	$arError[ "copy" ] = $copy_error ;
+
+//	debug( $arParam ) ;
+//	debug( $mode ) ;
+
+	// 該当データ数取得
+	$arCategory = array() ;
+	$arMenuCategory = array() ;
+	$cnt = 0 ;
+
+	$sort_error = "" ;
+	if ( $pageFunc != -1 )
+	{
+		if ( $mode == "renumber" )
+		{
+			$cid	= ${ $alias . "_corpid"			} ;
+			$mid	= ${ $alias . "_menucategoryid"	} ;
+			$oc1	= ${ $alias . "_category1"		} ;
+			$oc2	= ${ $alias . "_category2"		} ;
+			$oc3	= ${ $alias . "_category3"		} ;
+			
+			switch ( $func )
+			{
+			case	"riseup" :
+				$sort_error = $obMenu -> riseup( $mid , $oc1 , $oc2 , $oc3 , $cid ) ;
+				break ;
+			
+			case	"falldown" :
+				$sort_error = $obMenu -> falldown(  $mid , $oc1 , $oc2 , $oc3 , $cid ) ;
+				break ;
+			}
+
+			$arParam[ $alias . "_standard"	] = -1 ;
+			$arParam[ $alias . "_category1"	] = -1 ;
+			$arParam[ $alias . "_category2"	] = -1 ;
+			$arParam[ $alias . "_category3"	] = -1 ;
+		}
+
+		$arError[ "sort" ] = $sort_error ;
+
+		// WHERE句の初期化
+		$arWhere = array() ;
+		$arWhere[ "corpid"	] = ${ $alias . "_corpid" } ;
+		$arMenuCategory = $obMenu -> getTree( $arWhere , $arCategory ) ;
+	}
+
+	$menu = FUNC_MENU ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+	// 登録フォームの表示
+	$input	= fetchCategoryInput( $blams , $obMenu , $arParam , $arCategory , $arMenuCategory ) ;
+	$copy	= "" ;
+
+	// 自社情報選択の表示
+	$corp_input = fetchCorpInput( $blams , $obMenu , $arParam ) ;
+
+	// リスト表示
+	$data = fetchList( $blams , $funcname , $arParam , $arCategory , $input , $copy , $arError , $corp_input , $obMenu ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> FetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+// カテゴリーの入力フォーム
+function	FetchCategoryInput( $blams , $obMenu , $arParam , $arCategory , $arMenuCategory )
+{
+	$alias = $obMenu -> alias ;
+
+	$dummyForm = FetchCategoryForm( $blams , "" , $alias , $arCategory ) ;
+
+	// パラメータからデータを取り出す
+	foreach ( $arParam as $key => $value )
+		${ $key } = $value ;
+
+	$tsize = 160 ;
+	$isize = $tsize - 16 ;
+
+	$arCol = array() ;
+	$arCol[]	= $blams -> FetchTH( "メニュー種類" , $tsize , "" , "left" , TRUE ) ;
+	$arCol[]	= $blams -> FetchTH( "レベル1" , $tsize , "" , "left" ) ;
+	$arCol[]	= $blams -> FetchTH( "レベル2" , $tsize , "" , "left" ) ;
+	$arCol[]	= $blams -> FetchTH( "レベル3" , $tsize , "" , "left" ) ;
+
+	$data		 = "" ;
+	$data		.= $blams -> FetchButton( "submit" , "append" , "登録" , "minibutton" ) ;
+	$data		.= $blams -> FetchButton( "submit" , "update" , "更新" , "minibutton" ) ;
+	$data		.= $blams -> FetchButton( "submit" , "delete" , "削除" , "minibutton" ) ;
+	$arCol[]	= $blams -> FetchTD( $data , 160 , "" , "center bottom" , BLAMS_FORMAT_NOBORDER , 1 , 6 ) ;
+
+	$arForm[]	= $arCol ;
+
+	$arCol = array() ;
+	$js = sprintf( "ChangeMenuCategory( -999 , 'edit_form' , '%s' )" , $alias ) ;
+	$data		= $blams -> FetchSelectbox( $alias . "_menucategory" , ${ $alias . "_menucategory" } , $arMenuCategory	, $isize , "" , FALSE , $js ) ;
+	$arCol[]	= $blams -> FetchTD( $data , $tsize , "col1" , "left" ) ;
+
+	$js = sprintf( "ChangeCategory1( -999 , 'edit_form' , '%s' )" , $alias ) ;
+	$data		= $blams -> FetchSelectbox( $alias . "_category1" , ${ $alias . "_category1" } , array()	, $isize , "新規作成" , FALSE , $js ) ;
+	$arCol[]	= $blams -> FetchTD( $data , $tsize , "col1" , "left" ) ;
+
+	$js = sprintf( "ChangeCategory2( -999 , 'edit_form' , '%s' )" , $alias ) ;
+	$data		= $blams -> FetchSelectbox( $alias . "_category2" , ${ $alias . "_category2" } , array()	, $isize , "新規作成" , FALSE , $js ) ;
+	$arCol[]	= $blams -> FetchTD( $data , $tsize , "col1" , "left" ) ;
+	
+	$js = "" ;
+	$data		= $blams -> FetchSelectbox( $alias . "_category3" , ${ $alias . "_category3" } , array()	, $isize , "新規作成" , FALSE , $js ) ;
+	$arCol[]	= $blams -> FetchTD( $data , $tsize , "col1" , "left" ) ;
+	$arForm[]	= $arCol ;
+
+	$arCol = array() ;
+	$arCol[]	= $blams -> FetchTH( "機能参照"		, $tsize , "" , "left" ) ;
+	$arCol[]	= $blams -> FetchTH( "リンク"		, $tsize , "" , "left" ) ;
+	$arCol[]	= $blams -> FetchTH( "タイトル"		, $tsize , "" , "left" ) ;
+	$arCol[]	= $blams -> FetchTH( "スタイル名"	, $tsize , "" , "left" ) ;
+	$arForm[]	= $arCol ;
+
+	global	$arPresonalNavi ;
+	$keys = array_keys( $arPresonalNavi ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		$arPresonalNavi_local[ $keys[ $i ] ] = $arPresonalNavi[ $keys[ $i ] ][ "anchor" ] ;
+	$arPresonalNavi_local[ 99 ] = "ユーザ定義" ;
+
+	$standardForm = FetchStandardForm( $blams , $alias , $arPresonalNavi ) ;
+
+	$arCol = array() ;
+	$js = sprintf( "ChangeStandard( 'edit_form' , '%s' )" , $alias ) ;
+	$data		= $blams -> FetchSelectbox( $alias . "_standard" , ${ $alias . "_standard" } , $arPresonalNavi_local , $isize , "ユーザ定義" , FALSE , $js ) ;
+	$arCol[]	= $blams -> FetchTD( $data , $tsize , "col1" , "left" ) ;
+	$data		= $blams -> FetchInputbox( $alias . "_url" , ${ $alias . "_url" } , $isize , MAX_CATEGORYNAME , IME_OFF ) ;
+	$arCol[]	= $blams -> FetchTD( $data , $tsize , "col1" , "left" ) ;
+	$data		= $blams -> FetchInputbox( $alias . "_anchor" , ${ $alias . "_anchor" } , $isize , MAX_CATEGORYNAME , IME_ON ) ;
+	$arCol[]	= $blams -> FetchTD( $data , $tsize , "col1" , "left" ) ;
+	$data		= $blams -> FetchInputbox( $alias . "_class" , ${ $alias . "_class" } , $isize , MAX_CATEGORYNAME , IME_OFF ) ;
+	$arCol[]	= $blams -> FetchTD( $data , $tsize , "col1" , "left" ) ;
+	$arForm[]	= $arCol ;
+
+	$arCol = array() ;
+	$arCol[]	= $blams -> FetchTH( "説明文"	, $tsize * 4 , "" , "left" , BLAMS_FORMAT_NONE , 4 , 1 ) ;
+	$arForm[]	= $arCol ;
+
+	$arCol = array() ;
+	$data		= $blams -> FetchInputbox( $alias . "_subject" , ${ $alias . "_subject" } , $tsize * 4 - 16 , MAX_CATEGORYNAME , IME_ON ) ;
+	$arCol[]	= $blams -> FetchTD( $data , $tsize , "col1" , "left" , BLAMS_FORMAT_NONE , 4 , 1 ) ;
+	$arForm[]	= $arCol ;
+
+	// corpid は hidden で持っていて欲しい
+	$arParamFind[ $alias . "_corpid" ] = $arParam[ $alias . "_corpid" ] ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "alias"			, $alias		) ;
+	$tmpl -> assign( "edit_url"			, "list.php"	) ;
+	$tmpl -> assign( "search_data"		, $arParamFind	) ;
+	$tmpl -> assign( "standard_form"	, $standardForm	) ;
+	$tmpl -> assign( "dummy_form"		, $dummyForm	) ;
+	$tmpl -> assign( "form_data"		, $arForm		) ;
+	$data = $tmpl -> fetch( "menu/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// カテゴリーのリスト表示
+function	fetchList( $blams , $funcname , $arParam , $arCategory , $input , $copy , $arError , $corp_input , $obMenu )
+{
+	$alias = $obMenu -> alias ;
+
+	foreach ( $arParam as $key => $value )
+		${ $key } = $value ;
+
+	$tree = fetchCategoryTree( $blams , $obMenu , "" , $arCategory , 0 , 0 , 0 , 0 , 1 , ${ $alias . "_corpid" } , ${ $alias . "_menucategoryid" } , $alias ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"		, DEF_SITE_ROOTPATH				) ;
+	$tmpl -> assign( "corp_sel"		, $corp_input					) ;
+	$tmpl -> assign( "funcname"		, $funcname						) ;
+	$tmpl -> assign( "input_error"	, $arError[ "input" ]			) ;
+	$tmpl -> assign( "copy_error"	, $arError[ "copy" ]			) ;
+	$tmpl -> assign( "input"		, $input						) ;
+	$tmpl -> assign( "copy"			, $copy							) ;
+	$tmpl -> assign( "tree"			, $tree							) ;
+	$tmpl -> assign( "alias"		, $alias						) ;
+	$tmpl -> assign( "menucategory"	, ${ $alias . "_menucategory" }	) ;
+	$tmpl -> assign( "category1"	, ${ $alias . "_category1" }	) ;
+	$tmpl -> assign( "category2"	, ${ $alias . "_category2" }	) ;
+	$tmpl -> assign( "category3"	, ${ $alias . "_category3" }	) ;
+	$data = $tmpl -> fetch( "menu/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+// カテゴリーツリーの表示
+function	fetchCategoryTree( $blams , $obMenu , $parent , $arCategory , $menucategory , $category1 , $category2 , $category3 , $level = 1 , $corpid = -1 , $menucategoryid = -1 , $alias )
+{
+	$alias = $obMenu -> alias ;
+
+	$arTree = array() ;
+
+	$cnt = count( $arCategory ) ;
+
+//debug( $arCategory ) ;
+
+	$data = "" ;
+	if ( $cnt > 0 )
+	{
+		$arData = array() ;
+		
+		$keys	= array_keys( $arCategory )  ;
+
+		$prev = -1 ;
+		$next = -1 ;
+
+		// Treeデータの保存
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			$arResult = $arCategory[ $keys[ $i ] ] ;
+			$arMe = $arResult[ 0 ] ;
+			unset( $arResult[ 0 ] ) ;
+
+			if ( $parent != "" )
+				$arData[ "name"		]	= sprintf( "%s-%d" , $parent , $keys[ $i ] ) ;
+			else
+				$arData[ "name"		]	= sprintf( "%d" , $keys[ $i ] ) ;
+
+			switch( $level )
+			{
+			case	1 :
+				$menucategory = $keys[ $i ] ;
+				break ;
+			case	2 :
+				$category1 = $keys[ $i ] ;
+				break ;
+			case	3 :
+				$category2 = $keys[ $i ] ;
+				break ;
+			case	4 ;
+				$category3 = $keys[ $i ] ;
+				break ;
+			}
+
+			$subcnt = count( $arResult ) ;
+			if ( $subcnt > 0 )
+			{
+				$arSubCategory = array_values( $arResult ) ;
+				$subkey	= array_keys( $arSubCategory[ 0 ][ 0 ] )  ;
+				$arData[ "idname"	] = sprintf( "%s-%d" , $arData[ "name" ] , $subkey[ 0 ] ) ;
+			}
+
+			if ( $i < $cnt - 1 )
+				$next = $keys[ $i + 1 ] ;
+			$me	= array_keys( $arMe )  ;
+			$arData[ "corpid"			] = $corpid ;
+			$arData[ "menucategoryid"	] = $menucategoryid ;
+			$arData[ "subject"			] = $arMe[ $me[ 0 ] ] ;
+			$arData[ "child"			] = fetchCategoryTree( $blams , $obMenu , $arData[ "name" ] , $arResult , $menucategory , $category1 , $category2 , $category3 , $level + 1 , $corpid , $menucategoryid , $alias ) ;
+			$arData[ "menucategory"		] = $menucategory ;
+			$arData[ "category1"		] = $category1 ;
+			$arData[ "category2"		] = $category2 ;
+			$arData[ "category3"		] = $category3 ;
+			$arData[ "current"			] = $keys[ $i ] ;
+			$arData[ "prev"				] = $prev ;
+			$arData[ "next"				] = $next ;
+			
+			if ( empty( $arMe[ "detail" ] ) == false )
+			{
+				$arData[ "detail"			] = $arMe[ "detail" ] ;
+				if ( empty( $arMe[ "detail" ][ "standard" ] ) == false )
+					$arData[ "standard"			] = $arMe[ "detail" ][ "standard" ] ;
+			}
+			$arTree[] = $arData ;
+
+			$prev = $keys[ $i ] ;
+		}
+		
+		$tmpl = $blams -> tmpl ;
+		$tmpl -> assign( "rootpath"		, DEF_SITE_ROOTPATH		) ;
+		$tmpl -> assign( "level"		, $level				) ;
+		$tmpl -> assign( "alias"		, $alias				) ;
+		$tmpl -> assign( "tree_data"	, $arTree				) ;
+		$data = $tmpl -> fetch( "menu/tree.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+	}
+	return $data ;
+}
+
+// カテゴリーフォームの表示
+function	fetchCategoryForm( $blams , $upper , $alias , $arCategory )
+{
+	$cnt = count( $arCategory ) ;
+	$data = "" ;
+	if ( $cnt > 0 )
+	{
+		$arForm			= array() ;
+		$arCategorySum	= array() ;
+
+		$key	= array_keys( $arCategory )  ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			// 自レベルの配列の作成
+			$subkey = array_keys( $arCategory[ $key[ $i ] ][ 0 ] ) ;
+			$value = array_values( $arCategory[ $key[ $i ] ][ 0 ] ) ;
+			$arCategorySum[ $key[ $i ] ] = $value[ 0 ] ;
+
+			$level = "" ;
+			if ( $upper != "" )
+				$level = "-" ;
+			$level = sprintf( "%s%s%d" , $upper , $level , $key[ $i ] ) ;
+
+			// 再帰処理の起動
+			$arSubCategory = $arCategory[ $key[ $i ] ] ;
+			unset( $arSubCategory[ 0 ] ) ;
+			$arForm[] = FetchCategoryForm( $blams , $level , $alias , $arSubCategory ) ;
+
+		}
+
+		$tmpl = $blams -> tmpl ;
+		$tmpl -> assign( "alias"			, $alias			) ;
+		$tmpl -> assign( "upper"			, $upper			) ;
+		$tmpl -> assign( "category_data"	, $arCategorySum	) ;
+		$tmpl -> assign( "form_data"		, $arForm			) ;
+		$data = $tmpl -> fetch( "menu/dummyform.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+	}
+	return $data ;
+}
+
+// 標準メニューのフォームの出力
+function	fetchStandardForm( $blams , $alias , $arStandard )
+{
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "alias"			, $alias		) ;
+	$tmpl -> assign( "standard_data"	, $arStandard	) ;
+	$data = $tmpl -> fetch( "menu/standardform.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	
+	return $data ;
+}
+
+function	fetchCorpInput( $blams , $odMenu , $arParam )
+{
+	$alias = $odMenu -> alias ;
+
+	$S_CORPID = $arParam[ $alias . "_corpid" ] ;
+
+	$obCorp			= new PARTS_Corp() ;
+	$cp_alias		= $obCorp -> alias ;
+	$arSelfGroup	= $obCorp -> getOwner() ;
+
+	for( $i = 0 ; $i < count( $arSelfGroup ) ; $i ++ )
+	{
+		$corpid		= $arSelfGroup[ $i ][ $cp_alias . "_corpid"	] ;
+		$name		= $arSelfGroup[ $i ][ $cp_alias . "_name"	] ;
+
+		$arSelfGroupList[ $corpid ] = $name ;
+	}
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$isize	= $vsize - 16 ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+	$isize3	= $vsize3 - 16 ;
+
+	$value = "" ;
+	$form   = $blams -> FetchSelectbox( "S_CORPID" , $S_CORPID , $arSelfGroupList , $isize ,  "" , FALSE , "setCorpID(this.value)" ) ;
+	$td		= $blams -> FetchTD( $form , $tsize , "col1" , "left" ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "form"	, $td	) ;
+	$data = $tmpl -> fetch( "menu/select_corp.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+?>

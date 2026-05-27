@@ -1,0 +1,8 @@
+function deleteitem( cartitemid )
+{
+	if( cartitemid != "" )
+	{
+		document.getElementById( 'ci_cartitemid' ).value = cartitemid ;
+		document.getElementById( 'deleteitem' ).submit() ;
+	}
+}

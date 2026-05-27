@@ -1,0 +1,287 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php" ) ;
+
+	// 基本パラメータ変換
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams		= new BLAMS() ;
+	$obMailmag	= new PARTS_Mailmag() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obMailmag -> assignGlobal( $additional ) ;
+	
+	// 検索用パラメータ変換
+	if ( $S_TYPE == "" )
+		$S_TYPE = -1 ;
+
+	if ( $S_SEND_TYPE == "" )
+		$S_SEND_TYPE = -1 ;
+
+	if ( $S_SEND_FLG == "" )
+		$S_SEND_FLG = -1 ;
+
+	if ( $S_EDIT_FLG == "" )
+		$S_EDIT_FLG = -1 ;
+
+	// 検索用パラメータの保存
+	$arParamFind = array() ;
+	foreach( $obMailmag -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"		] = $page		;
+
+	$menu = FUNC_MAILMAGAZINE ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $obMailmag , true ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+	exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $obMailmag , $list_flg )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	foreach ( $arParamFind as $key => $value )
+		${ $key } = $value ;
+
+	$arWhere = array() ;
+	
+	if ( $S_TYPE != -1 )
+		$arWhere[ "type"		] = $S_TYPE ;
+	if ( $S_SEND_TYPE != -1 )
+		$arWhere[ "send_type"	] = $S_SEND_TYPE ;
+	if ( $S_SEND_FLG != -1 )
+		$arWhere[ "send_flg"	] = $S_SEND_FLG ;
+	if ( $S_EDIT_FLG != -1 )
+		$arWhere[ "edit_flg"	] = $S_EDIT_FLG ;
+	
+	$order  = "" ;
+	$order .= sprintf( "%s.edit_flg    , " , $obMailmag -> alias ) ;
+	$order .= sprintf( "%s.send_flg    , " , $obMailmag -> alias ) ;
+	$order .= sprintf( "%s.send_type   , " , $obMailmag -> alias ) ;
+	$order .= sprintf( "%s.update_date   " , $obMailmag -> alias ) ;
+	$arWhere[ "order"		]	= $order ;
+
+	$cnt = 0 ;
+	if ( $obMailmag -> isOpen() == true )
+	{
+		$cnt		= $obMailmag -> getCount( $arWhere ) ;
+		$arMailmag	= $obMailmag -> getData( $arWhere , $page , NUMBER_PER_PAGE ) ;
+	}
+	
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$arList = array() ;
+	$paging = 0 ;
+	$pageJump = 0 ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $obMailmag , $arWhere ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = FetchSearch( $blams , $arParamFind , $obMailmag ) ;
+	}
+	$arHeader = array(
+		array( "caption" => "表題"				, "class" => "w496 left" ) ,
+		array( "caption" => "種類"				, "class" => "w080 center" ) ,
+		array( "caption" => "送信状態"			, "class" => "w080 center" ) ,
+		array( "caption" => "送信方法"			, "class" => "w120 center" ) ,
+		array( "caption" => "送信時間"			, "class" => "w120 center" ) ,
+		array( "caption" => "編集状態"			, "class" => "w080 center" ) ,
+	) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	foreach ( $arParamFind as $key => $value )
+		${ $key } = $value ;
+
+	global	$arEditStatus ;			// 編集状態
+	$arEditStatus_local = $arEditStatus ;
+	unset( $arEditStatus_local[ DEF_EDITSTATUS_DELETED ] ) ;
+	global	$arMailMagType ;		// メールマガジン種類
+	global	$arMailMagSendType ;	// メールマガジン送信方法
+	global	$arMailMagSendFlg ;		// メールマガジン送信状態
+
+	$arForm = array() ;
+
+	$value = "" ;
+	$form	= $blams -> FetchSelectbox( "S_TYPE" , $S_TYPE , $arMailMagType , 120 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> FetchTDTD( "タイプ" , $form , 88 , 120 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form	= $blams -> FetchSelectbox( "S_SEND_TYPE" , $S_SEND_TYPE , $arMailMagSendType , 120 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> FetchTDTD( "送信方法" , $form , 88 , 120 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form	= $blams -> FetchSelectbox( "S_SEND_FLG" , $S_SEND_FLG , $arMailMagSendFlg , 120 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> FetchTDTD( "送信状態" , $form , 88 , 120 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form	= $blams -> FetchSelectbox( "S_EDIT_FLG" , $S_EDIT_FLG , $arEditStatus_local , 120 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> FetchTDTD( "編集状態" , $form , 88 , 120 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $page , $arParamFind , $obMailmag , $arWhere )
+{
+	// ローカル変数へ展開する
+	foreach ( $arParamFind as $key => $value )
+		${ $key } = $value ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	$arResult = $obMailmag -> arData ;
+	$alias = $obMailmag -> alias ;
+	
+	global	$arMailMagSendFlg ;
+	global	$arMailMagType ;
+	global	$arMailMagSendType ;
+	global	$arEditStatus ;
+
+	$cnt = count( $arResult ) ;
+	for ( $index = 0 ; $index < $cnt ; $index ++ )
+	{
+		// データの取得
+		$arData		= $arResult[ $index ] ;
+		
+		foreach ( $arData as $key => $value )
+			${ $key } = $value ;
+
+		// 送信状態
+		$szMailMagSendFlg = $arMailMagSendFlg[ ${ $alias . "_send_flg" } ] ;
+		if ( $szMailMagSendFlg == "" )
+			$szMailMagSendFlg = "不明" ;
+	
+		// 種類
+		$szMailMagType = $arMailMagType[ ${ $alias . "_type" } ] ;
+		if ( $szMailMagType == "" )
+			$szMailMagType = "不明" ;
+	
+		// 送信方法
+		$szMailMagSendType = $arMailMagSendType[ ${ $alias . "_send_type" } ] ;
+		if ( $szMailMagSendType == "" )
+			$szMailMagSendType = "不明" ;
+	
+		// 送信日時
+		if ( ${ $alias . "_send_date" } != "0001-01-01 00:00:00" )
+		{
+			$date = new DateTime( ${ $alias . "_send_date" } ) ;
+			$szSend_date  = $date -> format( "Y/m/d H:i" ) ;
+		}
+		else
+		{
+			$szSend_date = "" ;
+		}
+
+		// 編集状態
+		$szEditStatus = $arEditStatus[ ${ $alias . "_edit_flg" } ] ;
+		if ( $szEditStatus == "" )
+			$szEditStatus = "不明" ;
+
+		$arAnchor[ "url" 		] = "edit.php"					;
+		$arAnchor[ "idname"		] = $alias . "_mailmagid"		;
+		$arAnchor[ "id"			] = ${ $alias . "_mailmagid" }	;
+		$arAnchor[ "param"		] = $param						;
+		$arAnchor[ "anchor"		] = ${ $alias . "_subject" }	;
+		$arAnchor[ "caption"	] = ${ $alias . "_subject" }	;
+		$arAnchor[ "class"		] = "border left"				;
+		$arAnchor[ "script"			] = ""						;
+		$arAnchor[ "date_format"	] = ""						;
+
+		$arData = array() ;
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $szMailMagType ,		"class" => "border center"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szMailMagSendFlg ,		"class" => "border center"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szMailMagSendType ,	"class" => "border center"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szSend_date ,			"class" => "border center"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szEditStatus ,			"class" => "border center"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arList[] = $arData ;
+	}
+
+	return $arList ;
+}
+
+?>

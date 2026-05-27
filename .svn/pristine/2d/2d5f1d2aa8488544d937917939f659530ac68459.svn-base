@@ -1,0 +1,78 @@
+<?php
+	require_once( "class/member.class.php" ) ;
+
+// ログイン画面の表示
+function	fetchLogin( $func , $type = "" )
+{
+	global	$_SERVER ;
+	$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+	$NRML = sprintf( "http://%s" , $SERVER_NAME ) ;
+	$SSL = sprintf( "https://%s" , $SERVER_NAME ) ;
+
+	$tmplFile = "" ;
+	if ( $type == "" )
+		$tmplFile = "member/login_index.tmpl" ;
+	else if ( $type == "sub" )
+		$tmplFile = "member/login_sub.tmpl" ;
+
+	global	$arPresonalFunction ;
+	$funcName = array_search( $func , $arPresonalFunction ) ;
+
+	// ログイン情報の取得
+	$memberid = -1 ;
+	$level = -1 ;
+
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	$login = "" ;
+
+	$obMember = new PARTS_Member( $obSession -> conn ) ;
+	if ( $obMember -> isOpen() == true )
+	{
+		// ユーザ情報の取得
+		if ( $memberid != -1 )
+		{
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = $memberid ;
+			$arMember = $obMember -> getData( $arWhere ) ;
+			if ( count( $arMember ) == 0 )
+				$memberid = -1 ;
+			else
+				$level = $arMember[ 0 ][ sprintf( "%s_level" , $obMember -> alias ) ] ;
+		}
+	
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "memberid"		, $memberid ) ;
+		$tmpl -> assign( "funcName"		, $funcName ) ;
+	
+		if ( $memberid != -1 )
+		{
+			// ログイン時間を検索する
+			$login_date = $obSession -> getLastLogin( $memberid , $sessionid ) ;
+	
+			$point			= $arMember[ 0 ][ sprintf( "%s_point"		, $obMember -> alias ) ] ;
+			$total_point	= $arMember[ 0 ][ sprintf( "%s_total_point"	, $obMember -> alias ) ] ;
+	
+			$tmpl -> assign( "login_date"	, $login_date ) ;
+			$tmpl -> assign( "nickname"		, $arMember[ 0 ][ sprintf( "%s_name" , $obMember -> alias ) ] ) ;
+			$tmpl -> assign( "point"		, $point ) ;
+		}
+		
+		$login = $tmpl -> fetch( $tmplFile ) ;
+		unset( $tmpl ) ;
+	}
+	
+	return $login ;
+}
+
+function GetPersonalMember( $memberid )
+{
+	$obMember = new PARTS_Member() ;
+	$arMember = $obMember -> getAt( $memberid ) ;
+
+	return $arMember ;
+}
+
+?>

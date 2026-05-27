@@ -1,0 +1,119 @@
+<?php
+
+/**
+* BLAMS Šî–{ŠÖ”ŒS —X•Ö”Ô†ŒŸõƒNƒ‰ƒX
+*
+* —X•Ö”Ô†ŒŸõƒNƒ‰ƒX<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+define( "NUMBER_PER_ZIPCODE"				,	5	) ;		// s”^ƒy[ƒW
+
+//
+// “s“¹•{Œ§
+//
+global $arState ;
+$arState = array() ;
+
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Zipcode extends DB_Common
+{
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "zipcode_data" ;
+		$alias		= "zc" ;
+		$primarykey	= "zipcodeid" ;
+
+		parent::__construct( DB_SERVICE_NAME , DB_SERVICE_USER , DB_SERVICE_PASSWD , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_ZIPCODE ;
+
+		$this -> searchkey = array(
+				"S_FORMID"		,
+				"S_ZIP1"		,
+				"S_ZIP2"		,
+				"S_TARGET"		,
+			) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ƒ[ƒJƒ‹•Ï”‚Ö“WŠJ‚·‚é
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		if ( $zip7 != -1 )
+			$sql .= sprintf( "AND %s.zip7 like '%s%%' " , $this -> alias , $this -> mb_addslashes( $zip7 ) ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.zip7 " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		return $sql ;
+	}
+
+
+}
+?>

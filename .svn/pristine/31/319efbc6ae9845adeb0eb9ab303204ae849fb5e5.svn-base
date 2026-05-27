@@ -1,0 +1,246 @@
+<?php
+/**
+* BLAMS 基本関数郡 地域情報用クラス
+*
+* 地域情報用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+//
+// 都道府県
+//
+global $arState ;
+$arState = array() ;
+
+global $arStateName ;
+$arStateName = array() ;
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Area extends DB_Common
+{
+	var	$arState ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "area_data" ;
+		$alias		= "ara" ;
+		$primarykey	= "areaid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> arState = array() ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> searchkey = array(
+				"S_STATE"			,
+				"S_CITY"			,
+			) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = NUMBER_PER_PAGE )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+		}
+		
+		return $arData ;
+	}
+	
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = NUMBER_PER_PAGE )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$arParamList = $this -> fields ;
+		$arParamList[] = "not_level" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+		
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $alias ) ;
+		
+		$sql .= sprintf( "WHERE %s.status = 1 " , $alias ) ;
+
+		$limit = "" ;
+		if ( ${ $primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $alias , $primarykey , ${ $primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+		
+		// areanoによる検索
+		if ( $areano != -1 )
+			$sql .= sprintf( "AND %s.areano = '%d' " , $alias , $this -> mb_addslashes( $areano ) ) ;
+
+		// areaによる検索
+		if ( $area != -1 )
+			$sql .= sprintf( "AND %s.area = '%s' " , $alias , $this -> mb_addslashes( $area ) ) ;
+
+		// statenoによる検索
+		if ( $stateno != -1 )
+			$sql .= sprintf( "AND %s.stateno = '%d' " , $alias , $this -> mb_addslashes( $stateno ) ) ;
+
+		// stateによる検索
+		if ( $state != -1 )
+			$sql .= sprintf( "AND %s.state = '%d' " , $alias , $this -> mb_addslashes( $state ) ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY   " ) ;
+				$sql .= sprintf( "%s.areano , " , $alias ) ;
+				$sql .= sprintf( "%s.stateno    " , $alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		return $sql ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// statenoの入力検査
+			if ( ${ $alias . "_stateno" } == "" )
+			{
+				$error .= "・都道府県NOが入力されていません。\n" ;
+			}
+			else
+			{
+				$arWhere = array() ;
+				$arWhere[ "stateno" ]  = ${ $alias . "_stateno" } ;
+
+				// 修正の場合、異なるNOで指定の都道府県NOが存在する際は、重複エラーとする。
+				if ( $mode == "update" )
+					$arWhere[ "where" ] .= sprintf( " AND %s.%s <> %d " , $alias , $primarykey , ${ $keyname } ) ;
+	
+				// 重複ID検査
+				$arCheck = $this -> getData( $arWhere ) ;
+				if ( count( $arCheck ) > 0 )
+					$error .= "・同じ地域NOが存在しています。\n" ;
+			}
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+	function	makeStateData()
+	{
+		$arState = array() ;
+		
+		$arWhere = array() ;
+		$arResult = $this -> getData( $arWhere ) ;
+		$cnt = count( $arResult ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			$state = $arResult[ $i ][ $this -> alias . "_stateno" ] ;
+
+			$arData = array() ;
+			$arData[] = $arResult[ $i ][ $this -> alias . "_areano" ] ;
+			$arData[] = $arResult[ $i ][ $this -> alias . "_area" ] ;
+			$arData[] = $arResult[ $i ][ $this -> alias . "_state" ] ;
+
+			$arState[ $state ] = $arData ;
+		}
+
+		$this -> arState = $arState ;
+
+		return $arState ;
+	}
+	
+	function	makeStateName()
+	{
+		$arState		= array() ;
+		$arStateName	= array() ;
+
+		if ( count( $this -> arState ) > 0 )
+		{
+			$arState = $this -> arState ;
+			foreach( $arState as $key => $arData )
+				$arStateName[ $key ] = $arData[ 2 ] ;
+		}
+		else
+		{
+			$arWhere = array() ;
+			$arResult = $this -> getData( $arWhere ) ;
+			$cnt = count( $arResult ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$state = $arResult[ $i ][ $this -> alias . "_stateno" ] ;
+	
+				$arData = array() ;
+				$arData[] = $arResult[ $i ][ $this -> alias . "_areano" ] ;
+				$arData[] = $arResult[ $i ][ $this -> alias . "_area" ] ;
+				$arData[] = $arResult[ $i ][ $this -> alias . "_state" ] ;
+	
+				$arState[ $state ] = $arData ;
+			}
+
+			$this -> arState = $arState ;
+			foreach( $arState as $key => $arData )
+				$arStateName[ $key ] = $arData[ 2 ] ;
+		}
+		
+		return $arStateName ;
+	}
+
+}
+?>

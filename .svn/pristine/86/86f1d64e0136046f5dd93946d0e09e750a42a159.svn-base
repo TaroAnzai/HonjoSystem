@@ -1,0 +1,486 @@
+<?php
+//ini_set( "display_errors" ,1 ) ;
+
+/** Error reporting */
+if ( defined( "DEF_ERROR_LEVEL" ) == true )
+	error_reporting( DEF_ERROR_LEVEL ) ;
+
+require_once( "personal/parts.php" )  ;
+
+require_once( "personal/anchor.php" )  ;
+require_once( "personal/cart.php" )  ;
+require_once( "personal/carriage.php" )  ;
+require_once( "personal/event.php" )  ;
+require_once( "personal/link.php" )  ;
+require_once( "personal/login.php" )  ;
+require_once( "personal/menu.php" )  ;
+require_once( "personal/merchandise.php" )  ;
+require_once( "personal/page.php" )  ;
+require_once( "personal/product.php" )  ;
+require_once( "personal/profile.php" )  ;
+require_once( "personal/recruit.php" )  ;
+require_once( "personal/topics.php" )  ;
+require_once( "personal/webpage.php" )  ;
+
+// Webページの生成
+function	CreateWebPage( $func = DEF_PERSONAL_FUNC_TOP )
+{
+	$header		= fetchHeader( $func ) ;
+	$footer		= fetchFooter( $func ) ;
+	$navi		= fetchNavi( $func ) ;
+
+	$menu_top	= fetchMenuSub( $func ) ;
+	$menu_middle	= "" ;
+	$menu_bottom	= "" ;
+
+	$category	= -1 ;
+
+	$maincontents	= "" ;
+	$subcontents	= "" ;
+	
+	switch ( $func )
+	{
+	case	DEF_PERSONAL_FUNC_TOP :
+		$category		= DEF_CATEGORY_ITEM ;
+		$menu_middle	= "" ;
+		$menu_bottom	= "" ;
+		$maincontents	= fetchContentsIndex( $func ) ;
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_GREETINGS :
+		$menu_bottom	= "" ;
+		$maincontents	= fetchGreetings( $func , "" ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_SELF :
+		$menu_bottom	= "" ;
+		$maincontents	= fetchProfile( $func , "detail" ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_RECRUIT :
+		$menu_bottom	= "" ;
+		$maincontents	= fetchRecruit( $func ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_OFFICER :
+		$menu_bottom	= "" ;
+		$maincontents	= fetchOfficer( $func ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_HISTORY :
+		$menu_bottom	= "" ;
+		$maincontents	= fetchHistory( $func ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_PARTNER :
+		$menu_bottom	= "" ;
+		$maincontents	= fetchPartner( $func ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_OCCUPATION :
+		$menu_bottom	= "" ;
+		$maincontents	= fetchOccupation( $func ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_SUBSIDIARY :
+		$menu_bottom	= "" ;
+		$maincontents	= fetchSubsidiary( $func ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_RULES :
+	case	DEF_PERSONAL_FUNC_PRIVACY :
+	case	DEF_PERSONAL_FUNC_PROGRAM :
+	case	DEF_PERSONAL_FUNC_ORDERSLAW :
+	case	DEF_PERSONAL_FUNC_SUPPORT :
+		$menu_bottom	= "" ;
+		$maincontents	= fetchWebpage( $func ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_CARRIAGE :
+		$navi			= fetchNavi( $func ) ;
+		$menu_bottom	= "" ;
+		$maincontents	= fetchCarriage( $func ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	case	DEF_PERSONAL_FUNC_LINK :
+		$navi			= fetchNavi( $func ) ;
+		$menu_bottom	= "" ;
+		$maincontents	= fetchLink( $func ) ;
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+		$subcontents	= fetchContentsSub( $func ) ;
+		break ;
+
+	default :
+		$maincontents	= fetchContentsMain( $func , $maincontents ) ;
+		$subcontents	= "" ;
+		break ;
+	}
+
+	$contents	= fetchContents( $func , $maincontents , $subcontents ) ;
+	$menu		= fetchMenu( $func , $menu_top , $menu_middle , $menu_bottom , $category ) ;
+	PrintBody( $func , $header , $navi , $footer , $contents , $menu ) ;
+
+/*
+	// debug database connection count
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+		$obDB -> checkConnection() ;
+*/
+}
+
+// ページ全体の表示
+function	PrintBody( $func , $header , $navi , $footer , $contents , $menu )
+{
+	$cartlookup	= fetchCartLookup( $func ) ;
+	$cart		= fetchCart( $func ) ;
+	$login		= fetchLogin( $func ) ;
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "header"			, $header ) ;
+	$tmpl -> assign( "footer"			, $footer ) ;
+	$tmpl -> assign( "navi"				, $navi ) ;
+	$tmpl -> assign( "cartlookup"		, $cartlookup ) ;
+	$tmpl -> assign( "cart"				, $cart ) ;
+	$tmpl -> assign( "login"			, $login ) ;
+	$tmpl -> assign( "contents"			, $contents ) ;
+	$tmpl -> assign( "menu"				, $menu ) ;
+	$tmpl -> display( "body.tmpl" ) ;
+	unset( $tmpl ) ;
+}
+
+// TOPページのコンテンツの表示
+function	fetchContentsIndex( $func )
+{
+	// ログイン情報の取得
+	$memberid = -1 ;
+	$level = -1 ;
+
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	// ユーザ情報の取得
+	if ( $memberid != -1 )
+	{
+		$obMember = new PARTS_Member( $obSession -> conn ) ;
+		
+		$alias = $obMember -> alias ;
+		
+		$arMember = $obMember -> getAt( $memberid ) ;
+		if ( count( $arMember ) > 0 )
+			$level = $arMember[ $alias . "_level" ] ;
+		else
+			$memberid = -1 ;
+	}
+
+	$contents	= "" ;
+	
+	$eyecatch = "" ;
+	if ( $memberid == -1 )
+		$eyecatch	.= fetchInfo() ;
+	$campaign		= fetchCampaign( $func ) ;
+	$news			= fetchNews() ;
+	$event			= fetchEventList( $func ) ;
+	$topics			= fetchTopics( $func ) ;
+	$feature		= fetchFeatureMerchandise( $func ) ;
+	$product		= fetchFeatureProduct( $func ) ;
+	$TopPriority	= fetchFeatureMerchandiseTopPriority( $func , 5 ) ;
+	$newitem		= fetchFeatureMerchandiseNewItem( $func ) ;
+
+	$category		= DEF_CATEGORY_ITEM ;
+	$menu_category	= fetchCategory( $func , $category ) ;
+	$menu_profile	= fetchProfile( $func ) ;
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "memberid"			, $memberid ) ;
+	$tmpl -> assign( "eyecatch"			, $eyecatch ) ;
+	$tmpl -> assign( "campaign"			, $campaign ) ;
+	$tmpl -> assign( "news"				, $news ) ;
+	$tmpl -> assign( "event"			, $event ) ;
+	$tmpl -> assign( "topics"			, $topics ) ;
+	$tmpl -> assign( "feature"			, $feature ) ;
+	$tmpl -> assign( "top_priority"		, $TopPriority ) ;
+	$tmpl -> assign( "newitem"			, $newitem ) ;
+	$tmpl -> assign( "product"			, $product ) ;
+	$tmpl -> assign( "menu_profile"		, $menu_profile ) ;
+	$tmpl -> assign( "menu_category"	, $menu_category ) ;
+	$contents = $tmpl -> fetch( "contents_index.tmpl" ) ;
+	unset( $tmpl ) ;
+	
+	return $contents ;
+}
+
+// 画面中央のコンテンツの表示
+function	fetchContents( $func , $maincontents , $subcontents )
+{
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	assignFunction( $func , $tmpl ) ;
+
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "contents_main"	, $maincontents ) ;
+	$tmpl -> assign( "contents_sub"		, $subcontents ) ;
+	$contents = $tmpl -> fetch( "contents.tmpl" ) ;
+	unset( $tmpl ) ;
+	
+	return $contents ;
+}
+
+// 画面右部分のコンテンツの表示
+function	fetchContentsMain( $func , $contents )
+{
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	assignFunction( $func , $tmpl ) ;
+
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "contents"			, $contents ) ;
+	$contents = $tmpl -> fetch( "contents_main.tmpl" ) ;
+	unset( $tmpl ) ;
+	
+	return $contents ;
+}
+
+// 画面右部分のコンテンツの表示
+function	fetchContentsSub( $func )
+{
+	$login		= "" ;
+	$cart		= "" ;
+	$calender	= "" ;
+	$link		= "" ;
+	$banner		= "" ;
+	$favorite	= "" ;
+	$topics		= "" ;
+
+	$cartlookup	= fetchCartLookup( $func ) ;
+	$login		= fetchLogin( $func , "sub" ) ;
+	$favorite	= fetchFeatureMerchandiseFavorite( $func , 4 , "sub" ) ;
+	$cart		= fetchCart( $func ) ;
+	$calender	= fetchEventCalender( $func ) ;
+	$banner		= fetchBanner() ;
+	$calender	= fetchEventCalender( $func ) ;
+	$topics		= fetchTopics( $func , 0 , "sub" ) ;
+	$link		= fetchLink( "sub" ) ;
+	switch( $func )
+	{
+	case	DEF_PERSONAL_FUNC_CART :
+		$cart = "" ;
+		break ;
+	default :
+		$cart = fetchCart( $func ) ;
+	}
+	
+	$favlink	= fetchBanner( "top" , DEF_BANNER_IMAGE_FAVORITE ) ;
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	assignFunction( $func , $tmpl ) ;
+
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "cartlookup"		, $cartlookup ) ;
+	$tmpl -> assign( "cart"				, $cart ) ;
+	$tmpl -> assign( "calender"			, $calender ) ;
+	$tmpl -> assign( "login"			, $login ) ;
+	$tmpl -> assign( "link"				, $link ) ;
+	$tmpl -> assign( "banner"			, $banner ) ;
+	$tmpl -> assign( "favorite"			, $favorite ) ;
+	$tmpl -> assign( "favoriteLink"		, $favlink ) ;
+	$tmpl -> assign( "topics"			, $topics ) ;
+	$contents = $tmpl -> fetch( "contents_sub.tmpl" ) ;
+	unset( $tmpl ) ;
+	
+	return $contents ;
+}
+
+// 機能名称の割り当て
+function	assignFunction( $func , &$tmpl )
+{
+	$class		= "" ;
+	$subject	= "" ;
+	$anchor		= "" ;
+	global	$arNavi ;
+	global	$arMenu ;
+	
+	$arResult = array() ;
+	$arResult = array_merge( $arNavi , $arMenu ) ;
+
+	foreach ( $arResult as $arData )
+	{
+		if ( $arData[ "standard" ] == $func )
+		{
+			$class		= $arData[ "class"		] ;
+			$subject	= $arData[ "subject"	] ;
+			$anchor		= $arData[ "anchor"		] ;
+			break ;
+		}
+	}
+
+	$tmpl -> assign( "class"			, $class ) ;
+	$tmpl -> assign( "subject"			, $subject ) ;
+	$tmpl -> assign( "anchor"			, $anchor ) ;
+}
+
+// メニュー表示
+function	fetchNavi( $func , $category = "" )
+{
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	global	$arPresonalFunction ;
+	$funcName = array_search( $func , $arPresonalFunction ) ;
+
+	global	$arNavi ;
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "funcName"			, $funcName ) ;
+	$tmpl -> assign( "memberid"			, $memberid ) ;
+	$tmpl -> assign( "navi_data"		, $arNavi ) ;
+	$tmpl -> assign( "category_data"	, $category ) ;
+	$data = $tmpl -> fetch( "navi.tmpl" ) ;
+	unset( $tmpl ) ;
+	
+	return $data ;
+}
+
+// ヘッダ情報の生成
+function	fetchHeader( $func , $title = "" )
+{
+	global	$_SERVER ;
+	$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+	$NRML = sprintf( "http://%s" , $SERVER_NAME ) ;
+
+	global	$_COOKIE ;
+	if ( isset( $_COOKIE[ "bi" ] ) != true )
+		$bannerindex = 1 ;
+	else
+		$bannerindex = $_COOKIE[ "bi" ] + 1 ;
+
+	if ( isset( $_COOKIE[ "ci" ] ) != true )
+		$campaignindex = 1 ;
+	else
+		$campaignindex = $_COOKIE[ "ci" ] + 1 ;
+
+	$colorindex = 1 ;
+	if ( isset( $_COOKIE[ "cl" ] ) == true )
+		$colorindex = $_COOKIE[ "cl" ] ;
+
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	$cartlookup	= fetchCartLookup( $func ) ;
+	$cart		= fetchCart( $func ) ;
+	$login		= fetchLogin( $func ) ;
+
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	global	$arSiteTitle ;
+	global	$funcAnchor ;
+	global	$arPresonalFunction ;
+	$funcName = array_search( $func , $arPresonalFunction ) ;
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$ua = $tmpl -> getBrowserInfo() ;
+	$tmpl -> assign( "memberid"				, $memberid ) ;
+	$tmpl -> assign( "ua"				, $ua ) ;
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "funcName"			, $funcName ) ;
+	$tmpl -> assign( "title"			, $title ) ;
+	$tmpl -> assign( "anchor"			, $funcAnchor ) ;
+	$tmpl -> assign( "corp_data"		, $arCorp ) ;
+	$data = $tmpl -> fetch( "header.tmpl" ) ;
+
+	// IE6の場合、xml宣言を削除する。
+	$data = $tmpl -> makeXhtmlString( $data ) ;
+	unset( $tmpl ) ;
+
+	$tmpl = new HTML_template( "default" ) ;
+	$ua = $tmpl -> getBrowserInfo() ;
+	$tmpl -> assign( "ua"				, $ua ) ;
+	$tmpl -> assign( "servername"		, $SERVER_NAME ) ;
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "cartlookup"		, $cartlookup ) ;
+	$tmpl -> assign( "cart"				, $cart ) ;
+	$tmpl -> assign( "login"			, $login ) ;
+	$tmpl -> assign( "bi"				, $bannerindex ) ;
+	$tmpl -> assign( "ci"				, $campaignindex ) ;
+	$tmpl -> assign( "cl"				, $colorindex ) ;
+	$tmpl -> assign( "date"				, date( "D, j-M-Y H:i:s T" , time() + 86400 ) ) ;
+	$copyright = $tmpl -> fetch( "header.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	$data = str_replace( "</HEAD>" , "</head>" , $data ) ;
+	$data = str_replace( "</head>" , $copyright . "</head>" , $data ) ;
+
+	return	$data ;
+}
+
+// フッター情報の生成
+function	fetchFooter( $func )
+{
+	require_once( dirname( __FILE__ ) . "/../../htdocs/utility/slimstat/stats_include.php" ) ;
+
+	$arNavi = GetStandardMenu( DEF_CATEGORY_OTHER ) ;
+
+	$data = "" ;
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+	$now_year = date( "Y" ) ;
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	if ( count( $arCorp ) != 0 )
+	{
+		$tmpl -> assign( "func"					, $func ) ;
+		$tmpl -> assign( "navi_data"			, $arNavi ) ;
+		$tmpl -> assign( "year"					, $now_year ) ;
+		$tmpl -> assign( "corp_data"			, $arCorp ) ;
+		$data = $tmpl -> fetch( "footer.tmpl" ) ;
+	}
+	unset( $tmpl ) ;
+
+	$gacode = "" ;
+	if ( defined( "DEF_GACODE" ) == TRUE )
+		$gacode = DEF_GACODE ;
+
+	$tmpl = new HTML_template( "default" ) ;
+	$tmpl -> assign( "root_path"	, DEF_SITE_ROOTPATH ) ;
+	$tmpl -> assign( "gacode"		, $gacode ) ;
+	$copyright = $tmpl -> fetch( "footer.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	$data = str_replace( "</BODY>" , "</body>" , $data ) ;
+	$data = str_replace( "</body>" , $copyright . "</body>" , $data ) ;
+
+	return $data ;
+}
+
+?>

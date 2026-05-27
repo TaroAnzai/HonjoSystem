@@ -1,0 +1,26 @@
+#!/usr/local/bin/php
+<?php
+//ini_set( "display_errors" , 1 ) ;
+
+	// 実行ファイル情報
+	$self = $_SERVER[ 'DOCUMENT_ROOT' ] ;
+	if ( $self == "" )
+		$self = dirname( __FILE__ ) . "/" ;
+	define( "SELF_PATH"			, realpath( $self ) ) ;
+	define( "SELF_LIB"			, realpath( $self . "../" ) ) ;
+	define( "SELF_HTDOCS"		, realpath( $self . "../../htdocs" ) ) ;
+	define( "SELF_COMMAND"		, "autosend.php" ) ;
+	define( "SELF_FULLCOMMAND"	, SELF_PATH . "/" . SELF_COMMAND ) ;
+
+	$root = dirname( $_SERVER[ 'SCRIPT_FILENAME' ] ) ;
+	$root = str_replace( "/htdocs/../lib/cron" , "" , $root ) ;
+	define(	"SITE_INCLUDE_DIR"		, realpath( $root . "/conf" ) ) ;
+
+	ini_set( "include_path"		,	ini_get( "include_path" ) . ":" . SELF_LIB ) ;
+
+	require_once( "system.php" )  ;
+	require_once( "cron/autosend_core.php" )  ;
+
+	autosend() ;
+	exit ;
+?>

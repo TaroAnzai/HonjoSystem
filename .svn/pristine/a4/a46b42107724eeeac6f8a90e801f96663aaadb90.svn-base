@@ -1,0 +1,297 @@
+<?php
+/**
+* BLAMS 基本関数郡 問い合わせクラス
+*
+* LINKクラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" , 1 ) ;
+
+require_once( "class/db.class.php" ) ;
+
+// 問い合わせ種類
+$_FUNC = 1 ;
+
+define( "DEF_INQUIRYKIND_NORMAL"		,	$_FUNC ++	) ;		// 標準
+define( "DEF_INQUIRYKIND_REQUEST"		,	$_FUNC ++	) ;		// リクエスト
+
+global	$arInquiryKind ;
+$arInquiryKind = array(
+	DEF_INQUIRYKIND_NORMAL		=> "標準" ,
+	DEF_INQUIRYKIND_REQUEST		=> "リクエスト" ,
+) ;
+
+class PARTS_Inquiry extends DB_Common
+{
+	var $arKind ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "inquiry_data" ;
+		$alias		= "inq" ;
+		$primarykey	= "inquiryid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		global	$arInquiryKind ;
+		$this -> arKind = $arInquiryKind ;
+
+		$this -> searchkey = array(
+				"S_S_Y"				,
+				"S_S_M"				,
+				"S_S_D"				,
+				"S_E_Y"				,
+				"S_E_M"				,
+				"S_E_D"				,
+				"S_MEDIA"			,
+				"S_KIND"			,
+			) ;
+
+		// 追加項目
+		$this -> fieldsData[] = array( "name" => "zip1"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "zip2"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel1"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel2"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel3"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "birthday_y"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "birthday_m"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "birthday_d"			, "type" => "" , "format" => "%s" ) ;
+		
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	function	getData( $arParam , $page = 0 , $limit_flg = true , $per_page = -1 )
+	{
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields = "" ;
+			$fields .= sprintf( "%s  " , $this -> makeAliaseFields() ) ;
+			
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $limit_flg , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = 0 , $limit_flg = true , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $limit_flg == true )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.create_date desc	  " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		
+		return $sql ;
+	}
+
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		if( ${ $alias . "_gender" } == "" )
+			${ $alias . "_gender" } = -1 ;
+
+		if( ${ $alias . "_state" } == "" )
+			${ $alias . "_state" } = -1 ;
+
+		if( ${ $alias . "_kind" } == "" )
+			${ $alias . "_kind" } = 1 ;
+
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$arParam[ $alias . "_inquiryid"			] = -1 ;
+		$arParam[ $alias . "_name"				] = "" ;
+		$arParam[ $alias . "_kana"				] = "" ;
+		$arParam[ $alias . "_birthday"			] = "" ;
+		$arParam[ $alias . "_birthday_y"		] = "" ;
+		$arParam[ $alias . "_birthday_m"		] = "" ;
+		$arParam[ $alias . "_birthday_d"		] = "" ;
+		$arParam[ $alias . "_gender"			] = -1 ;
+		$arParam[ $alias . "_email"				] = "" ;
+		$arParam[ $alias . "_state"				] = -1 ;
+		$arParam[ $alias . "_city"				] = "" ;
+		$arParam[ $alias . "_addr1"				] = "" ;
+		$arParam[ $alias . "_addr2"				] = "" ;
+		$arParam[ $alias . "_zip1"				] = "" ;
+		$arParam[ $alias . "_zip2"				] = "" ;
+		$arParam[ $alias . "_tel1"				] = "" ;
+		$arParam[ $alias . "_tel2"				] = "" ;
+		$arParam[ $alias . "_tel3"				] = "" ;
+		$arParam[ $alias . "_message"			] = "" ;
+		$arParam[ $alias . "_kind"				] = 1 ;
+
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ $alias . "_create_date"		] = $now ;
+		$arParam[ $alias . "_update_date"		] = $now ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// 名前
+			if ( ${ $alias . "_name" } == "" )
+				$error .= "・名前(組織名)が入力されていません。\n" ;
+
+			// カナ
+			if ( ${ $alias . "_kana" } == "" )
+				$error .= "・カナが入力されていません。\n" ;
+
+			// 生年月日
+			$arParam[ $alias . "_birthday" ] = "" ;
+			if( ${ $alias . "_birthday_y" } != "" && ${ $alias . "_birthday_m" } != "" && ${ $alias . "_birthday_d" } != "" )
+			{
+				$error .= $this -> checkDate(	$arParam[ $alias . "_birthday" ] ,
+												false ,
+												${ $alias . "_birthday_y" } ,
+												${ $alias . "_birthday_m" } ,
+												${ $alias . "_birthday_d" } ,
+												false ,
+												"誕生日" 
+											) ;
+			}
+			else
+			{
+				$arParam[ $alias . "_birthday" ] = sprintf( "'%s'" , "0001-01-01" ) ;
+			}
+/*
+			// 性別
+			if ( ${ $alias . "_gender" } == -1 )
+				$error .= "・性別が選択されていません。\n" ;
+*/
+			// メールアドレス
+			$obMail = new PARTS_Mail() ;
+			if ( ${ $alias . "_email" } == "" )
+				$error .= "・メールアドレスが入力されていません。\n" ;
+			else if ( $obMail -> checkData( ${ $alias . "_email" } ) != TRUE )
+				$error .= "・メールアドレスが正しくありません。\n" ;
+
+			// 都道府県
+			if ( ${ $alias . "_state" } == -1 )
+				$error .= "・都道府県が選択されていません。\n" ;
+	
+			// 市町村
+			if ( ${ $alias . "_city" } == "" )
+				$error .= "・市町村が入力されていません。\n" ;
+	
+			// 住所１
+			if ( ${ $alias . "_addr1" } == "" )
+				$error .= "・住所が入力されていません。\n" ;
+	
+			// 郵便番号
+			$error .= $this -> checkZip( $arParam[ $alias . "_zip" ] , ${ $alias . "_zip1" } , ${ $alias . "_zip2" } ) ;
+
+			// 電話番号
+			$error .= $this -> checkTel( $arParam[ $alias . "_tel" ] , 
+											false , 
+											${ $alias . "_tel1" } , 
+											${ $alias . "_tel2" } , 
+											${ $alias . "_tel3" } ) ;
+
+			// 種類
+			if ( ${ $alias . "_kind" } == -1 )
+				$error .= "・種類が選択されていません。\n" ;
+
+			// 質問内容
+			if ( ${ $alias . "_message" } == "" )
+				$error .= "・質問内容が入力されていません。\n" ;
+			else
+				$arParam[ $alias . "_message" ] = str_replace( "\t" , "" , ${ $alias . "_message" } ) ;
+/*
+			if( $func == "database" )
+			{
+				$arParam[ $alias . "_start_date"	] = sprintf( "'%s'" , ${ $alias . "_start_date" } ) ;
+				$arParam[ $alias . "_end_date"		] = sprintf( "'%s'" , ${ $alias . "_end_date" } ) ;
+			}
+*/
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+}
+?>

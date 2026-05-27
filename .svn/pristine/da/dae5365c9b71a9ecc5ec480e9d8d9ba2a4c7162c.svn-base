@@ -1,0 +1,213 @@
+/*
+	Desgin Common Style
+*/
+* {
+    padding: 0 ;
+    margin: 0 ;
+	font-family :	"ÉÅÉCÉäÉI" , "Meiryo" ,
+					"ÉqÉâÉMÉmäpÉS Pro W3" , "Hiragino Kaku Gothic Pro" ,
+					"ÇlÇr ÇoÉSÉVÉbÉN" , "MS P Gothic" ,
+					"Osaka",
+					Verdana , Arial , Helvetica , sans-serif ;
+}
+
+img		{ border: none; }
+
+table , tr , td , th
+{
+	vertical-align : top ;
+	border-collapse : collapse ;
+	margin : 0px ;
+	padding : 0px ;
+}
+* html table	{	font-size : 0.96em ;	}
+
+input ,
+textarea ,
+select
+{
+	outline : none ;
+	font-size : 0.96em ;
+	padding : 3px 2px 3px ;
+	border : 1px solid #666666 ;
+	margin-bottom : 4px ;
+}
+* html input	{	font-size : 0.96em ;	}
+* html textarea	{	font-size : 0.96em ;	}
+
+form			{	font-size : 0.96em ;	}
+* html form		{	font-size : 0.96em ;	}
+
+input[ type="checkbox" ] ,
+input[ type="radiobox" ]
+{
+	border : none ;
+	vertical-align : middle ;
+}
+
+a
+{
+	outline : none ;
+	font-size : 0.98em ;
+	border : 0px ;
+}
+
+a:link				{ color : #666 ; text-decoration : none ; }
+a:visited			{ color : #666 ; text-decoration : none ; }
+a:hover				{ color : #333 ; text-decoration : underline ; }
+a:active			{ color : #666 ; text-decoration : none ; }
+
+a.pdf
+{
+	width : auto ;
+	height : 18px ;
+	line-height : 18px ;
+	vertical-align : top ;
+	background : transparent url("/img/pdf.gif") no-repeat left top ;
+	padding : 2px 0px 2px 20px ;
+}
+
+/*
+-------------------------------------------------------------------------------
+	ã§í 
+-------------------------------------------------------------------------------
+*/
+.tiny {
+	font-size: 0.8em ;
+}
+
+.small {
+	font-size: 0.9em ;
+}
+
+.left		{	text-align : left ;		margin-left : 0px  ;	margin-right : auto ;	}
+.center		{	text-align : center ;	margin-left : auto ;	margin-right : auto ;	}
+.right		{	text-align : right ;	margin-left : auto ;	margin-right : 0px  ;	}
+.middle		{	vertical-align : middle ;	}
+.bottom		{	vertical-align : bottom ;	}
+.top		{	vertical-align : top ;		}
+
+.formBlock	{	display : block ;			}
+.no-border	{	border : none ;				}
+.no-wrap	{	white-space : nowrap ;		}
+.wrap-free	{	word-wrap : break-word ;	}
+.wrap		{	white-space : normal ;		}
+.bold		{	font-weight : bold ;		}
+
+/*
+* html .wrap	{	word-break: break-all ;	}
+*/
+
+.imeon		{	ime-mode : active !important ;		}
+.imeoff		{	ime-mode : disabled !important ;	}
+
+.label		{	color : #333333 ;	font-size : 1em ;	margin : 0px ;	padding : 0px 4px ;	}
+.detail		{	color : #333333 ;	font-size : 1em ;	margin : 0px ;	padding : 0px 4px ;	}
+.form		{	color : #333333 ;	font-size : 0.9em ;	margin : 0px ;	padding : 0px 4px ;	}
+.form
+{
+	height : 1.5em ;
+	background-color : #ffffcc ;
+	border : #000 solid 1px ;
+}
+
+.w008		{	width : 8px ;	}
+.w016		{	width : 16px ;	}
+.w024		{	width : 24px ;	}
+.w032		{	width : 32px ;	}
+.w040		{	width : 40px ;	}
+.w048		{	width : 48px ;	}
+.w056		{	width : 56px ;	}
+.w064		{	width : 64px ;	}
+.w072		{	width : 72px ;	}
+.w080		{	width : 80px ;	}
+.w088		{	width : 88px ;	}
+.w096		{	width : 96px ;	}
+.w104		{	width : 104px ;	}
+.w112		{	width : 112px ;	}
+.w120		{	width : 120px ;	}
+.w128		{	width : 128px ;	}
+.w136		{	width : 136px ;	}
+.w144		{	width : 144px ;	}
+.w152		{	width : 152px ;	}
+.w160		{	width : 160px ;	}
+.w168		{	width : 168px ;	}
+.w176		{	width : 176px ;	}
+.w184		{	width : 184px ;	}
+.w192		{	width : 192px ;	}
+.w200		{	width : 200px ;	}
+.w208		{	width : 208px ;	}
+.w216		{	width : 216px ;	}
+.w224		{	width : 224px ;	}
+.w232		{	width : 232px ;	}
+.w240		{	width : 240px ;	}
+.w248		{	width : 248px ;	}
+.w256		{	width : 256px ;	}
+.w264		{	width : 264px ;	}
+.w272		{	width : 272px ;	}
+.w280		{	width : 280px ;	}
+.w288		{	width : 288px ;	}
+.w296		{	width : 296px ;	}
+.w304		{	width : 304px ;	}
+.w312		{	width : 312px ;	}
+.w320		{	width : 320px ;	}
+.w328		{	width : 328px ;	}
+.w336		{	width : 336px ;	}
+.w344		{	width : 344px ;	}
+.w352		{	width : 352px ;	}
+.w360		{	width : 360px ;	}
+.w368		{	width : 368px ;	}
+.w376		{	width : 376px ;	}
+.w384		{	width : 384px ;	}
+.w392		{	width : 392px ;	}
+.w400		{	width : 400px ;	}
+.w408		{	width : 408px ;	}
+.w416		{	width : 416px ;	}
+.w424		{	width : 424px ;	}
+.w432		{	width : 432px ;	}
+.w440		{	width : 440px ;	}
+.w448		{	width : 448px ;	}
+.w456		{	width : 456px ;	}
+.w464		{	width : 464px ;	}
+.w472		{	width : 472px ;	}
+.w480		{	width : 480px ;	}
+.w488		{	width : 488px ;	}
+.w496		{	width : 496px ;	}
+.w504		{	width : 504px ;	}
+.w512		{	width : 512px ;	}
+.w520		{	width : 520px ;	}
+.w528		{	width : 528px ;	}
+.w536		{	width : 536px ;	}
+.w544		{	width : 544px ;	}
+.w552		{	width : 552px ;	}
+.w560		{	width : 560px ;	}
+.w568		{	width : 568px ;	}
+.w576		{	width : 576px ;	}
+.w584		{	width : 584px ;	}
+.w592		{	width : 592px ;	}
+.w600		{	width : 600px ;	}
+.w608		{	width : 608px ;	}
+.w616		{	width : 616px ;	}
+.w624		{	width : 624px ;	}
+.w632		{	width : 632px ;	}
+.w640		{	width : 640px ;	}
+.w648		{	width : 648px ;	}
+.w656		{	width : 656px ;	}
+.w664		{	width : 664px ;	}
+.w672		{	width : 672px ;	}
+.w680		{	width : 680px ;	}
+.w688		{	width : 688px ;	}
+.w696		{	width : 696px ;	}
+.w704		{	width : 704px ;	}
+.w712		{	width : 712px ;	}
+.w720		{	width : 720px ;	}
+.w728		{	width : 728px ;	}
+.w736		{	width : 736px ;	}
+.w744		{	width : 744px ;	}
+.w752		{	width : 752px ;	}
+.w760		{	width : 760px ;	}
+.w768		{	width : 768px ;	}
+.w776		{	width : 776px ;	}
+.w784		{	width : 784px ;	}
+.w792		{	width : 792px ;	}
+.w800		{	width : 800px ;	}

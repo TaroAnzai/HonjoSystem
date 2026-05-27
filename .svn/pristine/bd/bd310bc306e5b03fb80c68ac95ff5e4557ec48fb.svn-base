@@ -1,0 +1,335 @@
+<?php
+/**
+* BLAMS 基本関数郡 カートアイテム用クラス
+*
+* カートアイテム用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+define( "NUMBER_PER_CARTITEM"		,	10	) ;		// 行数／ページ
+
+require_once( 'class/db.class.php' ) ;
+require_once( 'class/merchandise.class.php' )  ;
+require_once( 'class/merchandise_master.class.php' )  ;
+require_once( 'class/category.class.php' )  ;
+require_once( 'class/cart.class.php' )  ;
+
+class PARTS_CartItem extends DB_Common
+{
+	function	__construct(  $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "cartitem_data" ;
+		$alias		= "ci" ;
+		$primarykey	= "cartitemid" ;
+
+		parent::__construct(  $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_CARTITEM ;
+	}
+
+	// データの取得
+	function	getData( $arParam , $page = -1 , $per_page = NUMBER_PER_CARTITEM )
+	{
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$obMerchandiseMaster	= new PARTS_MerchandiseMaster( $this -> conn ) ;
+			$obMerchandise			= new PARTS_Merchandise( $this -> conn ) ;
+			$obCategory				= new PARTS_Category( $this -> conn ) ;
+
+			$fields = "" ;
+			$fields .= sprintf( "%s , " , $this					-> makeAliaseFields() ) ;
+			$fields .= sprintf( "%s , " , $obMerchandiseMaster	-> makeAliaseFields() ) ;
+			$fields .= sprintf( "%s , " , $obMerchandise		-> makeAliaseFields() ) ;
+			$fields .= sprintf( "%s , " , $obCategory			-> makeAliaseFields() ) ;
+			$fields .= sprintf( "( STRING_TO_ARRAY( TRANSLATE( TRIM( BOTH '[]' FROM " ) ;
+			$fields .= sprintf( "%s.relationid ) , '][' , ',' ) , ',' ) )[1] AS m_categoryid " , $obMerchandise -> alias ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+	
+			$this -> arData = $arData ;
+		}
+
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = NUMBER_PER_CARTITEM )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "not_cartitemid" ;
+		$arParamList[] = "memberid" ;
+		$arParamList[] = "order_date_from" ;
+		$arParamList[] = "order_date_to" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$obMerchandiseMaster	= new PARTS_MerchandiseMaster( $this -> conn ) ;
+		$obMerchandise			= new PARTS_Merchandise( $this -> conn ) ;
+		$obCategory				= new PARTS_Category( $this -> conn ) ;
+		$obCart					= new PARTS_Cart( $this -> conn ) ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "LEFT JOIN %s %s ON %s.merchandiseid = %s.merchandiseid " , 
+							$obMerchandise -> tname , 
+							$obMerchandise -> alias , 
+							$this -> alias , 
+							$obMerchandise -> alias 
+						) ;
+		$sql .= sprintf( "LEFT JOIN %s %s ON %s.merchandise_masterid = %s.merchandise_masterid " , 
+							$obMerchandiseMaster -> tname , 
+							$obMerchandiseMaster -> alias , 
+							$obMerchandise -> alias , 
+							$obMerchandiseMaster -> alias 
+						) ;
+		$sql .= sprintf( "LEFT JOIN %s %s ON %s.categoryid = %s.categoryid " , 
+							$obCategory -> tname , 
+							$obCategory -> alias , 
+							$obMerchandiseMaster -> alias , 
+							$obCategory -> alias 
+						) ;
+
+		// ダウンロードフラグカウント用
+		$sql .= sprintf( "LEFT JOIN %s %s ON %s.cartid = %s.cartid " , 
+							$obCart -> tname , 
+							$obCart -> alias , 
+							$this -> alias , 
+							$obCart -> alias 
+						) ;
+
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( $cartitemid != -1 )
+			$sql .= sprintf( "AND %s.cartitemid = %d " , $this -> alias , $cartitemid ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		if ( $not_cartitemid != -1 )
+			$sql .= sprintf( "AND %s.cartitemid != %d " , $this -> alias , $not_cartitemid ) ;
+
+		if ( $cartid != -1 )
+			$sql .= sprintf( "AND %s.cartid = %d " , $this -> alias , $cartid ) ;
+
+		if ( $merchandiseid != -1 )
+			$sql .= sprintf( "AND %s.merchandiseid = %d " , $this -> alias , $merchandiseid ) ;
+
+		//// ダウンロードフラグカウント用
+		// cart_data.memberid
+		if ( $memberid != -1 )
+			$sql .= sprintf( "AND %s.memberid = %d " , $obCart -> alias , $memberid ) ;
+
+		// cart_data.order_date_from
+		if ( $order_date_from != -1 )
+			$sql .= sprintf( "AND %s.order_date >= %s " , $obCart -> alias , $order_date_from ) ;
+
+		// cart_data.order_date_to
+		if ( $order_date_to != -1 )
+			$sql .= sprintf( "AND %s.order_date <= %s " , $obCart -> alias , $order_date_to ) ;
+			
+		// cartitem_data.dl_flg
+		if ( $dl_flg != -1 )
+			$sql .= sprintf( "AND %s.dl_flg = %d " , $this -> alias , $dl_flg ) ;
+		////
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.category1 , %s.category2 , %s.category3 , " , $obCategory -> alias , $obCategory -> alias , $obCategory -> alias ) ;
+				$sql .= sprintf( "%s.merchandisecode , "	, $obMerchandiseMaster -> alias ) ;
+				$sql .= sprintf( "%s.jancode "				, $obMerchandiseMaster -> alias ) ;
+			}
+		}
+
+		$sql .= $limit ;
+		return $sql ;
+	}
+
+	// membeidと期間(from,to)でダウンロード済のcartitem数を計算
+	// from,toのフォーマットは(Y-m-d)
+	function	getDlCount( $memberid , $fromDate , $toDate , $cartitemid = -1 )
+	{
+		$arWhere = array() ;
+		if ( $cartitemid != -1 )
+			$arWhere[ "not_cartitemid"		] = $cartitemid ;
+			
+		$arWhere[ "memberid"			] = $memberid ;
+		$arWhere[ "order_date_from"		] = sprintf( "'%s 00:00:00'" , $fromDate ) ;
+		$arWhere[ "order_date_to"		] = sprintf( "'%s 23:59:59'" , $toDate ) ;
+		$arWhere[ "dl_flg"				] = 1 ;
+
+		$cnt = $this -> getCount( $arWhere );
+		return $cnt ;
+	}
+
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		if( $func == "database" )
+		{
+			$arParam[ $alias . "_dl_date"	] = sprintf( "'%s'" , $arParam[ $alias . "_dl_date"	] ) ;
+		}
+				
+		$error = "" ;
+		return $error ;
+	}
+
+	// カートアイテムを削除(status = -1)する
+	// 仮のカートの場合がありcheckDataを回避する
+	function	deleteData( $cartitemid = -1 )
+	{
+		$result = FALSE ;
+
+		if( $cartitemid != -1 )
+		{
+			$sql = "" ;
+			$sql .= sprintf( "UPDATE %s SET " , $this -> tname ) ;
+			$sql .= sprintf( "status = '-1' , " ) ;
+			$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+			$sql .= sprintf( "WHERE " ) ;
+			$sql .= sprintf( "cartitemid = '%d' " , $cartitemid ) ;
+	
+			if( $sql != "" )
+			{
+				$record = $this -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					$this -> closeRecord( $record ) ;
+					$result = true ;
+				}
+			}
+		}
+		return $result ;
+	}
+
+	// カートアイテムの数量を変更する
+	// 仮のカートの場合がありcheckDataを回避する
+	function	updateNumber( $cartitemid = -1 , $number = 1 )
+	{
+		$result = FALSE ;
+
+		if( $cartitemid != -1 )
+		{
+			$sql = "" ;
+			$sql .= sprintf( "UPDATE %s SET " , $this -> tname ) ;
+			$sql .= sprintf( "number = '%d' , " , $number ) ;
+			$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+			$sql .= sprintf( "WHERE " ) ;
+			$sql .= sprintf( "cartitemid = '%d' " , $cartitemid ) ;
+	
+			if( $sql != "" )
+			{
+				$record = $this -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					$this -> closeRecord( $record ) ;
+					$result = true ;
+				}
+			}
+		}
+		return $result ;
+	}
+
+	// 包装・のしに関する部分を変更する
+	// cartid が同じ cartitem を一括で更新
+	// 仮のカートの場合がありcheckDataを回避する
+	function	updateDecoWrap( $cartid = -1 , $wrapping_flg = 0 , $decoration_flg = 0 , $deco_used = -1 )
+	{
+		$result = FALSE ;
+
+		if( $cartid != -1 )
+		{
+			$sql = "" ;
+			$sql .= sprintf( "UPDATE %s SET " , $this -> tname ) ;
+			$sql .= sprintf( "wrapping = '%d' , " , $wrapping_flg ) ;
+			$sql .= sprintf( "decoration = '%d' , " , $decoration_flg ) ;
+			$sql .= sprintf( "deco_used = '%d' , " , $deco_used ) ;
+			$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+			$sql .= sprintf( "WHERE " ) ;
+			$sql .= sprintf( "cartid = '%d' " , $cartid ) ;
+	
+			if( $sql != "" )
+			{
+				$record = $this -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					$this -> closeRecord( $record ) ;
+					$result = true ;
+				}
+			}
+		}
+		return $result ;
+	}
+
+	// arParam : key = DBフィールド名
+	// arParam : value = 値
+	// update_date だけは無条件で付加する
+	// arWhere : 条件（なしだと全件更新してしまうので注意）
+	// arWhere : key = DBフィールド名
+	// arWhere : value = 値
+	function	updateData( $arParam , $arWhere = array() )
+	{
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		$result = parent::updateData( $arParam ) ;
+		return $result ;
+	}
+
+	// DBのフィールド名＝変数名
+	// 異なる場合は事前に設定必要
+	function	insertData( &$arParam )
+	{
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		$result = parent::insertData( $arParam ) ;
+		return $result ;
+	}
+}
+
+?>

@@ -1,0 +1,1317 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php" ) ;
+
+	$mode = "" ;
+	$func = "" ;
+
+	// 登録ボタン名によって処理を分ける
+	$arMode = array( "append" , "update" , "delete" , "delete_image" ) ;
+	GetSystemMode( $mode , $func , $arMode ) ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams		= new BLAMS() ;
+	$obCorp		= new PARTS_Corp() ;
+	$obPhoto	= $obCorp -> obPhoto ;
+
+	$alias 		= $obCorp -> alias ;
+	$primarykey	= $obCorp -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+	
+	// 編集データ保存
+	$arParam = array() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$additional[] = "checkcategory" ;
+	$additional[] = "chkdays" ;
+	$obCorp -> assignGlobal( $additional , $arParam ) ;
+
+	if ( $S_GROUPFLG == "" )
+		$S_GROUPFLG = DEF_CORP_GROUP_OTHER ;
+
+	if ( $S_GROUPPARENTID == "" )
+		$S_GROUPPARENTID = -1 ;
+
+	switch( $func )
+	{
+	case "child" :			// 子会社入力の場合
+		$S_GROUPPARENTID =	${ $keyname } ;
+		${ $keyname } = -1 ;
+		$mode =		"append" ;
+		$func =		"input" ;
+		break ;
+	
+	case "parent" :
+		${ $keyname } = $S_GROUPPARENTID ;
+		$S_GROUPPARENTID = -1 ;
+		$mode =		"update" ;
+		$func =		"" ;
+		break ;
+	}
+
+	// 既存の自社情報がない場合は、新規登録画面へ遷移する
+	if ( $mode == "" && $func == "" )
+	{
+		if ( $S_GROUPFLG == DEF_CORP_GROUP_SELF )
+		{
+			$arCorp = $obCorp -> getOwner() ;
+			if ( count( $arCorp ) == 0 )
+			{
+				$mode = "append" ;
+				$func = "input" ;
+			}
+			else
+			{
+				$mode = "update" ;
+				$func = "" ;
+				${ $keyname } = $arCorp[ 0 ][ $keyname ] ;
+			}
+		}
+	}
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obCorp -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page ;
+
+	// データ取得時のキー初期化
+	$getdatakey = ${ $keyname } ;
+
+	// タイトル取得時のキー初期化
+	if ( $S_GROUPFLG == DEF_CORP_GROUP_OTHER )
+		$menu = FUNC_CORP ;
+	else if ( $S_GROUPFLG == DEF_CORP_GROUP_SELF )
+		$menu = FUNC_SELF ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> getFuncName( $menu ) ;
+	if ( $S_GROUPPARENTID != -1 )
+		$funcname = sprintf( "%s(子会社)" , $funcname ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	$error = "" ;
+	switch ( $mode )
+	{
+	// 新規登録モード
+	case "append" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "input" :
+		case "back" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データを初期化
+			if ( $func != "back" )
+			{
+				$obCorp -> initData( $arParam , $S_GROUPFLG , $S_GROUPPARENTID ) ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level , $obCorp ) ;
+
+			break ;
+
+		// 新規確認画面
+		case "confrm" :
+
+			// 入力データ検査
+			$error = $obCorp -> checkData( $mode , $func , $arParam ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obCorp ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+
+				// 機能を「入力」に戻す
+				$func = "input" ;
+
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level , $obCorp ) ;
+			}
+			break ;
+
+		// 新規完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 登録処理" , $funcname ) ;
+
+			// 新規登録実施
+			if ( $obCorp -> insertData( $arParam ) == TRUE )
+			{
+				$error = "正常に登録されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・登録に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $obCorp ) ;
+			break ;
+		}
+		break ;
+
+	// 更新モード
+	case "update" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "input" :
+		case "back" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 更新入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データをDBから再取得（初期化）
+			if ( $func != "back" )
+			{
+				// データをDBから再取得（初期化）
+				$arParam = $obCorp -> getAt( $getdatakey ) ;
+
+				$now_date = new DateTime();
+				$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+				$arParam[ "update_date" ] = $now ;
+			}
+			else if( $func == "back" )
+			{
+				$obPhoto -> deleteWhenBack( $arParam , $obCorp ) ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level , $obCorp ) ;
+			break ;
+
+		// 更新確認画面
+		case "confrm" :
+
+			// 入力データ検査
+			$error = $obCorp -> checkData( $mode , $func , $arParam ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obCorp ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 更新入力" , $funcname ) ;
+
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+
+				// 機能を「入力」に戻す
+				$func = "input" ;
+
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level , $obCorp ) ;
+			}
+			break ;
+
+		// 更新完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 更新処理" , $funcname ) ;
+
+			// 更新登録実施
+			if ( $obCorp -> updateData( $arParam ) == TRUE )
+			{
+				$error = "正常に更新されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・更新に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $obCorp ) ;
+			break ;
+
+		// 初期画面、もしくはFunctionの指定がない場合
+		default :
+			if( $S_GROUPPARENTID != -1 )
+			{
+				$func = "default_child" ;
+			}
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			// データをDBから再取得（初期化）
+			$arParam = $obCorp -> getAt( $getdatakey ) ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obCorp ) ;
+			break ;
+		}
+		break ;
+
+	// 削除モード
+	case "delete" :
+
+		// 機能分岐
+		switch( $func )
+		{
+
+		// 削除確認画面
+		case "confrm" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 削除確認" , $funcname ) ;
+
+			// 削除確認メッセージ表示
+			if ( $obCorp -> issetImage( $arParam ) )
+			{
+				$error  = "【重要】\n" ;
+				$error .= "・画像ファイルも同時に破棄されます。\n" ;
+			}
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obCorp ) ;
+			break ;
+
+		// 削除完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 削除処理" , $funcname ) ;
+
+			// 削除処理実施
+			if ( $obCorp -> deleteData( $arParam ) == TRUE )
+			{
+				$error = "正常に削除されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・削除に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $obCorp ) ;
+			break ;
+		}
+		break ;
+
+	// 画像のみ削除
+	case "delete_image" :
+
+		// タイトルの表示
+		$subfuncname = sprintf( "%s 画像削除処理" , $funcname ) ;
+
+		$arParam[ "del_column"	] = $func ;
+//		$arParam[ "del_photoid"	] = ${ $func . "_org" } ;
+		$arParam[ "del_photoid"	] = $arParam[ $func . "_org" ] ;
+
+		// 削除実行
+		if ( $obPhoto -> deleteEach( $arParam , $obCorp ) == TRUE )
+		{
+			$error = "正常に画像を削除しました。\n" ;
+		}
+		else
+		{
+			$error  = "【エラーがあります】\n" ;
+			$error .= "・画像の削除に失敗しました。\n" ;
+		}
+		$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $obCorp ) ;
+		break ;
+
+	}
+
+	// 「一覧に戻る」の表示
+	$pageback = "" ;
+	if ( $mode != "append" && $S_GROUPFLG == DEF_CORP_GROUP_OTHER )
+	{
+		if ( $S_GROUPPARENTID == -1 )
+			$pageback = $blams -> fetchPageback( "list.php" , $arParamFind ) ;
+		else
+			$pageback = $blams -> fetchPageback( "edit.php" , $arParamFind , "親会社情報へもどる" , "append[parent]" ) ;
+	}
+	
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $pageback . $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+	exit ;
+
+// ボタンの表示
+function	FetchButton( $blams , $mode , $func , $arParamFind )
+{
+	// ローカル変数へ展開する
+	foreach ( $arParamFind as $keys => $values )
+		${ $keys } = $values ;
+
+	$arProcess = array(
+		//					ボタン名								MODE							Action
+		"list"				=>	array( "value" => "一覧に戻る"		, "name" => "list"				, "action" => "list.php"		, "target" => "" , "org_action" => "" ) ,
+		"detail"			=>	array( "value" => "詳細に戻る"		, "name" => "update[default]"	, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"parent"			=>	array( "value" => "親会社詳細に戻る", "name" => "append[parent]"	, "action" => "edit.php"		, "target" => "" , "org_action" => "" ) ,
+
+		"append_confrm"		=>	array( "value" => "新規確認"		, "name" => "append[confrm]"	, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"append_done"		=>	array( "value" => "登録します"		, "name" => "append[done]"		, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"append_cancel"		=>	array( "value" => "キャンセル"		, "name" => "append[cancel]"	, "action" => "list.php"		, "target" => "" , "org_action" => "" ) ,
+		"append_back"		=>	array( "value" => "戻る"			, "name" => "append[back]"		, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"child_cancel"		=>	array( "value" => "キャンセル"		, "name" => "append[parent]"	, "action" => "edit.php"		, "target" => "" , "org_action" => "" ) ,
+
+		"update_input"		=>	array( "value" => "更新"			, "name" => "update[input]"		, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"update_confrm"		=>	array( "value" => "更新確認"		, "name" => "update[confrm]"	, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"update_done"		=>	array( "value" => "更新します"		, "name" => "update[done]"		, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"update_cancel"		=>	array( "value" => "キャンセル"		, "name" => "update[cancel]"	, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"update_back"		=>	array( "value" => "戻る"			, "name" => "update[back]"		, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+
+		"update_hist"		=>	array( "value" => "沿革情報追加"	, "name" => "append[input]"		, "action" => "histedit.php"	, "target" => "" , "org_action" => "" ) ,
+		"update_officer"	=>	array( "value" => "役員情報追加"	, "name" => "append[input]"		, "action" => "offedit.php"		, "target" => "" , "org_action" => "" ) ,
+		"update_subcorp"	=>	array( "value" => "子会社追加"		, "name" => "append[child]"		, "action" => "edit.php"		, "target" => "" , "org_action" => "" ) ,
+
+		"delete_confrm"		=>	array( "value" => "削除"			, "name" => "delete[confrm]"	, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"delete_done"		=>	array( "value" => "削除します"		, "name" => "delete[done]"		, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"delete_cancel"		=>	array( "value" => "キャンセル"		, "name" => "update[cancel]"	, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+
+		"next"				=>	array( "value" => "次の会員へ"		, "name" => "update[next]"		, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+		"prev"				=>	array( "value" => "前に会員へ"		, "name" => "update[prev]"		, "action" => ""				, "target" => "" , "org_action" => "" ) ,
+	) ;
+
+	$arOperation = array() ;
+	switch( $mode )
+	{
+	case "append" :
+		switch( $func )
+		{
+		case "input" :
+		case "back" :
+			if ( $S_GROUPPARENTID == -1 )
+				$arOperation = array( "append_confrm" , "append_cancel" ) ;
+			else
+				$arOperation = array( "append_confrm" , "child_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "append_done" , "append_back" ) ;
+			break ;
+		case "done" :
+			if ( $S_GROUPFLG == DEF_CORP_GROUP_SELF )
+				$arOperation = array( "detail" ) ;
+			else
+				if ( $S_GROUPPARENTID == -1 )
+					$arOperation = array( "list" ) ;
+				else
+					$arOperation = array( "parent" ) ;
+			break ;
+		}
+		break ;
+
+	case "update" :
+		switch( $func )
+		{
+		case "input" :
+		case "back" :
+			$arOperation = array( "update_confrm" , "update_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "update_done" , "update_back" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "detail" ) ;
+			break ;
+		case "default_child" :
+			$arOperation = array( "update_input" , "delete_confrm" , "update_hist" , "update_officer" , "child_cancel" ) ;
+			break ;
+		default :
+			$arOperation = array( "update_input" , "delete_confrm" , "update_hist" , "update_officer" , "update_subcorp" ) ;
+			break ;
+		}
+		break ;
+
+	case "delete" :
+		switch( $func )
+		{
+		case "confrm" :
+			$arOperation = array( "delete_done" , "delete_cancel" ) ;
+			break ;
+		case "done" :
+			if ( $S_GROUPPARENTID == -1 )
+				$arOperation = array( "list" ) ;
+			else
+				$arOperation = array( "parent" ) ;
+			break ;
+		}
+		break ;
+
+	case "delete_image" :
+		$arOperation = array( "detail" ) ;
+		break ;
+
+	}
+
+	$arButton = array() ;
+	for ( $i = 0 ; $i < count( $arOperation ) ; $i ++ )
+		$arButton[] = $arProcess[ $arOperation[ $i ] ] ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "id"				, "edit_form"		) ;
+	$tmpl -> assign( "button_data"		, $arButton			) ;
+	$data = $tmpl -> fetch( "common/button.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+
+}
+
+// 詳細表示
+function	FetchDetail( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obCorp )
+{
+	$alias 		= $obCorp -> alias ;
+	$primarykey	= $obCorp -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $keys => $values )
+		${ $keys } = $values ;
+
+	foreach ( $arParamFind as $keys => $values )
+		${ $keys } = $values ;
+
+	// 企業会員レベル
+	global	$arCorpLevel ;
+	$szCorpLevel = "不明" ;
+	if ( empty( $arCorpLevel[ ${ $alias . "_level" } ] ) == false )
+			$szCorpLevel = $arCorpLevel[ ${ $alias . "_level" } ] ;
+
+	// 社名
+	$szCorpName = $obCorp -> createLongName(	${ $alias .  "_name"		} ,
+												${ $alias . "_title"		} ,
+												${ $alias . "_position"		} ,
+												${ $alias . "_department"	}
+											) ;
+
+	// 住所
+	global	$arState ;
+	$szAddress  = $arState[ ${ $alias . "_state" } ][ 2 ] ;
+	$szAddress .= ${ $alias . "_city"	} ;
+	$szAddress .= ${ $alias . "_addr1"	}  ;
+	$szAddress .= " " ;
+	$szAddress .= ${ $alias . "_addr2"	} ;
+	$szAddress = sprintf( "〒%s-%s %s" , ${ $alias . "_zip1" } , ${ $alias . "_zip2" } , $szAddress ) ;
+
+	// 電話＆ＦＡＸ
+	if ( ${ $alias . "_tel1" } != "" && ${ $alias . "_tel2" } != "" && ${ $alias . "_tel3" } != "" )
+		$szTel = sprintf( "%s-%s-%s" , ${ $alias . "_tel1" }  , ${ $alias . "_tel2" }  , ${ $alias . "_tel3" } ) ;
+	else
+		$szTel = "未登録" ;
+
+	if ( ${ $alias . "_fax1" } != "" && ${ $alias . "_fax2" } != "" && ${ $alias . "_fax3" } != "" )
+		$szFax = sprintf( "%s-%s-%s" , ${ $alias . "_fax1" } , ${ $alias . "_fax2" } , ${ $alias . "_fax3" } ) ;
+	else
+		$szFax = "未登録" ;
+
+	$arHistory = array() ;
+	$arOfficer = array() ;
+	$arSubcorp = array() ;
+
+	if ( ${ $alias . "_" . $primarykey } != -1 )
+	{
+		$arParamChild = $arParamFind ;
+		$param = sprintf( "&page=%d&%s=%s" , $page , $keyname , ${ $keyname } ) ;
+		$param .= $blams -> MakeParamLink( $arParamChild , "GET" ) ;
+
+		// 沿革情報取得
+		$obHistory = $obCorp -> obHistory ;
+		$arWhere = array() ;
+		$arWhere[ $primarykey ] = ${ $keyname } ;
+		$arResult = $obHistory -> getData( $arWhere ) ;
+		
+		$cnt = count( $arResult ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			$arData = $arResult[ $i ] ;
+			$historyid		= $arData[ $obHistory -> alias . "_" . $obHistory -> primarykey	] ;
+			$history_date	= $arData[ $obHistory -> alias . "_history_date"				] ;
+			$body			= $arData[ $obHistory -> alias . "_body"						] ;
+
+			$date = new DateTime( $history_date ) ;
+			$szDate = sprintf( "%04d年%02d月" , $date -> format( "Y" ) , $date -> format( "m" ) ) ;
+
+			$arAnchor = array() ;
+			$arAnchor[ "idname"		] = $obHistory -> alias . "_" . $obHistory -> primarykey	;
+			$arAnchor[ "id"			] = $historyid		;
+			$arAnchor[ "url" 		] = "histedit.php"	;
+			$arAnchor[ "param"		] = $param			;
+			$arAnchor[ "anchor"		] = $szDate			;
+			$arAnchor[ "caption"	] = $szDate			;
+			$arAnchor[ "class"		] = "left"	;
+
+			$arAnchor[ "script"			] = ""			;
+			$arAnchor[ "date_format"	] = ""			;
+			
+			$arData = array() ;
+			$arData[] = $arAnchor ;
+			$arData[] = array( "caption" => $body ,			"class" => "left nl2br"	, "date_format" => ""	, "anchor" => "" ) ;
+			$arHistory[] = $arData ;
+		}
+
+		// 役員情報
+		$obOfficer = $obCorp -> obOfficer ;
+		$arWhere = array() ;
+		$arWhere[ $primarykey ] = ${ $keyname } ;
+		$arResult = $obOfficer -> getData( $arWhere ) ;
+		
+		$cnt = count( $arResult ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			$arData = $arResult[ $i ] ;
+			$officerid		= $arData[ $obOfficer -> alias . "_" . $obOfficer -> primarykey		] ;
+			$name			= $arData[ $obOfficer -> alias . "_name"			] ;
+			$post			= $arData[ $obOfficer -> alias . "_post"			] ;
+
+			global	$arPost ;
+			$post = $arPost[ $post ] ;
+			if ( $post == "" )
+				$post = "不明" ;
+
+			$arAnchor = array() ;
+			$arAnchor[ "idname"		] = $obOfficer -> alias . "_" . $obOfficer -> primarykey	;
+			$arAnchor[ "id"			] = $officerid		;
+			$arAnchor[ "url" 		] = "offedit.php"	;
+			$arAnchor[ "param"		] = $param			;
+			$arAnchor[ "anchor"		] = $name			;
+			$arAnchor[ "caption"	] = $name			;
+			$arAnchor[ "class"		] = "left"	;
+
+			$arAnchor[ "script"			] = ""			;
+			$arAnchor[ "date_format"	] = ""			;
+			
+			$arData = array() ;
+			$arData[] = $arAnchor ;
+			$arData[] = array( "caption" => $post ,			"class" => "left"	, "date_format" => ""	, "anchor" => "" ) ;
+			$arOfficer[] = $arData ;
+		}
+
+		// 子会社
+		$arParamChild = $arParamFind ;
+		$arParamChild[ "S_GROUPPARENTID" ] = ${ $keyname } ;
+		$param = sprintf( "&page=%d" , $page ) ;
+		$param .= $blams -> MakeParamLink( $arParamChild , "GET" ) ;
+
+		$arWhere = array() ;
+		$arWhere[ "groupparentid"	] = ${ $keyname } ;
+		$arWhere[ "order"			] = sprintf( "%s.name" , $alias ) ;
+		$arResult = $obCorp -> getData( $arWhere ) ;
+
+		$cnt = count( $arResult ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			$arData			= $arResult[ $i ] ;
+			$sub_corpid		= $arData[ $obCorp -> alias . "_corpid"			] ;
+
+			// 社名
+			$szCorp = $arData[ $obCorp -> alias . "_lname"			] ;
+
+			$arAnchor = array() ;
+			$arAnchor[ "url" 			] = "edit.php"	;
+			$arAnchor[ "idname"			] = $keyname	;
+			$arAnchor[ "id"				] = $sub_corpid	;
+			$arAnchor[ "param"			] = $param		;
+			$arAnchor[ "anchor"			] = $szCorp		;
+			$arAnchor[ "caption"		] = $szCorp		;
+			$arAnchor[ "class"			] = "left"		;
+			
+			$arAnchor[ "script"			] = ""			;
+			$arAnchor[ "date_format"	] = ""			;
+
+			$arData = array() ;
+			$arData[] = $arAnchor ;
+			$arSubcorp[] = $arData ;
+		}
+	}
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+
+	$arForm = array() ;
+
+	// 企業会員登録の場合、ログインID、パスワード、会員レベルを表示する
+	if ( ${ $alias . "_groupflg" } == DEF_CORP_GROUP_OTHER )
+	{
+		$passwd = DEF_DUMMY_PASSWORD ;
+		if ( $login_level == DEF_ADMIN )
+			$passwd = $obCorp -> decrypt( ${ $alias . "_passwd" } ) ;
+		
+		$value = "" ;
+		$value .= $blams -> fetchTHTD(	"ログインID ※" , ${ $alias . "_loginid" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE ) ;
+		$value .= $blams -> fetchTHTD(	"パスワード ※" ,
+										$passwd				  ,
+										$tsize ,
+										$vsize ,
+										"col1" ,
+										"left" ,
+										"middle" ,
+										BLAMS_FORMAT_ESCAPE ,
+										1 , 1 , 1 , 1 ,
+										$alias . "_crypt_passwd" ,
+										${ $alias . "_crypt_passwd" }
+									) ;
+		$arForm[] = $value ;
+
+		$value = "" ;
+		$value .= $blams -> fetchTHTD( "会員レベル ※" , $szCorpLevel , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+		$arForm[] = $value ;
+
+		$value = "" ;
+		$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+		$arForm[] = $value ;
+	}
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "組織名 ※" , $szCorpName , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "カナ ※" , ${ $alias . "_kana" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "組織名（英語） ※" , ${ $alias . "_name_en" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "部署名"          , ${ $alias . "_department" }    , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE ) ;
+	$value .= $blams -> fetchTHTD( "部署名（英語）"  , ${ $alias . "_department_en" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "住所 ※" , $szAddress , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "電話番号 ※" , $szTel , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "ＦＡＸ" , 	$szFax , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "代表者名" , 		${ $alias . "_representative" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE ) ;
+	$value .= $blams -> fetchTHTD( "メールアドレス" , 	${ $alias . "_agent_email" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE ) ;
+	$arForm[] = $value ;
+
+	// 役員情報
+	$officer_list = "" ;
+	$cnt = count( $arOfficer ) ;
+	if ( $cnt != 0 )
+	{
+		$arHeader = array() ;
+
+		$tmpl = $blams -> tmpl ;
+		$tmpl -> assign( "mode"		, "inner_list"		) ;
+		$tmpl -> assign( "list_data"		, $arOfficer		) ;
+		
+		$tmpl -> assign( "search"			, ""				) ;
+		$tmpl -> assign( "funcname"			, ""				) ;
+		$tmpl -> assign( "error"			, ""				) ;
+		$tmpl -> assign( "header_data"		, $arHeader			) ;
+		$tmpl -> assign( "paging"			, ""				) ;
+		$tmpl -> assign( "noanchor_flg"		, false				) ;
+		$tmpl -> assign( "page_jump"		, ""				) ;
+		
+		$officer_list = $tmpl -> fetch( "common/list.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+	}
+
+	// 役員
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "役員" , $officer_list , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_NOTAB , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$szFoundation_date = "" ;
+	if ( ${ $alias . "_foundation_date_y" } != "" )
+		$szFoundation_date = sprintf( "%04d年%02d月" , ${ $alias . "_foundation_date_y" }, ${ $alias . "_foundation_date_m" } ) ;
+
+	$szCapital = "" ;
+	if ( ${ $alias . "_capital" } != 0 )
+		$szCapital	= sprintf( "%s 万円" , number_format( ${ $alias . "_capital" } ) ) ;
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "設立年月" , 		$szFoundation_date , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "資本金（万円）" , 	$szCapital , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$szEmployees = "" ;
+	if ( ${ $alias . "_employees" } != 0 )
+		$szEmployees	= sprintf( "%d 人" , ${ $alias . "_employees" } ) ;
+		
+	$szAveAge = "" ;
+	if ( ${ $alias . "_ave_age" } != 0 )
+		$szAveAge		= sprintf( "%d 歳" , ${ $alias . "_ave_age" } ) ;
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "従業員数" , 	$szEmployees , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "平均年齢" , 	$szAveAge , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "事業内容" , ${ $alias . "_activities" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_OUTPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "HTMLヘッダ用<br />タイトル" , ${ $alias . "_headertitle" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "HTMLヘッダ用<br />ディスクリプション" , ${ $alias . "_headermessage" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "HTMLヘッダ用<br />キーワード" , ${ $alias . "_headermisc" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "キャッチコピー1<br />（タイトル）" , ${ $alias . "_catch" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "キャッチコピー1<br />（本文）" , ${ $alias . "_catch_body" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_OUTPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "キャッチコピー2<br />（タイトル）" , ${ $alias . "_catch2" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "キャッチコピー2<br />（本文）" , ${ $alias . "_catch_body2" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_OUTPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "サブタイトル1" , ${ $alias . "_subtitle" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "コメント1" , ${ $alias . "_comment" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_OUTPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "サブタイトル2" , ${ $alias . "_subtitle2" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "コメント2" , ${ $alias . "_comment2" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_OUTPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+// 画像　外観　内装　地図
+
+	$value = "" ;
+	$value .= $blams -> fetchDetailImageTHTD(	${ $alias . "_photoid_tmp" } , 
+												${ $alias . "_photoid_org" } ,
+												$alias . "_photoid_img" ,
+												${ $alias . "_photoid_img" } ,
+												DEF_TOPIMAGE_WID , DEF_TOPIMAGE_HGT ,
+												"画像（外観）" ,
+												$tsize , $vsize3 , "col1" , "left" , "top" , BLAMS_FORMAT_NONE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchDetailImageTHTD(	${ $alias . "_photoid1_tmp" } ,
+												${ $alias . "_photoid1_org" } ,
+												$alias . "_photoid1_img" ,
+												${ $alias . "_photoid1_img" } ,
+												DEF_TOPIMAGE_WID , DEF_TOPIMAGE_HGT ,
+												"画像（内装）" ,
+												$tsize , $vsize3 , "col1" , "left" , "top" , BLAMS_FORMAT_NONE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchDetailImageTHTD(	${ $alias . "_photoid_map_tmp" } ,
+												${ $alias . "_photoid_map_org" } ,
+												$alias . "_photoid_map_img" ,
+												${ $alias . "_photoid_map_img" } ,
+												DEF_TOPIMAGE_WID , DEF_TOPIMAGE_HGT ,
+												"画像" ,
+												$tsize , $vsize3 , "col1" , "left" , "top" , BLAMS_FORMAT_NONE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "補足説明" , ${ $alias . "_submessage" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_ESCAPE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "ご挨拶" , ${ $alias . "_misc" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_OUTPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "営業時間" , ${ $alias . "_business_hours" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_OUTPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "定休日" , ${ $alias . "_regular_holiday" } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_OUTPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	// ホームページ
+	global $arStyle ;
+	$szStyle = $arStyle[ ${ $alias . "_style" } ] ;
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "スタイル ※" , $szStyle , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_NONE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	// 沿革
+	$history_list = "" ;
+	$cnt = count( $arHistory ) ;
+	if ( $cnt != 0 )
+	{
+		$arHeader = array() ;
+
+		$tmpl = $blams -> tmpl ;
+		$tmpl -> assign( "mode"		, "inner_list"		) ;
+		$tmpl -> assign( "list_data"		, $arHistory		) ;
+		
+		$tmpl -> assign( "search"			, ""				) ;
+		$tmpl -> assign( "funcname"			, ""				) ;
+		$tmpl -> assign( "error"			, ""				) ;
+		$tmpl -> assign( "header_data"		, $arHeader			) ;
+		$tmpl -> assign( "paging"			, ""				) ;
+		$tmpl -> assign( "noanchor_flg"		, false				) ;
+		$tmpl -> assign( "page_jump"		, ""				) ;
+		
+		$history_list = $tmpl -> fetch( "common/list.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+	}
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "沿革" , $history_list , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_NONE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	// 子会社
+	$subcorp_list = "" ;
+	$cnt = count( $arSubcorp ) ;
+	if ( $cnt != 0 )
+	{
+		$arHeader = array() ;
+
+		$tmpl = $blams -> tmpl ;
+		$tmpl -> assign( "mode"		, 		"inner_list"		) ;
+		$tmpl -> assign( "list_data"		, $arSubcorp		) ;
+
+		$tmpl -> assign( "search"			, ""				) ;
+		$tmpl -> assign( "funcname"			, ""				) ;
+		$tmpl -> assign( "error"			, ""				) ;
+		$tmpl -> assign( "header_data"		, $arHeader			) ;
+		$tmpl -> assign( "paging"			, ""				) ;
+		$tmpl -> assign( "noanchor_flg"		, false				) ;
+		$tmpl -> assign( "page_jump"		, ""				) ;
+
+		$subcorp_list = $tmpl -> fetch( "common/list.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+	}
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "子会社" , $subcorp_list , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_NONE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParamFind ) ;
+
+	$pageback = "" ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, $pageback			) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "input_data"		, $arParam			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/confrm.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+// 入力フォームの表示
+function	FetchInput( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_level , $obCorp )
+{
+	$alias 		= $obCorp -> alias ;
+	$primarykey	= $obCorp -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $keys => $values )
+		${ $keys } = $values ;
+
+	foreach ( $arParamFind as $keys => $values )
+		${ $keys } = $values ;
+
+	// 一般会員レベル
+	global	$arCorpLevel ;
+
+	// 法人格
+	global $arCustomerTitle ;
+
+	// 法人格位置
+	global $arCustomerPosition ;
+
+	// 都道府県テーブル生成
+	global	$arStateName ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$isize	= $vsize - 16 ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+	$isize3	= $vsize3 - 16 ;
+
+	$arForm = array() ;
+
+	// 企業会員登録の場合、ログインID、パスワード、会員レベルを表示する
+	if ( ${ $alias . "_groupflg" } == DEF_CORP_GROUP_OTHER )
+	{
+		$passwd = "" ;
+		if ( empty( ${ $alias . "_passwd" } ) == false )
+			$passwd = DEF_DUMMY_PASSWORD ;
+
+		$value = "" ;
+		$form   = $blams -> fetchInputbox( $alias . "_loginid" , ${ $alias . "_loginid" } , $isize  , MAX_LOGINID , IME_OFF ) ;
+		$value .= $blams -> fetchTHTD( "ログインID ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+		$form   = $blams -> fetchPasswordbox(	$alias . "_passwd" ,
+												$passwd ,
+												$alias . "_crypt_passwd" ,
+												${ $alias . "_crypt_passwd" } ,
+												$isize  , MAX_PASSWD , IME_OFF ) ;
+		$value .= $blams -> fetchTHTD( "パスワード ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+		$arForm[] = $value ;
+
+		$value = "" ;
+		$form   = $blams -> fetchSelectbox( $alias . "_level" , ${ $alias . "_level" } , $arCorpLevel , $isize ,  "選択してください。" , FALSE , "" ) ;
+		$value .= $blams -> fetchTHTD( "会員レベル ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+		$arForm[] = $value ;
+
+		$value = "" ;
+		$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+		$arForm[] = $value ;
+	}
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_name" , ${ $alias . "_name" } , $isize3  , MAX_CORPNAME , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "組織名 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_kana" , ${ $alias . "_kana" } , $isize3  , MAX_CORPNAME , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "カナ ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_name_en" , ${ $alias . "_name_en" } , $isize3  , MAX_CORPNAME*2 , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "組織名（英語） ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_department" , ${ $alias . "_department" } , $isize  , MAX_CORPNAME ) ;
+	$value .= $blams -> fetchTHTD( "部署名" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_department_en" , ${ $alias . "_department_en" } , $isize  , MAX_CORPNAME , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "部署名（英語）" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $alias . "_title" , ${ $alias . "_title" } , $arCustomerTitle , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "法人格 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchSelectbox( $alias . "_position" , ${ $alias . "_position" } , $arCustomerPosition , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "法人格位置 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputZip(	$alias . "_zip" ,
+										${ $alias . "_zip1" } ,
+										${ $alias . "_zip2" } ,
+										"郵便番号検索" ,
+										$alias . "_zip" ,
+										sprintf( "%s_zip,%s_state,%s_city,%s_addr1" , $alias , $alias , $alias , $alias ) ,
+										"郵便番号検索" , true ) ;
+	$value .= $blams -> fetchTHTD( "郵便番号 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $alias . "_state" , ${ $alias . "_state" } , $arStateName , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "都道府県 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_city" , ${ $alias . "_city" } , $isize  , MAX_CITY , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "市区町村 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_addr1" , ${ $alias . "_addr1" } , $isize3  , MAX_ADDR , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "住所 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_addr2" , ${ $alias . "_addr2" } , $isize3  , MAX_ADDR , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "ビル名" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputPhone( $alias . "_tel" , ${ $alias . "_tel1" } , ${ $alias . "_tel2" } , ${ $alias . "_tel3" } ) ;
+	$value .= $blams -> fetchTHTD( "電話番号 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+
+	$form   = $blams -> fetchInputPhone( $alias . "_fax" , ${ $alias . "_fax1" } , ${ $alias . "_fax2" } , ${ $alias . "_fax3" } ) ;
+	$value .= $blams -> fetchTHTD( "FAX" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_representative" , ${ $alias . "_representative" } , $isize  , MAX_USERNAME , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "代表者名" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_agent_email" , ${ $alias . "_agent_email" } , $isize  , MAX_EMAIL , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "メールアドレス" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputDate(	$alias    . "_foundation_date" , 
+										${ $alias . "_foundation_date_y" } ,
+										${ $alias . "_foundation_date_m" } ,
+										0 , TRUE , TRUE , FALSE ) ;
+	$value .= $blams -> fetchTHTD( "設立年月" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$capital = "" ;
+	if ( ${ $alias . "_capital" } != 0 )
+		$capital = ${ $alias . "_capital" } ;
+
+	$employees = "" ;
+	if ( ${ $alias . "_employees" } != 0 )
+		$employees = ${ $alias . "_employees" } ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_capital" , $capital , 48  , MAX_CAPITAL , IME_OFF ) ;
+	$form  .= "万円\n" ;
+	$value .= $blams -> fetchTHTD( "資本金" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$form   = $blams -> fetchInputbox( $alias . "_employees" , $employees , 48  , MAX_CAPITAL , IME_OFF ) ;
+	$form  .= "人\n" ;
+	$value .= $blams -> fetchTHTD( "従業員数" , $form , $tsize , $vsize , "col1" , "left" , "middle" , TRUE ) ;
+	$arForm[] = $value ;
+
+	$ave_age = "" ;
+	if ( ${ $alias . "_ave_age" } != 0 )
+		$ave_age = ${ $alias . "_ave_age" } ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_ave_age" , $ave_age , 48  , MAX_CAPITAL , IME_OFF ) ;
+	$form  .= "歳\n" ;
+	$value .= $blams -> fetchTHTD( "平均年齢" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( $alias . "_activities" , ${ $alias . "_activities" } , $isize3  ) ;
+	$value .= $blams -> fetchTHTD( "事業内容" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_INPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_headertitle" , ${ $alias . "_headertitle" } , $isize3  , 80 , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "HTMLヘッダ用<br />タイトル" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_headermessage" , ${ $alias . "_headermessage" } , $isize3  , 80 , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "HTMLヘッダ用<br />ディスクリプション" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_headermisc" , ${ $alias . "_headermisc" } , $isize3  , 80 , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "HTMLヘッダ用<br />キーワード" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_catch" , ${ $alias . "_catch" } , $isize3  , 80 , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "キャッチコピー1<br />（タイトル）" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( $alias . "_catch_body" , ${ $alias . "_catch_body" } , $isize3 ) ;
+	$value .= $blams -> fetchTHTD( "キャッチコピー1<br />（本文）" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_INPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_catch2" , ${ $alias . "_catch2" } , $isize3  , 80 , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "キャッチコピー2<br />（タイトル）" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( $alias . "_catch_body2" , ${ $alias . "_catch_body2" } , $isize3 ) ;
+	$value .= $blams -> fetchTHTD( "キャッチコピー2<br />（本文）" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_INPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_subtitle" , ${ $alias . "_subtitle" } , $isize3  , 80 , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "サブタイトル1" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( $alias . "_comment" , ${ $alias . "_comment" } , $isize3 ) ;
+	$value .= $blams -> fetchTHTD( "コメント1" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_INPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_subtitle2" , ${ $alias . "_subtitle2" } , $isize3  , 80 , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "サブタイトル2" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( $alias . "_comment2" , ${ $alias . "_comment2" } , $isize3 ) ;
+	$value .= $blams -> fetchTHTD( "コメント2" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_INPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	// 画像
+
+	$value = "" ;
+	$value .= $blams -> fetchInputImageTHTD(	${ $alias . "_photoid_tmp" } ,
+												${ $alias . "_photoid_org" } ,
+												$alias . "_photoid" ,
+												${ $alias . "_photoid_img" } ,
+												DEF_TOPIMAGE_WID , DEF_TOPIMAGE_HGT ,
+												"画像（外観）" ,
+												$tsize , $isize3 ,
+												"col1" , "left" , "top" , TRUE , 1 , 1 , 3 ) ;
+												
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchInputImageTHTD(	${ $alias . "_photoid1_tmp" } ,
+												${ $alias . "_photoid1_org" } ,
+												$alias . "_photoid1" ,
+												${ $alias . "_photoid1_img" } ,
+												DEF_TOPIMAGE_WID , DEF_TOPIMAGE_HGT ,
+												"画像（内装）" ,
+												$tsize , $isize3 ,
+												"col1" , "left" , "top" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchInputImageTHTD(	${ $alias . "_photoid_map_tmp" } ,
+												${ $alias . "_photoid_map_org" } ,
+												$alias . "_photoid_map" ,
+												${ $alias . "_photoid_map_img" } ,
+												DEF_TOPIMAGE_WID , DEF_TOPIMAGE_HGT ,
+												"画像" ,
+												$tsize , $isize3 ,
+												"col1" , "left" , "top" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $alias . "_submessage" , ${ $alias . "_submessage" } , $isize3  , 80 , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "補足説明" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( $alias . "_misc" , ${ $alias . "_misc" } , $isize3 ) ;
+	$value .= $blams -> fetchTHTD( "ご挨拶" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_INPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( $alias . "_business_hours" , ${ $alias . "_business_hours" } , $isize3 ) ;
+	$value .= $blams -> fetchTHTD( "営業時間" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_INPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( $alias . "_regular_holiday" , ${ $alias . "_regular_holiday" } , $isize3 ) ;
+	$value .= $blams -> fetchTHTD( "定休日" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_MULTILINE_INPUT , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	// スタイル
+	global $arStyle ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $alias . "_style" , ${ $alias . "_style" } , $arStyle , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "スタイル ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , TRUE , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParamFind ) ;
+
+	$arParamFind[ $alias . "_create_date" ] = ${ $alias . "_create_date" } ;
+	$arParamFind[ $alias . "_update_date" ] = ${ $alias . "_update_date" } ;
+
+	$arParamFind[ $alias . "_groupparentid"	] = ${ $alias . "_groupparentid" } ;
+	$arParamFind[ $alias . "_groupflg"		] = ${ $alias . "_groupflg" } ;
+
+	$pageback = "" ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, $pageback			) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, $keyname			) ;
+	$tmpl -> assign( "idvalue"			, ${ $keyname }		) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+// 詳細表示
+function	FetchDone( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $obCorp )
+{
+	$alias		= $obCorp -> alias ;
+	$primarykey	= $obCorp -> primarykey ;
+	$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $keys => $values )
+		${ $keys } = $values ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParamFind ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH		) ;
+	$tmpl -> assign( "funcname"			, $funcname				) ;
+	$tmpl -> assign( "mode"				, $mode					) ;
+	$tmpl -> assign( "func"				, $func					) ;
+	$tmpl -> assign( "error"			, $error				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"			) ;
+	$tmpl -> assign( "button"			, $button				) ;
+	$tmpl -> assign( "idname"			, $primarykey			) ;
+	$tmpl -> assign( "idvalue"			, ${ $keyname }			) ;
+	$data = $tmpl -> fetch( "common/done.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+?>

@@ -1,0 +1,248 @@
+<?php
+/**
+* BLAMS 基本関数郡 LINKクラス
+*
+* LINKクラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" , 1 ) ;
+
+require_once( "class/db.class.php" ) ;
+require_once( "class/category.class.php" ) ;
+
+class PARTS_Link extends DB_Common
+{
+	var $obCategory ;
+	
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "link_data" ;
+		$alias		= "lnk" ;
+		$primarykey	= "linkid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> obCategory	= new PARTS_Category( $this -> conn ) ;
+		$this -> obPhoto	= new PARTS_Photo( $this -> conn ) ;
+
+		$this -> searchkey = array(
+				"S_SUBJECT"			,
+				"S_EDIT_FLG"		,
+				"S_YEAR"			,
+				"S_MON"				,
+				"S_DAY"				,
+			) ;
+
+		$this -> images = array( "photoid" ) ;
+	}
+
+	function	getData( $arParam , $page = 0 , $limit_flg = true , $per_page = -1 )
+	{
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields = "" ;
+			$fields .= sprintf( "%s , " , $this -> makeAliaseFields() ) ;
+			$fields .= sprintf( "%s   " , $this -> obCategory -> makeAliaseFields() ) ;
+			
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $limit_flg , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = 0 , $limit_flg = true , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= $fields ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "LEFT JOIN %s %s ON %s.kind = %s.category1 " , 
+							$this -> obCategory -> tname , 
+							$this -> obCategory -> alias , 
+							$this -> alias , 
+							$this -> obCategory -> alias 
+						) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+		$sql .= sprintf( "AND   %s.kind   = %d " , $this -> obCategory -> alias , DEF_CATEGORY_LINK ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $limit_flg == true )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		// 編集中フラグ検索
+		if ( $edit_flg != -1 )
+			$sql .= sprintf( "AND %s.edit_flg = %d " , $this -> alias , $edit_flg ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.category1			, " , $this -> obCategory -> alias ) ;
+				$sql .= sprintf( "%s.category2			, " , $this -> obCategory -> alias ) ;
+				$sql .= sprintf( "%s.category3			, " , $this -> obCategory -> alias ) ;
+				$sql .= sprintf( "%s.subject			  " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		
+		return $sql ;
+	}
+
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		if( ${ $alias . "_edit_flg" } == "" )
+			${ $alias . "_edit_flg" } = DEF_EDITSTATUS_EDITTING ;
+
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$arParam[ $alias . "_linkid"			] = -1 ;
+		$arParam[ $alias . "_subject"			] = "" ;
+		$arParam[ $alias . "_url"				] = "" ;
+		$arParam[ $alias . "_comment"			] = "" ;
+		$arParam[ $alias . "_width"				] = DEF_BANNER_M_WID ;
+		$arParam[ $alias . "_height"			] = DEF_BANNER_M_HGT ;
+		$arParam[ $alias . "_kind"				] = 0 ;
+		$arParam[ $alias . "_photo"				] = "" ;
+		$arParam[ $alias . "_photo_name"		] = "" ;
+		$arParam[ $alias . "_photo_size"		] = "" ;
+		$arParam[ $alias . "_photo_type"		] = "" ;
+		$arParam[ $alias . "_photoid"			] = "" ;
+		$arParam[ $alias . "_edit_flg"			] = DEF_EDITSTATUS_EDITTING ;
+		$arParam[ $alias . "_status"			] = DEF_EVENT_PRIORITY_NONE ;
+		$arParam[ $alias . "_photoid_org"		] = -1 ;
+		$arParam[ $alias . "_photoid_tmp"		] = -1 ;
+
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ $alias . "_create_date"		] = $now ;
+		$arParam[ $alias . "_update_date"		] = $now ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$blams = new BLAMS() ;
+
+		$error = "" ;
+		$obDate = new DateTime();
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// 表題
+			if ( ${ $alias . "_subject" } == "" )
+				$error .= "・表題が入力されていません。\n" ;
+
+			if( ${ $alias . "_url" } != "" )
+			{
+				$arParam[ $alias . "_url" ] = $blams -> AddHTTPProtocol( ${ $alias . "_url" } ) ;
+				$url = $arParam[ $alias . "_url" ] ;
+				if( !($blams -> is_url( $url ) ) )
+				{
+					$error .= "・リンク先のURLの書式が正しくありません。\n" ;
+				}
+			}
+			else
+			{
+				$error .= "・リンク先が入力されていません。\n" ;
+			}
+
+			// 種類
+			if ( ${ $alias . "_kind" } == -1 )
+				$error .= "・種類が入力されていません。\n" ;
+
+			// 編集状態
+			if( ${ $alias . "_edit_flg" } == -1 )
+				$error .= "・編集状態が選択されていません。\n" ;
+
+			// 画像
+			$obPhoto = $this -> obPhoto ;
+			$error .= $obPhoto -> checkData( $alias . "_photoid_img" , $alias . "_photoid_tmp" , $arParam , "img" , "画像" ) ;
+
+			if( ${ $alias . "_photoid_img" } != "" )
+			{
+				// 幅の指定
+				if ( is_numeric( ${ $alias . "_width" } ) != TRUE )
+				{
+					$error .= "・バナーサイズ（幅）が指定されていません。\n" ;
+				}
+	
+				if ( is_numeric( ${ $alias . "_height" } ) != TRUE )
+				{
+					$error .= "・バナーサイズ（高さ）が指定されていません。\n" ;
+				}
+			}
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+}
+?>

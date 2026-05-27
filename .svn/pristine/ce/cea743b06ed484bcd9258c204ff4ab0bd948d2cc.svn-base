@@ -1,0 +1,556 @@
+<?php
+/**
+* BLAMS 基本関数郡 TOPICS用クラス
+*
+* TOPICS用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+define( "NUMBER_PER_TOPICS"		,	5	) ;		// 行数／ページ
+
+//
+// トピックスカテゴリ
+//
+$_FUNC = 0 ;
+define( "TOPICS_TYPE_WEB"			,	$_FUNC ++	) ;		// 手動
+define( "TOPICS_TYPE_TOP"			,	$_FUNC ++	) ;		// トップコンテンツ
+define( "TOPICS_TYPE_PROFILE"		,	$_FUNC ++	) ;		// 自社情報
+define( "TOPICS_TYPE_HISTORY"		,	$_FUNC ++	) ;		// 沿革情報
+define( "TOPICS_TYPE_OFFICER"		,	$_FUNC ++	) ;		// 役員情報
+define( "TOPICS_TYPE_RECRUIT"		,	$_FUNC ++	) ;		// 採用情報
+
+$_FUNC = 100 ;
+define( "TOPICS_TYPE_MERCHANDISE"	,	$_FUNC ++	) ;		// 商品（ショップ用）
+define( "TOPICS_TYPE_ITEM"			,	$_FUNC ++	) ;		// 商品
+define( "TOPICS_TYPE_PRODUCT"		,	$_FUNC ++	) ;		// 業務
+define( "TOPICS_TYPE_EVENT"			,	$_FUNC ++	) ;		// イベント
+define( "TOPICS_TYPE_NEWS"			,	$_FUNC ++	) ;		// ニュース
+define( "TOPICS_TYPE_VOICE"			,	$_FUNC ++	) ;		// 通信
+define( "TOPICS_TYPE_TOPICS"		,	$_FUNC ++	) ;		// TOPICS
+define( "TOPICS_TYPE_INFO"			,	$_FUNC ++	) ;		// 情報
+define( "TOPICS_TYPE_LINK"			,	$_FUNC ++	) ;		// リンク
+define( "TOPICS_TYPE_CORP"			,	$_FUNC ++	) ;		// 企業
+define( "TOPICS_TYPE_SHOP"			,	$_FUNC ++	) ;		// ショップ
+define( "TOPICS_TYPE_FESTIVAL"		,	$_FUNC ++	) ;		// おまつり
+define( "TOPICS_TYPE_REPORT"		,	$_FUNC ++	) ;		// レポート
+
+$arImage = array(
+	TOPICS_TYPE_WEB			=> "/img/listWeb.gif"			,
+	TOPICS_TYPE_TOP			=> "/img/listTop.gif"			,
+	TOPICS_TYPE_PROFILE		=> "/img/listProfile.gif"		,
+	TOPICS_TYPE_HISTORY		=> "/img/listHistory.gif"		,
+	TOPICS_TYPE_OFFICER		=> "/img/listOfficer.gif"		,
+	TOPICS_TYPE_RECRUIT		=> "/img/listRecruit.gif"		,
+
+	TOPICS_TYPE_MERCHANDISE	=> "/img/listMerchandise.gif"	,
+	TOPICS_TYPE_ITEM		=> "/img/listItem.gif"			,
+	TOPICS_TYPE_PRODUCT		=> "/img/listProduct.gif"		,
+	TOPICS_TYPE_EVENT		=> "/img/listEvent.gif"			,
+	TOPICS_TYPE_NEWS		=> "/img/listNews.gif"			,
+	TOPICS_TYPE_VOICE		=> "/img/listVoice.gif"			,
+	TOPICS_TYPE_TOPICS		=> "/img/listTopics.gif"		,
+	TOPICS_TYPE_INFO		=> "/img/listInfo.gif"			,
+	TOPICS_TYPE_LINK		=> "/img/listLink.gif"			,
+	TOPICS_TYPE_CORP		=> "/img/listCorp.gif"			,
+	TOPICS_TYPE_SHOP		=> "/img/listShop.gif"			,
+	TOPICS_TYPE_FESTIVAL	=> "/img/listFestival.gif"		,
+	TOPICS_TYPE_REPORT		=> "/img/listReport.gif"		,
+) ;
+
+global	$arTopicsTitle ;
+$arTopicsTitle = array(
+	TOPICS_TYPE_WEB			=> "インフォメーション" ,
+	TOPICS_TYPE_TOP			=> "TOPコンテンツ"		,
+	TOPICS_TYPE_PROFILE		=> "自社情報"			,
+	TOPICS_TYPE_HISTORY		=> "沿革情報"			,
+	TOPICS_TYPE_OFFICER		=> "役員情報"			,
+	TOPICS_TYPE_RECRUIT		=> "採用情報"			,
+
+	TOPICS_TYPE_MERCHANDISE	=> "商品（ショップ用）"	,
+	TOPICS_TYPE_ITEM		=> "商品"				,
+	TOPICS_TYPE_PRODUCT		=> "業務"				,
+	TOPICS_TYPE_EVENT		=> "イベント"			,
+	TOPICS_TYPE_NEWS		=> "ニュース"			,
+	TOPICS_TYPE_VOICE		=> "通信"				,
+	TOPICS_TYPE_TOPICS		=> "トピックス"			,
+	TOPICS_TYPE_INFO		=> "情報"				,
+	TOPICS_TYPE_LINK		=> "リンク"				,
+	TOPICS_TYPE_CORP		=> "企業"				,
+	TOPICS_TYPE_SHOP		=> "ショップ"			,
+	TOPICS_TYPE_FESTIVAL	=> "おまつり"			,
+	TOPICS_TYPE_REPORT		=> "レポート"			,
+) ;
+
+$arTopicsLink = array(
+	TOPICS_TYPE_WEB			=> "/"					,
+	TOPICS_TYPE_TOP			=> "/"					,
+	TOPICS_TYPE_PROFILE		=> "/profile.html"		,
+	TOPICS_TYPE_HISTORY		=> "/history.html"		,
+	TOPICS_TYPE_OFFICER		=> "/officer.html"		,
+	TOPICS_TYPE_RECRUIT		=> "/recruite.html"		,
+
+	TOPICS_TYPE_MERCHANDISE	=> "/merchandise/"		,
+	TOPICS_TYPE_ITEM		=> "/item/"				,
+	TOPICS_TYPE_PRODUCT		=> "/product/"			,
+	TOPICS_TYPE_EVENT		=> "/event/"			,
+	TOPICS_TYPE_NEWS		=> "/news/"				,
+	TOPICS_TYPE_VOICE		=> "/voice/"			,
+	TOPICS_TYPE_TOPICS		=> "/topics/"			,
+	TOPICS_TYPE_INFO		=> "/info"				,
+	TOPICS_TYPE_LINK		=> "/link/"				,
+	TOPICS_TYPE_CORP		=> "/corp/"				,
+	TOPICS_TYPE_SHOP		=> "/shop/"				,
+	TOPICS_TYPE_FESTIVAL	=> "/festa/"			,
+	TOPICS_TYPE_REPORT		=> "/report/"			,
+) ;
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Topics extends DB_Common
+{
+	var	$obTop ;
+	var	$obEvent ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "topics_data" ;
+		$alias		= "tpc" ;
+		$primarykey	= "topicsid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_TOPICS ;
+
+		$this -> obTop		= new PARTS_Top( $this -> conn ) ;
+		$this -> obEvent	= new PARTS_Event( $this -> conn ) ;
+
+		$this -> searchkey = array(
+				"S_SUBJECT"			,
+				"S_EDIT_FLG"		,
+			) ;
+
+		// 追加項目
+		$this -> fieldsData[] = array( "name" => "start_date_y"				, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_m"				, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_d"				, "type" => "" , "format" => "%s" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+	
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		// 会社IDで検索
+		if ( $corpid != -1 )
+			$sql .= sprintf( "AND %s.corpid = %d " , $this -> alias , $corpid ) ;
+
+		// TYPE
+		if ( $topicstype != -1 )
+			$sql .= sprintf( "AND %s.topicstype = %d " , $this -> alias , $topicstype ) ;
+
+		// LINKID
+		if ( $linkid != -1 )
+			$sql .= sprintf( "AND %s.linkid = %d " , $this -> alias , $linkid ) ;
+
+		// 編集中フラグ
+		if ( $edit_flg != -1 )
+			$sql .= sprintf( "AND %s.edit_flg = %d " , $this -> alias , $edit_flg ) ;
+
+		// 掲載開始日
+		if ( $start_date != -1 )
+			$sql .= sprintf( "AND %s.start_date %s " , $this -> alias , $start_date ) ;
+
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			else
+				$sql .= sprintf( "ORDER BY %s.start_date desc , %s.update_date DESC " , $this -> alias , $this -> alias ) ;
+		}
+		$sql .= $limit ;
+		
+		return $sql ;
+	}
+	
+	// タイトル文字と種類でIDを検索する
+	function getID( $subject , $topicstype , $start_date , $edit_flg )
+	{
+		$topicsid = -1 ;
+		// 例外処理判定
+		if ( $topicstype == TOPICS_TYPE_TOP )
+		{
+			// トピックスカテゴリが、トップコンテンツ登録でない場合、
+			// 常に新規登録する為、戻り値は -1 とする
+	
+			if ( $this -> isOpen() )
+			{
+				$obDate = new DateTime( sprintf( "%s" , trim( $start_date , "'" ) ) ) ;
+				
+				$sql  = "" ;
+				$sql .= sprintf( "SELECT * FROM %s " , $this -> tname ) ;
+				$sql .= sprintf( "WHERE status     =  1             " ) ;
+				$sql .= sprintf( "AND   subject    =  '%s'          " , $this -> mb_addslashes( $subject ) ) ;
+				$sql .= sprintf( "AND   topicstype =  '%d'          " , $topicstype ) ;
+				$sql .= sprintf( "AND   start_date >= '%s 00:00:00' " , $obDate -> format( "Y-m-d" ) ) ;
+				$sql .= sprintf( "AND   start_date <= '%s 23:59:59' " , $obDate -> format( "Y-m-d" ) ) ;
+				if ( $edit_flg != -1 )
+					$sql .= sprintf( "AND edit_flg = '%d' " , $edit_flg ) ;
+
+				$record = $this -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					if ( $this -> getDataCount( $record ) > 0 )
+						$topicsid = $this -> getValue( $record , $this -> primarykey ) ;
+					$this -> closeRecord( $record ) ;
+				}
+			}
+		}
+		return $topicsid ;
+	}
+
+	// 公開日が該当トピックと重複した事で、登録されなかった「公開ＯＫ」のデータを検索する
+	function	getOpenedContentsID( $topicstype , $start_date , $exclude_linkid )
+	{
+		$new_linkid = -1 ;
+	
+		if ( $this -> isOpen() )
+		{
+			$strStart_date = trim( $start_date , "'" ) ;
+			$obDate = new DateTime( $strStart_date ) ;
+
+			// where句の初期化
+			$where  = "" ;
+			$where .= sprintf( "AND start_date >= '%s 00:00:00' " , $obDate -> format( "Y-m-d" ) ) ;
+			$where .= sprintf( "AND start_date <= '%s 23:59:59' " , $obDate -> format( "Y-m-d" ) ) ;
+
+			$obj = -1 ;
+			if ( $topicstype == TOPICS_TYPE_TOP )
+				$obj = $this -> obTop ;
+			else if ( $topicstype == TOPICS_TYPE_EVENT )
+				$obj = $this -> obEvent ;
+
+			if ( is_object( $obj ) )
+			{
+				$arWhere = array() ;
+				$arWhere[ "status"		]  = 1 ;
+				$arWhere[ "edit_flg"	]  = DEF_EDITSTATUS_OPENED ;
+				$arWhere[ "where"		]  = $where ;
+				$arWhere[ "where"		] .= sprintf( "AND %s <> '%d' " , $obj -> primarykey , $exclude_linkid ) ;
+
+				// トップコンテンツから探す
+				$arResult = $obj -> getData( $arWhere ) ;
+				if ( count( $arResult ) > 0 )
+				{
+					// 該当トピックスが存在するので、新しい linkid として戻り値にセットする
+					$new_linkid = $arResult[ 0 ][ $obj -> alias . "_" . $obj -> primarykey  ] ;
+				}
+			}
+		}
+	
+		return $new_linkid ;
+	}
+
+	// トピックスの自動挿入関数
+	function autoInsert( $subject , $topicstype , $start_date = "LOCALTIMESTAMP(0)" , $edit_flg = DEF_EDITSTATUS_OPENED , $corpid = -1 , $linkid = -1 , $topicssort = EVENT_SORT_NORMAL )
+	{
+		$now = date( "'Y-m-d H:i:s'" ) ;
+		if ( $start_date == "LOCALTIMESTAMP(0)" )
+			$start_date = $now ;
+		else
+			$start_date = sprintf( "'%s'" , trim( $start_date , "'" ) ) ;
+
+		$topicsid = -1 ;
+		$arResult = array() ;
+
+		$bNew = true ;
+		if ( $linkid != -1 )
+		{
+			$arWhere = array() ;
+			$arWhere[ "topicstype"	] = $topicstype ;
+			$arWhere[ "linkid"		] = $linkid ;
+			$arResult = $this -> getData( $arWhere ) ;
+			if ( count( $arResult ) > 0 )
+			{
+				$arResult = $arResult[ 0 ] ;
+				$topicsid = $arResult[ $this -> alias . "_" . $this -> primarykey ] ;
+				$bNew = false ;
+			}
+		}
+
+		// 編集状態により、正しい処理方法を判定する
+		$process = "" ;
+		if ( $edit_flg == DEF_EDITSTATUS_OPENED )
+		{
+			// 「公開ＯＫ」の登録処理
+			if ( $this -> getID( $subject , $topicstype , $start_date , DEF_EDITSTATUS_OPENED ) == -1 )
+			{
+				// 公開日当日、初めての「公開ＯＫ」登録
+				if ( $bNew == true )
+				{
+					// 「公開ＯＫ」でないトピックスが、既に存在しているかを検索する
+					$new_topicsid = $this -> getID( $subject , $topicstype , $start_date , -1 ) ;
+					if ( $new_topicsid != -1 )
+					{
+						// 存在した場合は、それにつなぎ替えて更新処理
+						$topicsid	= $new_topicsid ;
+						$process	= "update" ;
+					}
+					else
+					{
+						// それも存在しなければ、新規登録が必要
+						$process = "insert" ;
+					}
+				}
+				else
+				{
+					// 過去に登録履歴が存在する為、登録更新処理で良い
+					$process = "update" ;
+				}
+			}
+			else
+			{
+				// 公開日当日、初めての「公開ＯＫ」登録でないなら、何もしない
+			}
+		}
+		else
+		{
+			// 「公開ＯＫ」以外の登録処理
+			if ( $bNew == true )
+			{
+				// 過去に登録履歴が存在しない為、登録の必要なし
+			}
+			else
+			{
+				// 過去に「公開ＯＫ」登録履歴が存在する為、編集状態の更新が必要
+				$process = "update" ;
+
+				// 公開日が該当トピックと重複した事で、登録されなかった「公開ＯＫ」のデータを検索する
+				$new_linkid = $this -> getOpenedContentsID( $topicstype , $start_date , $linkid ) ;
+				if ( $new_linkid != -1 )
+				{
+					// 存在した場合は、それにつなぎ替える
+					$linkid		= $new_linkid ;
+					$edit_flg	= DEF_EDITSTATUS_OPENED ;
+				}
+			}
+		}
+		
+		$arResult[ $this -> alias . "_" . $this -> primarykey	] = $topicsid ;
+		$arResult[ $this -> alias . "_corpid"					] = $corpid ;
+		$arResult[ $this -> alias . "_subject"					] = $subject ;
+		$arResult[ $this -> alias . "_topicstype"				] = $topicstype ;
+		$arResult[ $this -> alias . "_topicssort"				] = $topicssort ;
+		$arResult[ $this -> alias . "_status"					] = 1 ;
+		$arResult[ $this -> alias . "_linkid"					] = $linkid ;
+		$arResult[ $this -> alias . "_edit_flg"					] = $edit_flg ;
+		$arResult[ $this -> alias . "_start_date"				] = trim( $start_date , "'" ) ;
+
+		// 処理分岐
+		if ( $process == "insert" )
+		{
+			// ID指定がない、もしくは該当するTOPICSデータがない場合は新規作成
+			$result = $this -> insertData( $arResult ) ;
+		}
+		else if ( $process == "update" )
+		{
+			// 該当するTOPICSデータがある場合は、そのデータの内容を更新する。
+			// （必要あらば、linkid 先も変更する）
+			$result = $this -> updateData( $arResult ) ;
+		}
+
+		if ( $process == "" )
+		{
+			// 登録／更新処理の必要がない場合の戻り値は、正常終了
+			$result = true ;
+		}
+
+		return $result ;
+	}
+
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		if( ${ $alias . "_edit_flg" } == "" )
+			${ $alias . "_edit_flg" } = DEF_EDITSTATUS_EDITTING ;
+
+		if( ${ $alias . "_topicstype" } == "" )
+			${ $alias . "_topicstype" } = TOPICS_TYPE_WEB ;
+
+		if( ${ $alias . "_status" } == "" )
+			${ $alias . "_status" } = DEF_EVENT_PRIORITY_NONE ;
+
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+
+		$arParam[ $alias . "_topicsid"			] = -1 ;
+		$arParam[ $alias . "_subject"			] = "" ;
+		$arParam[ $alias . "_topicssort"		] = 0 ;
+		$arParam[ $alias . "_topicstype"		] = TOPICS_TYPE_WEB ;
+		$arParam[ $alias . "_linkid"			] = -1 ;
+
+		$arParam[ $alias . "_start_date"		] = $now ;
+		$arParam[ $alias . "_start_date_y"		] = $now_date -> format( "Y" ) ;
+		$arParam[ $alias . "_start_date_m"		] = $now_date -> format( "n" ) ;
+		$arParam[ $alias . "_start_date_d"		] = $now_date -> format( "j" ) ;
+		$arParam[ $alias . "_edit_flg"			] = DEF_EDITSTATUS_EDITTING ;
+		$arParam[ $alias . "_status"			] = DEF_EVENT_PRIORITY_NONE ;
+
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ $alias . "_create_date"		] = $now ;
+		$arParam[ $alias . "_update_date"		] = $now ;
+	}
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$error = "" ;
+		$obDate = new DateTime();
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// 表題
+			if ( ${ $alias . "_subject" } == "" )
+				$error .= "・タイトルが入力されていません。\n" ;
+
+			// 掲載日
+			if ( empty( $arParam[ $alias . "_start_date" ] ) == true )
+			{
+				$arParam[ $alias . "_start_date" ] = "" ;
+				if ( ( is_numeric( ${ $alias . "_start_date_y" } ) ) &&
+					 ( is_numeric( ${ $alias . "_start_date_m" } ) ) &&
+					 ( is_numeric( ${ $alias . "_start_date_d" } ) ) )
+				{
+					if ( checkdate( ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } , ${ $alias . "_start_date_y" } ) )
+					{
+						// 公開開始日の更新
+						$obStart_date = new DateTime();
+						$obStart_date -> setDate( ${ $alias . "_start_date_y" } , ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } ) ;
+						$obStart_date -> setTime( 0 , 0 , 0 ) ;
+						$start_date_new = $obStart_date -> format( "Y-m-d H:i:s" ) ;
+						$arParam[ $alias . "_start_date" ] = $start_date_new ;
+					}
+					else
+					{
+						$error .= "・指定された公開開始日は正しくありません。\n" ;
+					}
+				}
+				else
+				{
+					$error .= "・公開開始日が正しく入力されていません。\n" ;
+				}
+			}
+			
+			// 表示先
+			if( ${ $alias . "_topicssort" } == -1 )
+				$error .= "・表示先が選択されていません。\n" ;
+
+			// 種類
+			if( ${ $alias . "_topicstype" } == -1 )
+				$error .= "・種類が選択されていません。\n" ;
+
+			// 優先度
+			if( ${ $alias . "_status" } == -1 )
+				$error .= "・優先度が選択されていません。\n" ;
+
+			// 編集状態
+			if( ${ $alias . "_edit_flg" } == -1 )
+				$error .= "・編集状態が選択されていません。\n" ;
+
+			if( $func == "database" )
+			{
+				$arParam[ $alias . "_start_date"	] = sprintf( "'%s'" , ${ $alias . "_start_date" } ) ;
+			}
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+}
+?>

@@ -1,0 +1,9 @@
+<?php
+	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../lib/personal.php" ) ;
+
+	// URL‚©‚ç‹@”\”Ô†‚ðŽæ“¾‚·‚éB
+	$func = GetFuncNumber() ;
+
+	CreateWebPage( $func ) ;
+?>

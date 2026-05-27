@@ -1,0 +1,277 @@
+<?php
+/**
+* BLAMS 基本関数郡 諸設定用クラス
+*
+* バナー情報管理用クラス
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+$_FUNC = 1 ;
+define( "DEF_BANNER_IMAGE_FAVORITE" , 	$_FUNC ++ ) ;
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Banner extends DB_Common
+{
+	var	$obPhoto ;
+
+	function	__construct(  $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "banner_data" ;
+		$alias		= "bnr" ;
+		$primarykey	= "bannerid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> obPhoto	= new PARTS_Photo( $this -> conn ) ;
+
+		$this -> searchkey = array(
+				"S_SUBJECT"		,
+				"S_EDIT_FLG"	,
+			) ;
+			
+		$this -> images = array( "photoid" ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$alias = $this -> alias ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+		
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+		
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.bannerid " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+	
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$blams = new BLAMS() ;
+
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// 表題
+			if ( ${ $alias . "_subject" } == "" )
+				$error .= "・表題が入力されていません。\n" ;
+	
+			// TAG
+			if ( ${ $alias . "_body" } == "" && ${ $alias . "_url" } == "" )
+				$error .= "・TAGかURLを入力する必要があります。\n" ;
+
+			// URL
+			if( ${ $alias . "_url" } != "" )
+			{
+				$arParam[ $alias . "_url" ] = $blams -> AddHTTPProtocol( ${ $alias . "_url" } ) ;
+				$url = $arParam[ $alias . "_url" ] ;
+				if( !($blams -> is_url( $url ) ) )
+					$error .= "・URLの書式が正しくありません。\n" ;
+			}
+
+/*
+typeをkindに変更
+			// 種類
+			if ( ${ $alias . "_kind" } == -1 )
+				$error .= "・種類が選択されていません。\n" ;
+	
+			// バナー種類
+			if ( ${ $alias . "_type" } == -1 )
+				$error .= "・バナー種類が選択されていません。\n" ;
+*/
+			// バナー種類
+			if ( ${ $alias . "_kind" } == -1 )
+				$error .= "・バナー種類が選択されていません。\n" ;
+
+			// 編集状態
+			if ( ${ $alias . "_edit_flg" } == -1 )
+				$error .= "・編集状態が選択されていません。\n" ;
+	
+			// 画像
+			if ( ${ $alias . "_photoid_img" } != "" )
+			{
+				$obPhoto = $this -> obPhoto ;
+				$error .= $obPhoto -> checkData( $alias . "_photoid_img"	, $alias . "_photoid_tmp"	, $arParam	, "img"	, "画像"	) ;
+				//$error .= CheckDataPhoto( "photoid_img"		, "photoid_tmp"		, $arParam , "画像"		, $conn ) ;
+	
+				// 幅の指定
+				if ( is_numeric( ${ $alias . "_width" } ) != TRUE )
+					$error .= "・バナーサイズ（幅）が指定されていません。\n" ;
+	
+				if ( is_numeric( ${ $alias . "_height" } ) != TRUE )
+					$error .= "・バナーサイズ（高さ）が指定されていません。\n" ;
+			}
+			else
+			{
+				if ( ${ $alias . "_photoid_org" } == -1 && ${ $alias . "_photoid_tmp" } == -1 )
+				{
+					if ( ${ $alias . "_url" } != "" )
+						$error .= "・URLを指定した場合、バナー画像を登録する必要があります。\n" ;
+				}
+			}
+/*
+			if ( ${ $alias . "_photourl" } != "" )
+			{
+				$arParam[ $alias . "_photourl" ] = $blams -> AddHTTPProtocol( ${ $alias . "_photourl" } ) ;
+				$photourl = $arParam[ $alias . "_photourl" ] ;
+				if( !($blams -> is_url( $photourl ) ) )
+					$error .= "・画像URLの書式が正しくありません。\n" ;
+			}
+*/
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ $alias . "_bannerid"		] = -1 ;
+		$arParam[ $alias . "_subject"		] = "" ;
+		$arParam[ $alias . "_body"			] = "" ;
+		$arParam[ $alias . "_url"			] = "" ;
+		$arParam[ $alias . "_photoid"		] = "" ;
+		$arParam[ $alias . "_photoid_org"	] = -1 ;
+		$arParam[ $alias . "_photoid_tmp"	] = -1 ;
+		$arParam[ $alias . "_photourl"		] = "" ;
+		$arParam[ $alias . "_edit_flg"		] = DEF_EDITSTATUS_EDITTING ;
+		$arParam[ $alias . "_width"			] = DEF_BANNER_M_WID ;
+		$arParam[ $alias . "_height"		] = DEF_BANNER_M_HGT ;
+//		$arParam[ $alias . "_type"			] = DEF_BANNER_TEXT ;
+//		$arParam[ $alias . "_kind"			] = 0 ;
+// typeをkindに変更
+		$arParam[ $alias . "_kind"			] = DEF_BANNER_TEXT ;
+
+		$arParam[ $alias . "_create_date"	] = $now ;
+		$arParam[ $alias . "_update_date"	] = $now ;
+	}
+	
+	//
+	// 新規データ登録
+	//
+	function insertData( &$arParam )
+	{
+		$result = false ;
+
+		$result = parent::insertData( $arParam , -1 , "" ) ;
+		
+		return $result ;
+	}
+
+	//
+	// データ更新
+	//
+	function updateData( $arParam )
+	{
+		$result = false ;
+	
+		$result = parent::updateData( $arParam , -1 , "" ) ;
+
+		return $result ;
+	}
+	
+	//
+	// データ削除
+	//
+	function deleteData( $arParam )
+	{
+		$result = false ;
+	
+		$result = parent::deleteData( $arParam , -1 , "" ) ;
+
+		return $result ;
+	}
+
+}
+?>

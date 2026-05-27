@@ -1,0 +1,377 @@
+<?php
+/**
+* BLAMS 基本関数郡 TOPICS用クラス
+*
+* TOPICS用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+define( "NUMBER_PER_TOP"		,	5	) ;		// 行数／ページ
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Top extends DB_Common
+{
+	var	$obPhoto ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "top_data" ;
+		$alias		= "tp" ;
+		$primarykey	= "topid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_TOP ;
+
+		$this -> obPhoto	= new PARTS_Photo( $this -> conn ) ;
+
+		$this -> searchkey = array(
+				"S_SUBJECT"			,
+				"S_EDIT_FLG"		,
+			) ;
+
+		$this -> images = array( "photoid" ) ;
+
+		// 追加項目
+		$this -> fieldsData[] = array( "name" => "start_date_y"				, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_m"				, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_d"				, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "end_date_y"				, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "end_date_m"				, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "end_date_d"				, "type" => "" , "format" => "%s" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+	
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+				
+		// 編集中フラグ
+		if ( $edit_flg != -1 )
+			$sql .= sprintf( "AND %s.edit_flg = %d " , $this -> alias , $edit_flg ) ;
+
+		// 掲載開始日
+		if ( $start_date != -1 )
+			$sql .= sprintf( "AND %s.start_date %s " , $this -> alias , $start_date ) ;
+
+		// 掲載終了日
+		if ( $end_date != -1 )
+			$sql .= sprintf( "AND %s.end_date %s " , $this -> alias , $end_date ) ;
+
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			else
+				$sql .= sprintf( "ORDER BY %s.update_date DESC " , $this -> alias , $this -> alias ) ;
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		if( ${ $alias . "_edit_flg" } == "" )
+			${ $alias . "_edit_flg" } = DEF_EDITSTATUS_EDITTING ;
+
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$arParam[ $alias . "_topid"				] = -1 ;
+		$arParam[ $alias . "_subject"			] = "" ;
+		$arParam[ $alias . "_body"				] = "" ;
+		$arParam[ $alias . "_photo"				] = "" ;
+		$arParam[ $alias . "_photo_name"		] = "" ;
+		$arParam[ $alias . "_photo_size"		] = "" ;
+		$arParam[ $alias . "_photo_type"		] = "" ;
+		$arParam[ $alias . "_photoid"			] = "" ;
+
+		$arParam[ $alias . "_start_date"		] = DEF_DATE_MIN ;
+		$arParam[ $alias . "_start_date_y"		] = DEF_DATE_MIN_YEAR ;
+		$arParam[ $alias . "_start_date_m"		] = DEF_DATE_MIN_MONTH ;
+		$arParam[ $alias . "_start_date_d"		] = DEF_DATE_MIN_DAY ;
+		$arParam[ $alias . "_end_date"			] = DEF_DATE_MAX ;
+		$arParam[ $alias . "_end_date_y"		] = DEF_DATE_MAX_YEAR ;
+		$arParam[ $alias . "_end_date_m"		] = DEF_DATE_MAX_MONTH ;
+		$arParam[ $alias . "_end_date_d"		] = DEF_DATE_MAX_DAY ;
+		$arParam[ $alias . "_edit_flg"			] = DEF_EDITSTATUS_EDITTING ;
+		$arParam[ $alias . "_status"			] = DEF_EVENT_PRIORITY_NONE ;
+
+		$arParam[ $alias . "_photoid_org"		] = -1 ;
+		$arParam[ $alias . "_photoid_tmp"		] = -1 ;
+
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ $alias . "_create_date"		] = $now ;
+		$arParam[ $alias . "_update_date"		] = $now ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$error = "" ;
+		$obDate = new DateTime();
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// 表題
+			if ( ${ $alias . "_subject" } == "" )
+				$error .= "・表題が入力されていません。\n" ;
+
+			// 本文
+			if ( ${ $alias . "_body" } == "" )
+				$error .= "・本文が入力されていません。\n" ;
+
+			// 掲載日
+			$arParam[ $alias . "_start_date" ] = "" ;
+			if ( ${ $alias . "_start_date_y" } == "" && ( is_numeric( ${ $alias . "_start_date_m" } ) && is_numeric( ${ $alias . "_start_date_d" } ) ) )
+			{
+				if ( checkdate( ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } , 2000 ) != FALSE )
+				{
+					// 掲載開始日の更新
+					$obDate -> setDate( DEF_DATE_LIMIT_YEAR , ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } ) ;
+					$obDate -> setTime( DEF_DATE_MIN_HOUR , DEF_DATE_MIN_MINUTE , DEF_DATE_MIN_SECOND ) ;
+					$start_date_new = $obDate -> format( "Y-m-d H:i:s" ) ;
+					$arParam[ $alias . "_start_date"	] = $start_date_new ;
+					$arParam[ $alias . "_start_date_y"	] = DEF_DATE_LIMIT_YEAR ;
+				}
+				else
+				{
+					$error .= "・指定された掲載開始日は正しくありません。\n" ;
+				}
+			}
+			else if ( ( is_numeric( ${ $alias . "_start_date_y" } ) ) &&
+				 ( is_numeric( ${ $alias . "_start_date_m" } ) ) &&
+				 ( is_numeric( ${ $alias . "_start_date_d" } ) ) )
+			{
+				if ( checkdate( ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } , ${ $alias . "_start_date_y" } ) != FALSE )
+				{
+					// 掲載開始日の更新
+					$obDate -> setDate( ${ $alias . "_start_date_y" } , ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } ) ;
+					$obDate -> setTime( DEF_DATE_MIN_HOUR , DEF_DATE_MIN_MINUTE , DEF_DATE_MIN_SECOND ) ;
+					$start_date_new = $obDate -> format( "Y-m-d H:i:s" ) ;
+					$arParam[ $alias . "_start_date" ] = $start_date_new ;
+				}
+				else
+				{
+					$error .= "・指定された掲載開始日は正しくありません。\n" ;
+				}
+			}
+			else if ( ${ $alias . "_start_date_y" } != "" || ${ $alias . "_start_date_m" } != "" || ${ $alias . "_start_date_d" } != "" )
+			{
+				$error .= "・掲載開始日が正しく入力されていません。\n" ;
+			}
+			else
+			{
+				$arParam[ $alias . "_start_date"	] = DEF_DATE_MIN ;
+				$arParam[ $alias . "_start_date_y"	] = DEF_DATE_MIN_YEAR ;
+				$arParam[ $alias . "_start_date_m"	] = DEF_DATE_MIN_MONTH ;
+				$arParam[ $alias . "_start_date_d"	] = DEF_DATE_MIN_DAY ;
+			}
+
+			$arParam[ $alias . "_end_date" ] = "" ;
+			if ( ( ${ $alias . "_end_date_y" } == "" || ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR || ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR + 1 ) && ( is_numeric( ${ $alias . "_end_date_m" } ) && is_numeric( ${ $alias . "_end_date_d" } ) ) )
+			{
+				if ( checkdate( ${ $alias . "_end_date_m" } , ${ $alias . "_end_date_d" } , 2000 ) != FALSE )
+				{
+					// 掲載終了日の更新
+	
+					$chk_start_md	= sprintf( "%02d%02d" , ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } ) ;
+					$chk_end_md		= sprintf( "%02d%02d" , ${ $alias . "_end_date_m" } , ${ $alias . "_end_date_d" } ) ;
+	
+					if( $chk_start_md  > $chk_end_md )
+					{
+						$obDate -> setDate( DEF_DATE_LIMIT_YEAR + 1 , ${ $alias . "_end_date_m" } , ${ $alias . "_end_date_d" } ) ;
+						$arParam[ $alias . "_end_date_y" ] = DEF_DATE_LIMIT_YEAR + 1 ;
+					}
+					else
+					{
+						$obDate -> setDate( DEF_DATE_LIMIT_YEAR , ${ $alias . "_end_date_m" } , ${ $alias . "_end_date_d" } ) ;
+						$arParam[ $alias . "_end_date_y" ] = DEF_DATE_LIMIT_YEAR ;
+					}
+	
+					$obDate -> setTime( DEF_DATE_MAX_HOUR , DEF_DATE_MAX_MINUTE , DEF_DATE_MAX_SECOND ) ;
+					$end_date_new = $obDate -> format( "Y-m-d H:i:s" ) ;
+					$arParam[ $alias . "_end_date" ] = $end_date_new ;
+				}
+				else
+				{
+					$error .= "・指定された掲載開始日は正しくありません。\n" ;
+				}
+			}
+			else if ( ( is_numeric( ${ $alias . "_end_date_y" } ) ) &&
+				 ( is_numeric( ${ $alias . "_end_date_m" } ) ) &&
+				 ( is_numeric( ${ $alias . "_end_date_d" } ) ) )
+			{
+				if ( checkdate( ${ $alias . "_end_date_m" } , ${ $alias . "_end_date_d" } , ${ $alias . "_end_date_y" } ) != FALSE )
+				{
+					// 掲載終了日の更新
+					$obDate -> setDate( ${ $alias . "_end_date_y" } , ${ $alias . "_end_date_m" } , ${ $alias . "_end_date_d" } ) ;
+					$obDate -> setTime( DEF_DATE_MAX_HOUR , DEF_DATE_MAX_MINUTE , DEF_DATE_MAX_SECOND ) ;
+					$end_date_new = $obDate -> format( "Y-m-d H:i:s" ) ;
+					$arParam[ $alias . "_end_date" ] = $end_date_new ;
+				}
+				else
+				{
+					$error .= "・指定された掲載終了日は正しくありません。\n" ;
+				}
+			}
+			else if ( ${ $alias . "_end_date_y" } != "" || ${ $alias . "_end_date_m" } != "" || ${ $alias . "_end_date_d" } != "" )
+			{
+				$error .= "・掲載終了日が正しく入力されていません。\n" ;
+			}
+			else
+			{
+				$arParam[ $alias . "_end_date"		] = DEF_DATE_MAX ;
+				$arParam[ $alias . "_end_date_y"	] = DEF_DATE_MAX_YEAR ;
+				$arParam[ $alias . "_end_date_m"	] = DEF_DATE_MAX_MONTH ;
+				$arParam[ $alias . "_end_date_d"	] = DEF_DATE_MAX_DAY ;
+			}
+
+			if( ${ $alias . "_start_date_y" } == DEF_DATE_LIMIT_YEAR || ${ $alias . "_start_date_y" } == "" )
+			{
+				if( ${ $alias . "_start_date_m" } != "" && ${ $alias . "_start_date_d" } != "" )
+				{
+					if( !( ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR || ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR + 1 || ${ $alias . "_end_date_y" } == "" ) )
+						$error .= "・掲載開始日の年を入力した場合は、掲載終了日にも年を入力してください。\n" ;
+				}
+			}
+			else if( ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR || ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR + 1 || ${ $alias . "_end_date_y" } == "" )
+			{
+				if( ${ $alias . "_end_date_m" } != "" && ${ $alias . "_end_date_d" } != "" )
+				{
+					if( !( ${ $alias . "_start_date_y" } == DEF_DATE_LIMIT_YEAR || ${ $alias . "_start_date_y" } == "" ) )
+						$error .= "・掲載終了日の年を入力した場合は、掲載開始日にも年を入力してください。\n" ;
+				}
+			}
+			else if ( ( is_numeric( ${ $alias . "_start_date_y" } ) ) &&
+				 ( is_numeric( ${ $alias . "_start_date_m" } ) ) &&
+				 ( is_numeric( ${ $alias . "_start_date_d" } ) ) &&
+				 ( is_numeric( ${ $alias . "_end_date_y" } ) ) &&
+				 ( is_numeric( ${ $alias . "_end_date_m" } ) ) &&
+				 ( is_numeric( ${ $alias . "_end_date_d" } ) ) )
+			{
+				$chk_start_date	= sprintf( "%04d%02d%02d" , ${ $alias . "_start_date_y" } , ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } ) ;
+				$chk_end_date	= sprintf( "%04d%02d%02d" , ${ $alias . "_end_date_y" } , ${ $alias . "_end_date_m" } , ${ $alias . "_end_date_d" } ) ;
+				if( $chk_start_date  > $chk_end_date )
+					$error .= "・入力した掲載終了日は、掲載開始日よりも早い日付です。\n" ;
+			}
+
+			if( ( ${ $alias . "_start_date_y" } == "" || ${ $alias . "_start_date_y" } == DEF_DATE_LIMIT_YEAR ) && ${ $alias . "_start_date_m" } == "" && ${ $alias . "_start_date_d" } == "" )
+			{
+				if( ( ${ $alias . "_end_date_y" } == "" || ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR || ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR + 1 ) && ${ $alias . "_end_date_m" } != "" && ${ $alias . "_end_date_d" } != "" )
+					$error .= "・掲載開始日が指定されていないか、掲載終了日が正しく入力されていません。\n" ;
+			}
+			else if( ( ${ $alias . "_end_date_y" } == "" || ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR || ${ $alias . "_end_date_y" } == DEF_DATE_LIMIT_YEAR + 1 ) && ${ $alias . "_end_date_m" } == "" && ${ $alias . "_end_date_d" } == "" )
+			{
+				if( ( ${ $alias . "_start_date_y" } == "" || ${ $alias . "_start_date_y" } == DEF_DATE_LIMIT_YEAR ) && ${ $alias . "_start_date_m" } != "" && ${ $alias . "_start_date_d" } != "" )
+					$error .= "・掲載終了日が指定されていないか、掲載開始日が正しく入力されていません。\n" ;
+			}
+
+			// 編集状態
+			if( ${ $alias . "_edit_flg" } == -1 )
+				$error .= "・編集状態が選択されていません。\n" ;
+
+			// 画像
+			$obPhoto = $this -> obPhoto ;
+			$error .= $obPhoto -> checkData( $alias . "_photoid_img" , $alias . "_photoid_tmp" , $arParam , "img" , "画像" ) ;
+
+			if( $func == "database" )
+			{
+				$arParam[ $alias . "_start_date"	] = sprintf( "'%s'" , ${ $alias . "_start_date" } ) ;
+				$arParam[ $alias . "_end_date"		] = sprintf( "'%s'" , ${ $alias . "_end_date" } ) ;
+			}
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+}
+?>

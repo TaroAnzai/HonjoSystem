@@ -1,0 +1,356 @@
+<?php
+
+// 会社案内の表示
+function	fetchProfile( $func , $detail = "" )
+{
+	$arCorp = array() ;
+	$arHistory = array() ;
+
+	$obCorp = new PARTS_Corp() ;
+	if ( $obCorp -> isOpen() == true )
+	{
+		$arCorp = $obCorp -> getOwner() ;
+		if ( count( $arCorp ) > 0 )
+		{
+			$arSubCorp	= $arCorp ;
+			unset( $arSubCorp[ 0 ] ) ;
+
+			$arCorp		= $arCorp[ 0 ] ;
+		}
+		$corpid = $obCorp -> getID() ;
+
+		$obDB = new DB_Common() ;
+		if ( $obDB -> isOpen() )
+		{
+			// 沿革の取得
+			$arHistory = array() ;
+			$sql  = sprintf( "" ) ;
+			$sql .= sprintf( "SELECT * FROM history_data " ) ;
+			$sql .= sprintf( "WHERE status = 1 " ) ;
+			$sql .= sprintf( "AND status = 1 " ) ;
+			$sql .= sprintf( "AND corpid = %d " , $corpid ) ;	// 自社情報
+			$sql .= sprintf( "ORDER BY history_date " ) ;
+			$record = $obDB -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				$cnt = $obDB -> getDataCount( $record ) ;
+				for ( $i = 0 ; $i < $cnt ; $i ++ )
+				{
+					$arHistory[] = $obDB -> getValues( $record , $i ) ;
+				}
+				$obDB -> closeRecord( $record ) ;
+			}
+			
+		}
+	}
+	
+	global $arCustomerTitle ;
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+
+	switch ( $detail )
+	{
+	case	"detail" :
+		$tmpl -> assign( "func"			, $func ) ;
+		$tmpl -> assign( "title_data"	, $arCustomerTitle ) ;
+		$tmpl -> assign( "corp_data"	, $arCorp ) ;
+		$tmpl -> assign( "subsidiary_data"	, $arSubCorp ) ;
+		$tmpl -> assign( "history_data"	, $arHistory ) ;
+		$profile = $tmpl -> fetch( "profile/profile.tmpl" ) ;
+		unset( $tmpl ) ;
+
+		break ;
+	
+	default :
+		$tmpl -> assign( "func"			, $func ) ;
+		$tmpl -> assign( "title_data"	, $arCustomerTitle ) ;
+		$tmpl -> assign( "corp_data"	, $arCorp ) ;
+		$profile = $tmpl -> fetch( "profile/profile_index.tmpl" ) ;
+	}
+	unset( $tmpl ) ;
+
+	return $profile ;
+}
+
+// ご挨拶の表示
+function	fetchGreetings( $func , $detail = "" )
+{
+	$data = "" ;
+	
+	$arCorp = array() ;
+	$arHistory = array() ;
+
+	$obCorp = new PARTS_Corp() ;
+	if ( $obCorp -> isOpen() == true )
+	{
+		$arCorp = $obCorp -> getOwner() ;
+		if ( count( $arCorp ) > 0 )
+			$arCorp = $arCorp[ 0 ] ;
+		$corpid = $obCorp -> getID() ;
+
+		$obDB = new DB_Common() ;
+		if ( $obDB -> isOpen() )
+		{
+			// 沿革の取得
+			$arHistory = array() ;
+			$sql  = sprintf( "" ) ;
+			$sql .= sprintf( "SELECT * FROM history_data " ) ;
+			$sql .= sprintf( "WHERE status = 1 " ) ;
+			$sql .= sprintf( "AND status = 1 " ) ;
+			$sql .= sprintf( "AND corpid = %d " , $corpid ) ;	// 自社情報
+			$sql .= sprintf( "ORDER BY history_date " ) ;
+			$record = $obDB -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				$cnt = $obDB -> getDataCount( $record ) ;
+				for ( $i = 0 ; $i < $cnt ; $i ++ )
+				{
+					$arHistory[] = $obDB -> getValues( $record , $i ) ;
+				}
+				$obDB -> closeRecord( $record ) ;
+			}
+			
+		}
+	}
+	
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+
+	switch ( $detail )
+	{
+	default :
+		$tmpl -> assign( "func"			, $func ) ;
+		$tmpl -> assign( "corp_data"	, $arCorp ) ;
+		$tmpl -> assign( "history_data"	, $arHistory ) ;
+		$data = $tmpl -> fetch( "profile/greetings.tmpl" ) ;
+		unset( $tmpl ) ;
+	}
+	unset( $tmpl ) ;
+
+	return $data ;
+}
+
+// 役員情報の取得
+function	GetOfficer()
+{
+	$arOfficer = array() ;
+
+	global $arPost ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT * FROM officer_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 ORDER BY post , update_date DESC " ) ;
+
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = $obDB -> getValues( $record , $i ) ;
+
+				$post	= $arData[ "post" ] ;
+				$arData[ "postName"		] = $arPost[ $post ] ;
+
+				$arOfficer[] = $arData ;
+			}
+			
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+	return $arOfficer ;
+}
+
+// 役員情報の表示
+function	fetchOfficer( $func )
+{
+	$arOfficer = GetOfficer() ;
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	$tmplFils = "profile/officer.tmpl" ;
+
+	// 生成された会社情報がある場合は テンプレートを表示する
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "officer_data"	, $arOfficer ) ;
+	$tmpl -> assign( "corp_data"	, $arCorp ) ;
+	$data = $tmpl -> fetch( $tmplFils ) ;
+	unset( $tmpl ) ;
+
+	return $data ;
+}
+
+// 沿革情報の取得
+function	GetHistory()
+{
+	$arData = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT * FROM history_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 order by history_date " ) ;
+
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData[] = $obDB -> getValues( $record , $i ) ;
+			}
+			
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+	return $arData ;
+}
+
+// 沿革情報の表示
+function	fetchHistory( $func )
+{
+	$arHistory = GetHistory() ;
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	$tmplFils = "profile/history.tmpl" ;
+
+	// 生成された会社情報がある場合は テンプレートを表示する
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "history_data"	, $arHistory ) ;
+	$tmpl -> assign( "corp_data"	, $arCorp ) ;
+	$data = $tmpl -> fetch( $tmplFils ) ;
+	unset( $tmpl ) ;
+
+	return $data ;
+}
+
+// 取引先情報の表示
+function	fetchPartner( $func )
+{
+	global	$arPartnerTitle ;
+
+	$obPartner = new PARTS_Partner ;
+	$arPartner = $obPartner -> getData( array() , 0 , false ) ;
+
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	$tmplFils = "profile/partner.tmpl" ;
+
+	// 生成された会社情報がある場合は テンプレートを表示する
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "partner_title", $arPartnerTitle ) ;
+	$tmpl -> assign( "partner_data"	, $arPartner ) ;
+	$tmpl -> assign( "corp_data"	, $arCorp ) ;
+	$data = $tmpl -> fetch( $tmplFils ) ;
+	unset( $tmpl ) ;
+
+	return $data ;
+}
+// 業務履歴情報の取得
+function	GetOccupation()
+{
+	$arData = array() ;
+	
+	global $arOccupation ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT * FROM occupation_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 ORDER BY year , month " ) ;
+
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arTemp		= $obDB -> getValues( $record , $i ) ;
+				
+				$arTemp[ "typeName" ] = $arOccupation[ $arTemp[ "type" ] ] ;
+				$arData[] = $arTemp ;
+			}
+			
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+	return $arData ;
+}
+
+// 業務履歴情報の表示
+function	fetchOccupation( $func )
+{
+	$arOccupation = GetOccupation() ;
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	$tmplFils = "profile/occupation.tmpl" ;
+
+	// 生成された会社情報がある場合は テンプレートを表示する
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "occupation_data"	, $arOccupation ) ;
+	$tmpl -> assign( "corp_data"	, $arCorp ) ;
+	$data = $tmpl -> fetch( $tmplFils ) ;
+	unset( $tmpl ) ;
+
+	return $data ;
+}
+
+// 業務履歴情報の取得
+function	GetSubsidiary()
+{
+	$arSubCorp = array() ;
+
+	$obCorp = new PARTS_Corp() ;
+	if ( $obCorp -> isOpen() == true )
+	{
+		$arCorp = $obCorp -> getOwner() ;
+		if ( count( $arCorp ) > 0 )
+		{
+			$arSubCorp	= $arCorp ;
+			unset( $arSubCorp[ 0 ] ) ;
+
+			$arCorp		= $arCorp[ 0 ] ;
+		}
+		$corpid = $obCorp -> getID() ;
+	}
+	
+	return $arSubCorp ;
+}
+
+// 子会社情報の表示
+function	fetchSubsidiary( $func )
+{
+	$arOccupation = GetSubsidiary() ;
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	$tmplFils = "profile/subsidiary.tmpl" ;
+
+	// 生成された会社情報がある場合は テンプレートを表示する
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "subsidiary_data"	, $arOccupation ) ;
+	$tmpl -> assign( "corp_data"	, $arCorp ) ;
+	$data = $tmpl -> fetch( $tmplFils ) ;
+	unset( $tmpl ) ;
+
+	return $data ;
+}
+
+?>

@@ -1,0 +1,132 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	$DOCUMENT_ROOT = $_SERVER["DOCUMENT_ROOT"];
+	require_once( $DOCUMENT_ROOT . "../lib/common.ini" )  ;
+	require_once( $DOCUMENT_ROOT . "../lib/common.php" )  ;
+
+	$obPhoto = new PARTS_Photo() ;
+
+	$alias 		= $obPhoto -> alias ;
+	$primarykey	= $obPhoto -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+//
+//	引数
+//		$photoid
+//		$specify_wid
+//		$specify_hgt
+//
+	$bg_r = 255 ;
+	$bg_g = 255 ;
+	$bg_b = 255 ;
+
+	$trimming	= 1 ;
+	$plane		= FALSE ;
+	$edge		= TRUE ;
+
+	$specify_wid = 160 ;
+	$specify_hgt = 120 ;
+
+	// パスよりパラメータを取得する
+	$path = "" ;
+	if ( empty( $_SERVER['PATH_INFO'] ) == false )
+		$path = $_SERVER['PATH_INFO'] ;
+	$path = str_replace( ".png" , "" , $path ) ;
+	$path = str_replace( ".gif" , "" , $path ) ;
+	$path = str_replace( ".jpg" , "" , $path ) ;
+	$path = str_replace( ".pdf" , "" , $path ) ;
+	$arList = explode( "/" , $path ) ;
+
+	for ( $i = 1 ; $i < count( $arList ) ; $i ++ )
+	{
+		$flg   = substr( $arList[ $i ] , 0 , 1 ) ;
+		$value = substr( $arList[ $i ] , 1 ) ;
+		switch( $flg )
+		{
+		case	"I" :	// color
+			${ $keyname } = $value ;
+			break ;
+		}
+	}
+
+	$plane = TRUE ;
+
+	if ( empty( ${ $keyname } ) == true )
+		${ $keyname } = -1 ;
+
+	// 写真情報取得
+	$file = null ;
+	$arResult = array() ;
+	if ( ${ $keyname } != -1 )
+	{
+		$arWhere = array() ;
+		$arWhere[ $primarykey ] = ${ $keyname } ;
+		$arResult = $obPhoto -> getData( $arWhere ) ;
+	
+		if ( count( $arResult ) > 0 )
+		{
+			$arResult = $arResult[ 0 ] ;
+			$file	= $arResult[ $alias . "_data"	] ;
+	
+			// base64デコード
+			$file = base64_decode( $file ) ;
+		}
+	}
+	
+	// プレーンモードで表示
+	if ( $plane == TRUE )
+	{
+		if ( ${ $keyname } != -1 )
+		{
+			if ( count( $arResult ) != 0 )
+			{
+				$imagetype = $arResult[ $alias . "_type" ] ;
+				switch ( $imagetype )
+				{
+				case	DEF_IMAGETYPE_GIF :
+					header( "Content-type: image/gif" ) ;
+					break ;
+
+				case	DEF_IMAGETYPE_JPEG :
+					header( "Content-type: image/jpeg" ) ;
+					break ; 
+
+				case	DEF_IMAGETYPE_PNG :
+					header( "Content-type: image/png" ) ;
+					break ;
+
+				case	DEF_IMAGETYPE_PDF :
+					header( "Content-Type:application/pdf" ) ;
+					break ;
+
+				default	:
+					header( "Content-type: application/binary" ) ;
+				}
+		
+				header( "Cache-control: no-cache" ) ;
+				print $file ;
+			}
+		}
+		else
+		{
+			// 画像の作成
+			if ( $specify_wid == "" )
+				$specify_wid = 640 ;
+	
+			if ( $specify_hgt == "" )
+				$specify_hgt = 480 ;
+		
+			// IDが -1 の場合 透過GIFを作成して出力する
+			$imgh = ImageCreateTrueColor( $specify_wid , $specify_hgt ) ;
+			$dummy	= ImageColorAllocate( $imgh , 255 , 0 , 0 ) ;
+			$trans	= ImageColorAllocate( $imgh , 255 , 255 , 0 ) ;
+			
+			ImageColorTransparent( $imgh , $trans ) ;
+			
+			header( "Content-type: image/gif" ) ;
+			header( "Cache-control: no-cache" ) ;
+			ImageGIF( $imgh ) ;
+			ImageDestroy( $imgh ) ;
+		}
+	}
+?>

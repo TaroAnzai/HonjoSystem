@@ -1,0 +1,48 @@
+/*
+-------------------------------------------------------------------------------
+	Login
+-------------------------------------------------------------------------------
+*/
+
+#login
+{
+	width : 760px ;
+	text-align : center ;
+	margin : 96px auto 16px ;
+}
+
+#login	dl
+{
+	width : 640px ;
+	text-align : left ;
+	margin : 16px auto 8px ;
+}
+
+#login	dl dt
+{
+	display : block ;
+	float : left ;
+	text-align : right ;
+	width : 252px ;
+	padding-right : 4px ;
+	margin-bottom : 4px ;
+}
+
+#login	dl dd
+{
+	display : block ;
+	float : left ;
+	width : 380px ;
+	padding-left : 4px ;
+	margin-bottom : 4px ;
+}
+
+#login:after ,
+#login dl:after
+{
+	content : "." ;
+	display : block ;
+	height : 0px ;
+	clear : both ;
+	visibility : hidden ;
+}

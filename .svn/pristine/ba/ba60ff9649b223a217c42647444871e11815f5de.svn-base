@@ -1,0 +1,391 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+	require_once( "class/member_corp.class.php" ) ;
+
+	// 基本パラメータ変換
+	if ( !isset( $mode ) )
+		$mode = "update" ;
+
+	if ( !isset( $page ) )
+		$page = 0 ;
+
+	if ( !isset( $order ) )
+		$order = "" ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams		= new BLAMS() ;
+	$obMember	= new PARTS_Member( $obSession -> conn ) ;
+
+	// 編集データ保存
+	$arParam = array() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$additional[] = "order" ;
+	$obMember -> assignGlobal( $additional , $arParam ) ;
+
+	// 検索用パラメータ変換
+	if( $S_STATE == "" )
+		$S_STATE = -1 ;
+
+	if( $S_LEVEL == "" )
+		$S_LEVEL = -1 ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obMember -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page			;
+	$arParamFind[ "order"	] = $order			;
+
+	$menu = FUNC_MEMBER ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $obMember , true ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+	exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , &$arParamFind , $obMember , $list_flg )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$arWhere = array() ;
+	if( $S_LOGINID != "" )
+		$arWhere[ "loginid"			]	= $S_LOGINID ;
+
+	if( $S_NAME != "" )
+		$arWhere[ "name"			]	= $S_NAME ;
+
+	$arWhere[ "state"			]	= $S_STATE ;
+
+	if( $S_TEL1 != "" )
+		$arWhere[ "tel1"			]	= $S_TEL1 ;
+
+	if( $S_TEL2 != "" )
+		$arWhere[ "tel2"			]	= $S_TEL2 ;
+
+	if( $S_TEL3 != "" )
+		$arWhere[ "tel3"			]	= $S_TEL3 ;
+
+	if( $S_EMAIL != "" )
+		$arWhere[ "agent_email"		]	= $S_EMAIL ;
+
+	$arWhere[ "where"			]	= sprintf( "AND %s.level != %d " , $obMember -> alias , DEF_MEMBER_LEVEL_NON ) ;
+	if( $S_LEVEL != -1 )
+	{
+		if( $S_LEVEL == 98 )
+		{
+			$arWhere[ "where"			]	.= sprintf( "AND ( %s.level in ( %d , %d ) " , $obMember -> alias , DEF_MEMBER_LEVEL_THIRTY_APPLY , DEF_MEMBER_LEVEL_NOLIMIT_APPLY ) ;
+			$arWhere[ "where"			]	.= sprintf( "OR %s.level_renew in ( %d , %d ) ) " , $obMember -> alias , DEF_MEMBER_LEVEL_THIRTY_APPLY , DEF_MEMBER_LEVEL_NOLIMIT_APPLY ) ;
+		}
+		else
+		{
+			$arWhere[ "where"			]	.= sprintf( "AND ( %s.level = %d " , $obMember -> alias , $S_LEVEL ) ;
+			$arWhere[ "where"			]	.= sprintf( "OR %s.level_renew = %d ) " , $obMember -> alias , $S_LEVEL ) ;
+		}
+	}
+
+	if( $S_SERVERID != "" )
+		$arWhere[ "where"			]	.= sprintf( "AND '%s' = ANY( %s.serverid ) " , $S_SERVERID , $obMember -> alias ) ;
+
+	if( $S_SERVERNO != "" )
+		$arWhere[ "where"			]	.= sprintf( "AND '%s' = ANY( %s.serverno ) " , $S_SERVERNO , $obMember -> alias ) ;
+
+	if( $S_MONITORID != "" )
+		$arWhere[ "where"			]	.= sprintf( "AND '%s' = ANY( %s.monitorid ) " , $S_MONITORID , $obMember -> alias ) ;
+
+	if( $S_MONITORNO != "" )
+		$arWhere[ "where"			]	.= sprintf( "AND '%s' = ANY( %s.monitorno ) " , $S_MONITORNO , $obMember -> alias ) ;
+
+	$order  = "" ;
+//	$order .= sprintf( "%s.kana        , " , $obMember -> alias ) ;
+//	$order .= sprintf( "%s.loginid     , " , $obMember -> alias ) ;
+	$order .= sprintf( "%s.create_date desc " , $obMember -> alias ) ;
+	$arWhere[ "order"		]	= $order ;
+	$arParamFind[ "order"	]	= $order ;
+
+	$cnt = $obMember -> getCount( $arWhere ) ;
+
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$paging = "" ;
+	$pageJump = "" ;
+	$arList = array() ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $obMember , $arWhere ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = FetchSearch( $blams , $arParamFind ) ;
+	}
+	$arHeader = array(
+		array( "caption" => "ログインID"		, "class" => "w096 left" ) ,
+		array( "caption" => "名前"				, "class" => "w176 left" ) ,
+		array( "caption" => "カナ"				, "class" => "w176 left" ) ,
+		array( "caption" => "e-mail"			, "class" => "w184 left" ) ,
+		array( "caption" => "現住所"			, "class" => "w064 left" ) ,
+		array( "caption" => "会員レベル"		, "class" => "w144 left" ) ,
+	) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 都道府県テーブル生成
+	global	$arStateName ;
+
+	// 会員レベル
+	global $arMemberLevel ;
+	unset( $arMemberLevel[ 0 ] ) ; // 非会員
+	$arMemberLevel[ 98 ] = "申請中を全て" ;
+
+	$arForm = array() ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_LOGINID" , $S_LOGINID , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "ログインID" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+	$form	= $blams -> fetchSelectbox( "S_LEVEL" , $S_LEVEL , $arMemberLevel , 200 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "会員レベル" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$value = "" ;
+
+	$form   = $blams -> fetchInputbox( "S_NAME" , $S_NAME , 256 - 16  , 64 , IME_ON ) ;
+	$value .= $blams -> fetchTDTD( "社名" , $form , 128 , 256 , "" , "left" , "middle no-wrap" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form   = $blams -> fetchInputbox( "S_KANA" , $S_KANA , 256 - 16  , 64 , IME_ON ) ;
+	$value .= $blams -> fetchTDTD( "社名（カナ）" , $form , 128 , 256 , "" , "left" , "middle no-wrap" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	//
+	$value = "" ;
+	$form	= $blams -> fetchSelectbox( "S_STATE" , $S_STATE , $arStateName , 120 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "住所" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form	= $blams -> fetchInputPhone( "S_TEL" , $S_TEL1 , $S_TEL2 , $S_TEL3 ) ;
+	$value .= $blams -> fetchTDTD( "電話番号" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	//
+	$value = "" ;
+
+	$form	= $blams -> fetchInputbox( "S_EMAIL" , $S_EMAIL , 256 - 16 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "メールアドレス" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER , 1 , 1 , 3 ) ;
+
+	$arForm[] = $value ;
+
+	//
+	$value = "" ;
+	$form   = $blams -> fetchInputDate( "S_CREATE_DATE_S" , $S_CREATE_DATE_S_y , $S_CREATE_DATE_S_m , $S_CREATE_DATE_S_d , true , true , true ) ;
+	$form  .= "&nbsp;～&nbsp;" ;
+	$form  .= $blams -> fetchInputDate( "S_CREATE_DATE_E" , $S_CREATE_DATE_E_y , $S_CREATE_DATE_E_m , $S_CREATE_DATE_E_d , true , true , true ) ;
+	$value .= $blams -> fetchTDTD( "登録年月日" , $form , 128 , 384 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER , 1 , 1 , 3 ) ;
+
+	$arForm[] = $value ;
+
+	$value = "" ;
+
+	$form   = $blams -> fetchInputbox( "S_SERVERID" , $S_SERVERID , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "サーバーID" , $form , 128 , 256 , "" , "left" , "middle no-wrap" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form   = $blams -> fetchInputbox( "S_SERVERNO" , $S_SERVERNO , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "サーバーS/N" , $form , 128 , 256 , "" , "left" , "middle no-wrap" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$value = "" ;
+
+	$form   = $blams -> fetchInputbox( "S_MONITORID" , $S_MONITORID , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "モニタID" , $form , 128 , 256 , "" , "left" , "middle no-wrap" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form   = $blams -> fetchInputbox( "S_MONITORNO" , $S_MONITORNO , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "モニタS/N" , $form , 128 , 256 , "" , "left" , "middle no-wrap" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "csv_url"			, "csvout.php"		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "member/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $page , $arParamFind , $obMember , $arWhere )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 都道府県テーブル生成
+	global	$arStateName ;
+
+	global $arMemberLevel ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	$arResult = $obMember -> getData( $arWhere , $page , NUMBER_PER_PAGE ) ;
+
+	$alias = $obMember -> alias ;
+	
+	$cnt = count( $arResult ) ;
+	for ( $index = 0 ; $index < $cnt ; $index ++ )
+	{
+		// データの取得
+		$arData		= $arResult[ $index ] ;
+
+		$memberid		= $arData[ $alias . "_memberid"		] ;
+		$loginid		= $arData[ $alias . "_loginid"		] ;
+		$level			= $arData[ $alias . "_level"		] ;
+		$name			= $arData[ $alias . "_name"			] ;
+		$kana			= $arData[ $alias . "_kana"			] ;
+		$level_renew	= $arData[ $alias . "_level_renew"	] ;
+		$agent_email	= $arData[ $alias . "_agent_email"	] ;
+		$state			= $arData[ $alias . "_state"		] ;
+
+		$billing_count	= $arData[ "billing_count"			] ;
+
+		if ( $loginid == "" )
+			$loginid = "不明" ;
+
+		if ( $name == "" )
+			$name = "不明" ;
+
+		if ( $kana == "" )
+			$kana = "不明" ;
+
+		$szName = sprintf( "%s" , $name ) ;
+		$szKana = sprintf( "%s" , $kana ) ;
+
+		$szState = "" ;
+		if( $state != -1 )
+			$szState = $arStateName[ $state ] ;
+		if ( $szState == "" )
+			$szState = "不明" ;
+
+		$szEMail = $agent_email ;
+		if ( $szEMail == "" )
+			$szEMail = $agent_email ;
+
+		$szBillingCount = "無し" ;
+		if ( $billing_count > 0 )
+			$szBillingCount = sprintf( "%d件" , $billing_count ) ;
+
+		$szMemberLevel = "" ;
+		if( $level_renew != -1 )
+			$szMemberLevel = $arMemberLevel[ $level_renew ] ;
+		else if( $level != -1 )
+			$szMemberLevel = $arMemberLevel[ $level ] ;
+
+		$arAnchor[ "url" 			] = "edit.php"		;
+		$arAnchor[ "idname"			] = $alias . "_memberid"		;
+		$arAnchor[ "id"				] = $memberid		;
+		$arAnchor[ "param"			] = $param			;
+		$arAnchor[ "anchor"			] = $loginid		;
+		$arAnchor[ "caption"		] = $loginid		;
+		$arAnchor[ "class"			] = "border left"	;
+		$arAnchor[ "script"			] = ""									;
+		$arAnchor[ "date_format"	] = ""									;
+
+		$arData = array() ;
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $szName ,			"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szKana ,			"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szEMail ,			"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szState ,			"class" => "border center"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szMemberLevel ,	"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arList[] = $arData ;
+	}
+
+	return $arList ;
+}
+
+
+?>

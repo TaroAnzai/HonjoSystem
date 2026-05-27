@@ -1,0 +1,57 @@
+// 指定のフォームにあるデータをすべて初期化する。
+function	ClearForm( id )
+{
+	// id から フォームのオブジェクトを取得する
+	var objForm = document.getElementById( id ) ;
+	if ( objForm )
+	{
+		var elements = objForm.elements.length ;
+		for ( var j = 0 ; j < elements ; j ++ )
+		{
+			var	objElements = objForm.elements[ j ] ;
+			switch ( objElements.type )
+			{
+			case	"text" :
+				objElements.value = "" ;
+				break ;
+			case	"select-one" :
+				objElements.selectedIndex = 0 ;
+				break ;
+			}
+		}
+	}
+}
+
+// 指定のフォームを転送する。
+function	SubmitForm( id , action , obj , target , org_action )
+{
+	target = target || "" ;
+	org_action = org_action || "" ;
+
+	// id から フォームのオブジェクトを取得する
+	var objForm = document.getElementById( id ) ;
+	if ( objForm )
+	{
+		var newEle = document.createElement( "input" ) ;
+		newEle.name = obj.name ;
+		newEle.value = obj.value ;
+		newEle.type = "hidden" ; 
+		
+		objForm.appendChild( newEle ) ;
+		
+		objForm.action = action ;
+		if( target != "" )
+		{
+			objForm.target = target ;
+		}
+		objForm.submit() ;
+
+		// 別ページに飛ばした場合は、サブミット後に元へ戻す
+		if( target != "" )
+		{
+			objForm.removeChild( newEle ) ;
+			objForm.target = "" ;
+			objForm.action = org_action ;
+		}
+	}
+}

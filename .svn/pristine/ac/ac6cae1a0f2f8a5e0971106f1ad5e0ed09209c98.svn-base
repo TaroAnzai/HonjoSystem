@@ -1,0 +1,290 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	// 基本パラメータ変換
+	if ( empty( $mode ) == true )
+		$mode = "update" ;
+
+	if ( empty( $page ) == true )
+		$page = 0 ;
+		
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams			= new BLAMS() ;
+	$obOccupation	= new PARTS_Occupation() ;
+	
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obOccupation -> assignGlobal( $additional ) ;
+
+	// 検索用パラメータ変換
+	if ( empty( $S_NAME ) == true )
+		$S_NAME = "" ;
+	$S_NAME = $obOccupation -> mb2sb( $S_NAME ) ;
+
+	if ( $S_CORPID == "" )
+		$S_CORPID = -1 ;
+
+	if ( is_numeric ( $S_YEAR ) == FALSE )	// 0226
+		$S_YEAR = "" ;						// 0226
+
+	if ( is_numeric ( $S_MON ) == FALSE )	// 0226
+		$S_MON = "" ;						// 0226
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obOccupation -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"		] = $page		;
+
+	$menu = FUNC_OCCUPATION ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $obOccupation ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+
+exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $obOccupation )
+{
+	$obCorp = new PARTS_Corp() ;
+	
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$list_flg = TRUE ;
+
+	// 現在掲載中のイベント情報を検索
+//	$now = date( "Y-m-d H:i:s" ) ;
+	$now_date = new DateTime();
+	$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+
+	$arWhere = array() ;
+	
+	if ( $S_CORPID != -1 )
+		$arWhere[ "corpid"	] = $S_CORPID ;
+	
+	if ( !( $S_YEAR == "" || $S_YEAR == -1 ) )
+		$arWhere[ "year"	] = $S_YEAR ;
+	
+	if ( !( $S_MON == "" || $S_MON == -1 ) )
+		$arWhere[ "month"	] = $S_MON ;
+
+	// 該当データ数取得
+	$cnt = 0 ;
+	if ( $obOccupation -> isOpen() == true )
+	{
+		$cnt			= $obOccupation -> getCount( $arWhere ) ;
+		$arOccupation	= $obOccupation -> getData( $arWhere , $page , NUMBER_PER_PAGE ) ;
+	}
+
+//debug($cnt);
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$arList = array() ;
+	$paging = 0 ;
+	$pageJump = 0 ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $obOccupation , $obCorp ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = FetchSearch( $blams , $arParamFind , $obCorp ) ;
+	}
+	
+	$arHeader = array(
+		array( "caption" => "社名"			, "class" => "w192 left" ) ,
+		array( "caption" => "内容"			, "class" => "w448 left" ) ,
+		array( "caption" => "年月"			, "class" => "w128 center" ) ,
+		array( "caption" => "更新日"		, "class" => "w128 center" ) ,
+	) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind , $obCorp )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 年テーブル生成
+	$cpAlias = $obCorp -> alias ;
+	$arCorp = $obCorp -> getOwner() ;
+	
+	$nowYear = date( "Y" ) ;
+	$befYear = $arCorp[0][ $cpAlias . "_foundation_date_y" ] ;
+	if ( $befYear == "0001" )
+		$befYear = $nowYear - 40 ;
+	
+	$arYear_local = array() ;
+	for ( $i = $befYear ; $i <= $nowYear ; $i ++ )
+	{
+		$arYear_local[ $i ] = sprintf("%d", $i) ;
+	}
+
+	// 月テーブル生成
+	$arMonth_local = array() ;
+	for ( $i = 0 ; $i < 12 ; $i ++ )
+	{
+		$arMonth_local[ $i+1 ] = sprintf("%d", $i+1) ;
+	}
+
+	$arFoem = array() ;
+
+	$value = "" ;
+	$form	= $blams -> fetchSelectbox( "S_YEAR" , $S_YEAR , $arYear_local , 192 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "年" , $form , 64 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+	$form	= $blams -> fetchSelectbox( "S_MON" , $S_MON , $arMonth_local , 192 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "月" , $form , 64 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+
+// 一覧の取得
+function	GetList( $blams , $start_page , $arParamFind , $obOccupation , $obCorp )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	$arOccupation	= $obOccupation -> arData ;
+	$alias			= $obOccupation -> alias ;
+	$primarykey		= $obOccupation -> primarykey ;
+	$keyname		= $alias . "_" . $primarykey ;
+
+	foreach ( $arOccupation as $arOcpData )
+	{
+		// データの取得
+		$occupationid	= $arOcpData[ $alias . "_occupationid"	] ;
+		$corpid			= $arOcpData[ $alias . "_corpid"		] ;
+		$body			= $arOcpData[ $alias . "_body"			] ;
+		$year			= $arOcpData[ $alias . "_year"			] ;
+		$month			= $arOcpData[ $alias . "_month"			] ;
+		$update_date	= $arOcpData[ $alias . "_update_date"	] ;
+
+		$cpAlias = $obCorp -> alias ;
+		$arCorp = array() ;
+		$arCorp = $obCorp -> getAt( $corpid ) ;
+		
+		$szCorpName = "" ;
+		if ( count( $arCorp ) > 0 )
+			$szCorpName = $arCorp[ $cpAlias . "_name" ] ;
+			
+		if ( $szCorpName == "" )
+			$szCorpName = "不明" ;
+				
+		if( $year == 0 && $month == 0 )
+			$szDate = "不明" ;
+		else if( $year == 1 && $month == 1 )
+			$szDate = "ヘッダ指定" ;
+		else
+			$szDate = sprintf( "%d年 %02d月" , $year , $month ) ;
+		
+		$arData = array() ;
+		$arData[] = array( "caption" => $szCorpName ,	"class" => "border left"	, "date_format" => ""		, "anchor" => "" ) ;
+
+		$arAnchor[ "url" 			] = "edit.php"					;
+		$arAnchor[ "idname"			] = $alias . "_occupationid"	;
+		$arAnchor[ "id"				] = $occupationid				;
+		$arAnchor[ "param"			] = $param						;
+		$arAnchor[ "anchor"			] = $body						;
+		$arAnchor[ "caption"		] = $body						;
+		$arAnchor[ "class"			] = "border left"				;
+		$arAnchor[ "script"			] = ""							;
+		$arAnchor[ "date_format"	] = ""							;
+		
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $szDate ,		"class" => "border center"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $update_date ,	"class" => "border center"	, "date_format" => "%Y/%m/%d"	, "anchor" => "" ) ;
+		$arList[] = $arData ;
+	}
+	
+	return $arList ;
+}
+
+?>

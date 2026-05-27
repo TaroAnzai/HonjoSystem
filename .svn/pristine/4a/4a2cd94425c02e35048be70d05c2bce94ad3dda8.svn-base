@@ -1,0 +1,939 @@
+<?php
+/**
+* BLAMS 基本関数郡 会社用クラス
+*
+* 会社用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+$_FUNC = 1 ;
+define( "DEF_CORP_GROUP_OTHER"			,	$_FUNC ++	) ;	// 企業メンバー情報
+define( "DEF_CORP_GROUP_SELF"			,	99			) ;	// 自社情報
+define( "DEF_CORP_GROUPPARENTID_PARENT"	,	-99			) ;	// 親情報 検索用
+
+define( "NUMBER_PER_CORP"			,	5	) ;	// 行数／ページ
+
+// 法人格
+global $arCustomerTitle ;
+$arCustomerTitle = array(
+	"株式会社" ,
+	"有限会社" ,
+	"個人事業主" ,
+	"合名会社" ,
+	"合資会社" ,
+	"社団法人" ,
+	"医療法人" ,
+	"学校法人" ,
+	"財団法人" ,
+	"宗教法人" ,
+	"相互会社" ,
+	"協同組合" ,
+	"社会福祉法人" ,
+	"医療法人財団" ,
+	"医療法人社団" ,
+	"独立行政法人" ,
+	"国立大学法人" ,
+	"大学共同利用機関法人" ,
+	"特定非営利活動法人" ,
+	"事業共同組合" ,
+	"農業組合" ,
+	"漁業組合" ,
+	"労働組合" ,
+	"共済組合" ,
+	"その他" ,
+	"地方公共団体" ,
+	"99" => "無"
+) ;
+
+// 法人格 位置
+$_FUNC = 1 ;
+define( "DEF_POSITION_NONE"		,	$_FUNC ++ ) ;
+define( "DEF_POSITION_BEFORE"	,	$_FUNC ++ ) ;
+define( "DEF_POSITION_AFTER"	,	$_FUNC ++ ) ;
+
+global $arCustomerPosition ;
+$arCustomerPosition = array(
+	DEF_POSITION_NONE	=>	"表示なし" ,
+	DEF_POSITION_BEFORE	=>	"前" ,
+	DEF_POSITION_AFTER	=>	"後" ,
+) ;
+
+// 会員レベル（共通）
+$_FUNC = 0 ;
+define( "DEF_CORP_LEVEL_NON"			,	$_FUNC ++	) ;	// 非会員
+define( "DEF_CORP_LEVEL_FREE"			,	$_FUNC ++	) ;	// 無料会員
+define( "DEF_CORP_LEVEL_PAY"			,	$_FUNC ++	) ;	// 有料会員
+define( "DEF_CORP_LEVEL_WEB"			,	$_FUNC ++	) ;	// Web会員
+define( "DEF_CORP_LEVEL_DEMO"			,	99			) ;	// DEMO会員
+define( "DEF_CORP_LEVEL_NON_LABEL"	,	"非会員"	) ;	// 非会員
+
+global	$arCorpLevel ;
+$arCorpLevel = array(
+	DEF_CORP_LEVEL_NON	=> "非会員" ,
+	DEF_CORP_LEVEL_FREE	=> "無料会員" ,
+	DEF_CORP_LEVEL_PAY	=> "有料会員" ,
+	DEF_CORP_LEVEL_WEB	=> "Web会員" ,
+	DEF_CORP_LEVEL_DEMO	=> "DEMO会員" ,
+) ;
+
+require_once( 'class/db.class.php' ) ;
+require_once( 'class/category.class.php' ) ;
+require_once( 'class/officer.class.php' ) ;
+require_once( 'class/history.class.php' ) ;
+require_once( 'class/photo.class.php' ) ;
+
+class PARTS_Corp extends DB_Common
+{
+	var	$obCategory ;
+	var	$obOfficer ;
+	var	$obHistory ;
+	var	$obPhoto ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "corp_data" ;
+		$alias		= "cp" ;
+		$primarykey	= "corpid" ;
+
+		parent::__construct(  $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_CORP ;
+
+		$this -> obCategory	= new PARTS_Category( $this -> conn ) ;
+		$this -> obOfficer	= new PARTS_Officer( $this -> conn ) ;
+		$this -> obHistory	= new PARTS_History( $this -> conn ) ;
+		$this -> obPhoto	= new PARTS_Photo( $this -> conn ) ;
+		
+		$this -> searchkey = array(
+				"S_GROUPFLG"		,
+				"S_GROUPPARENTID"	,
+				"S_LOGINID"			,
+				"S_NAME"			,
+				"S_KANA"			,
+				"S_STATE"			,
+				"S_LEVEL"			,
+			) ;
+		$this -> obOfficer -> searchkey = $this -> searchkey ;
+		$this -> obHistory -> searchkey = $this -> searchkey ;
+
+		$this -> images = array( "photoid" , "photoid1" , "photoid_map" ) ;
+
+		// 追加項目
+		$this -> fieldsData[] = array( "name" => "crypt_passwd"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "zip1"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "zip2"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel1"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel2"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel3"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "fax1"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "fax2"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "fax3"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "foundation_date_type"	, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "foundation_date_y"	, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "foundation_date_m"	, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_y"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_m"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_d"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "checkcategory"		, "type" => "" , "format" => ""   ) ;
+		$this -> fieldsData[] = array( "name" => "checkdays"			, "type" => "" , "format" => ""   ) ;
+		
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	// データの取得
+	// 社名の整形も含む
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$alias = $this -> alias ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$obCategory = $this -> obCategory ;
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			for ( $i = 0 ; $i < count( $arData ) ; $i ++ )
+			{
+				$passwd			= $arData[ $i ][ $alias . "_passwd"			] ;
+				$state			= $arData[ $i ][ $alias . "_state"			] ;
+				$tel			= $arData[ $i ][ $alias . "_tel"			] ;
+				$fax			= $arData[ $i ][ $alias . "_fax"			] ;
+				$name			= $arData[ $i ][ $alias . "_name"			] ;
+				$title			= $arData[ $i ][ $alias . "_title"			] ;
+				$position		= $arData[ $i ][ $alias . "_position"		] ;
+				$department		= $arData[ $i ][ $alias . "_department"		] ;
+				$name_en		= $arData[ $i ][ $alias . "_name_en"		] ;
+				$department_en	= $arData[ $i ][ $alias . "_department_en"	] ;
+
+				$szCorpName	= $this -> createLongName( $name , $title , $position , $department ) ;
+				$szCorpName_en	 = $this -> createLongName( $name_en , $title , DEF_POSITION_NONE , $department_en ) ;
+				global	$arState ;
+				
+				// パスワードを暗号化する
+				if ( $passwd != "" )
+				{
+					$passwd = $this -> encrypt( $passwd ) ;
+					$arData[ $i ][ $alias . "_passwd"		] = $passwd ;
+					$arData[ $i ][ $alias . "_crypt_passwd"	] = $passwd ;
+				}
+
+				if ( $tel == "--" )
+					$tel = "" ;
+
+				if ( $fax == "--" )
+					$fax = "" ;
+				
+				$arData[ $i ][ $alias . "_lname"		] = $szCorpName ;
+				$arData[ $i ][ $alias . "_lname_en"		] = $szCorpName_en ;
+				$arData[ $i ][ $alias . "_state_string"	] = $arState[ $state ][ 2 ] ;
+				$arData[ $i ][ $alias . "_tel"			] = $tel ;
+				$arData[ $i ][ $alias . "_fax"			] = $fax ;
+				
+				// 郵便番号、電話、ＦＡＸ分解
+				$arZip	= explode( '-' , $arData[ $i ][ $alias . "_zip"	] ) ;
+				$arTel	= explode( '-' , $arData[ $i ][ $alias . "_tel"	] ) ;
+				$arFax	= explode( '-' , $arData[ $i ][ $alias . "_fax"	] ) ;
+			
+				$arData[ $i ][ $alias . "_zip1"	] = "" ;
+				$arData[ $i ][ $alias . "_zip2"	] = "" ;
+				if ( count( $arZip ) == 2 )
+				{
+					$arData[ $i ][ $alias . "_zip1"	] = $arZip[ 0 ] ;
+					$arData[ $i ][ $alias . "_zip2"	] = $arZip[ 1 ] ;
+				}
+				
+				$arData[ $i ][ $alias . "_tel1"	] = "" ;
+				$arData[ $i ][ $alias . "_tel2"	] = "" ;
+				$arData[ $i ][ $alias . "_tel3"	] = "" ;
+				if ( count( $arTel ) == 3 )
+				{
+					$arData[ $i ][ $alias . "_tel1"	] = $arTel[ 0 ] ;
+					$arData[ $i ][ $alias . "_tel2"	] = $arTel[ 1 ] ;
+					$arData[ $i ][ $alias . "_tel3"	] = $arTel[ 2 ] ;
+				}
+				
+				$arData[ $i ][ $alias . "_fax1"	] = "" ;
+				$arData[ $i ][ $alias . "_fax2"	] = "" ;
+				$arData[ $i ][ $alias . "_fax3"	] = "" ;
+				if ( count( $arFax ) == 3 )
+				{
+					$arData[ $i ][ $alias . "_fax1"	] = $arFax[ 0 ] ;
+					$arData[ $i ][ $alias . "_fax2"	] = $arFax[ 1 ] ;
+					$arData[ $i ][ $alias . "_fax3"	] = $arFax[ 2 ] ;
+				}
+				
+				if( $arData[ $i ][ $alias . "_foundation_date" ] == DEF_DATE_MIN )
+				{
+					$arData[ $i ][ $alias . "_foundation_date_y"	] = "" ;
+					$arData[ $i ][ $alias . "_foundation_date_m"	] = "" ;
+				}
+				else
+				{
+					$obFoundation_date = new DateTime( $arData[ $i ][ $alias . "_foundation_date" ] );
+					$arData[ $i ][ $alias . "_foundation_date_y"	] = $obFoundation_date -> format( "Y" ) ;
+					$arData[ $i ][ $alias . "_foundation_date_m"	] = $obFoundation_date -> format( "n" ) ;
+				}
+
+				if( $arData[ $i ][ $alias . "_start_date" ] == DEF_DATE_MIN )
+				{
+					$arData[ $i ][ $alias . "_start_date_y"	] = "" ;
+					$arData[ $i ][ $alias . "_start_date_m"	] = "" ;
+					$arData[ $i ][ $alias . "_start_date_d"	] = "" ;
+				}
+				else
+				{
+					$obStart_date = new DateTime( $arData[ $i ][ $alias . "_start_date" ] );
+					$arData[ $i ][ $alias . "_start_date_y"	] = $obStart_date -> format( "Y" ) ;
+					$arData[ $i ][ $alias . "_start_date_m"	] = $obStart_date -> format( "n" ) ;
+					$arData[ $i ][ $alias . "_start_date_d"	] = $obStart_date -> format( "d" ) ;
+				}
+			}
+			
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "name_unique" ;
+		$arParamList[] = "department_unique" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		foreach( $arParam as $keys => $values )
+			${ $keys } = $values ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		if ( $groupflg != -1 )
+			$sql .= sprintf( "AND %s.groupflg = %d " , $this -> alias , $groupflg ) ;
+
+		if ( $groupparentid == DEF_CORP_GROUPPARENTID_PARENT )
+			$sql .= sprintf( "AND %s.groupparentid = -1 " , $this -> alias ) ;
+		else if ( $groupparentid != -1 )
+			$sql .= sprintf( "AND %s.groupparentid = %d " , $this -> alias , $groupparentid ) ;
+
+		// ログインID
+		if ( $loginid != "" && $loginid != -1 )
+			$sql .= sprintf( "AND %s.loginid = '%s' " , $this -> alias , $this -> mb_addslashes( $loginid ) ) ;
+
+		// パスワード
+		if ( $passwd != "" && $passwd != -1 )
+			$sql .= sprintf( "AND %s.passwd = '%s' " , $this -> alias , $this -> mb_addslashes( $passwd ) ) ;
+
+		// 名前で検索（曖昧検索）
+		if ( $name != "" && $name != -1 )
+			$sql .= sprintf( "AND %s.name like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $name ) ) ;
+
+		// 名前で検索（厳密検索）
+		if ( $name_unique != "" && $name_unique != -1 )
+			$sql .= sprintf( "AND %s.name = '%s' " , $this -> alias , $this -> mb_addslashes( $name_unique ) ) ;
+
+		// カナで検索（曖昧検索）
+		if ( $kana != "" && $kana != -1 )
+			$sql .= sprintf( "AND %s.kana like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $kana ) ) ;
+
+		// レベルで検索
+		if ( $level != -1 )
+			$sql .= sprintf( "AND %s.level = %d " , $this -> alias , $level ) ;
+
+		// 所在地で検索
+		if ( $state != -1 )
+			$sql .= sprintf( "AND %s.state = %d " , $this -> alias , $state ) ;
+
+		// 部署名で検索（曖昧検索）
+		if ( $department != "" && $department != -1 )
+			$sql .= sprintf( "AND %s.department like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $department ) ) ;
+
+		// 部署名で検索（厳密検索）
+		if ( $department_unique != "" && $department_unique != -1 )
+			$sql .= sprintf( "AND %s.department = '%s' " , $this -> alias , $this -> mb_addslashes( $department_unique ) ) ;
+
+		// 電話番号で検索
+		if ( $tel != "" && $tel != -1 )
+			$sql .= sprintf( "AND %s.tel = '%s' " , $this -> alias , $this -> mb_addslashes( $tel ) ) ;
+
+		// FAX番号で検索
+		if ( $fax != "" && $fax != -1 )
+			$sql .= sprintf( "AND %s.fax = '%s' " , $this -> alias , $this -> mb_addslashes( $fax ) ) ;
+
+		// URLで検索
+		if ( $url != "" && $url != -1 )
+			$sql .= sprintf( "AND %s.url = '%s' " , $this -> alias , $this -> mb_addslashes( $url ) ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.name " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+
+	// 自社情報の取得
+	// 支社・子会社も同時に
+	function getOwner()
+	{
+		$alias		= $this -> alias ;
+		
+		// URLよりサイトのアドレスを取得する
+		$url = SERVER_NAME ;
+
+		$arCorp = array() ;
+
+		if ( $this -> isOpen() )
+		{
+			$arWhere = array() ;
+			$arWhere[ "url"				] = $url ;
+			$arWhere[ "groupflg"		] = DEF_CORP_GROUP_SELF ;
+			$arWhere[ "where"			] = sprintf( "AND %s.groupparentid != -1 " , $alias ) ;
+			$arCorp = $this -> getData( $arWhere ) ;
+			if ( count( $arCorp ) == 0 )
+			{
+				$arWhere = array() ;
+				$arWhere[ "groupflg"	] = DEF_CORP_GROUP_SELF ;
+				$arWhere[ "order"		] = sprintf( "%s.groupparentid , %s.kana" , $alias , $alias ) ;
+				$arCorp = $this -> getData( $arWhere ) ;
+			}
+		}
+		return $arCorp ;
+	}
+
+	// 表示しているURLの自社情報を取得
+	function getSiteOwner()
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		$arCorp = array() ;
+		if ( $this -> isOpen() )
+		{
+			$id = -1 ;
+	
+			$url = $_SERVER[ "SERVER_NAME" ] ;
+	
+			$arWhere = array() ;
+			$arWhere[ "url"				] = $url ;
+			$arWhere[ "groupflg"		] = DEF_CORP_GROUP_SELF ;
+			$arWhere[ "where"			] = sprintf( "AND %s.groupparentid != -1 " , $alias ) ;
+			$arCorp = $this -> getData( $arWhere ) ;
+			if ( count( $arCorp ) == 0 )
+			{
+				$arWhere = array() ;
+				$arWhere[ "groupflg"	] = DEF_CORP_GROUP_SELF ;
+				$arWhere[ "order"		] = sprintf( "%s.groupparentid , %s.kana" , $alias , $alias ) ;
+				$arCorp = $this -> getData( $arWhere ) ;
+			}
+		}
+		return $arCorp ;
+	}
+
+	function	createLongNameIndex( $index )
+	{
+		$name = "" ;
+		if ( count( $this -> arData ) > $index )
+		{
+			$arData = $this -> arData[ $index ] ;
+
+			$corpid		= $arData[ $this -> alias . "_corpid"	] ;
+			$name		= $arData[ $this -> alias . "_name"		] ;
+			$title		= $arData[ $this -> alias . "_title"	] ;
+			$position	= $arData[ $this -> alias . "_position"	] ;
+
+			$name = $this -> createLongName( $name , $title , $position , $department ) ;
+		}
+		return $name ;
+	}
+
+	function	createLongName( $name , $title , $position , $department )
+	{
+		// 法人格の表示
+		global	$arCustomerTitle ;
+		if ( $title != -1 && $title != 99 )
+		{
+			switch ( $position )
+			{
+			case	DEF_POSITION_NONE :
+				$name = sprintf( "%s" , $name ) ;
+				break ;
+			
+			case	DEF_POSITION_BEFORE :
+				$name = sprintf( "%s %s" , $arCustomerTitle[ $title ] , $name ) ;
+				break ;
+				
+			case	DEF_POSITION_AFTER :
+				$name = sprintf( "%s%s" , $name , $arCustomerTitle[ $title ] ) ;
+				break ;
+			}
+		}
+		if ( $department != "" )
+			$name = sprintf( "%s %s" , $name , $department ) ;
+
+		if ( $name == "" )
+			$name = "不明" ;
+
+		return $name ;
+	}
+	
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		${ $alias . "_kana" } = $this -> hira2kana( ${ $alias . "_kana" } ) ;
+		
+		if ( ${ $alias . "_groupparentid" } == "" )
+			${ $alias . "_groupparentid" } = -1 ;
+	
+		if ( ${ $alias . "_level" } == "" )
+			${ $alias . "_level" } = -1 ;
+	
+		if ( ${ $alias . "_state" } == "" )
+			${ $alias . "_state" } = -1 ;
+	
+		${ $alias . "_dat_subject" } = "" ;
+		if ( is_array( ${ $alias . "_checkcategory" } ) == true )
+		{
+			foreach( ${ $alias . "_checkcategory" } as $checkcategory )
+				${ $alias . "_dat_subject" } .= sprintf( "[%d]" , $checkcategory ) ;
+		}
+	
+		global	$arDays ;
+		${ $alias . "_closed_day" } = 0 ;
+		if( is_array( ${ $alias . "_checkdays" } ) )
+		{
+			$num = 0 ;
+		 	for( $i = count( $arDays ) ; $i >= 0  ; $i -- )
+		 	{
+		 		if( in_array( $i , ${ $alias . "_checkdays" } ) )
+		 			$num = $num | 1 ;
+		 		else
+		 			$num = $num | 0 ;
+		 		
+		 		$num = $num << 1 ;
+		 	}
+		 	$num = $num >> 1 ;
+			${ $alias . "_closed_day" } = $num ;
+		}
+	
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+	
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			if ( ${ $alias . "_groupflg" } == DEF_CORP_GROUP_OTHER )
+			{
+				// ログインID
+				if ( ${ $alias . "_loginid" } == "" )
+				{
+					// IDの自動生成
+					$obSerialno		= new PARTS_Serialno( $this -> conn ) ;
+					$new_id = $obSerialno -> createSerialNo( SERIALNO_TYPE_CORP ) ;
+					if ( $new_id != 0 )
+						$arParam[ $alias . "_loginid" ] = sprintf( "C%010d" , $new_id ) ;
+					else
+						$error .= "・IDの自動生成に失敗しました。\n" ;
+				}
+				else
+				{
+					// 同じIDが存在しないかどうかの検査
+					$arWhere = array() ;
+					$arWhere[ "loginid" ] = ${ $alias . "_loginid" } ;
+					
+					if ( $mode == "update" )
+						$arWhere[ "where"	] = sprintf( "AND %s.%s != %d" , $alias , $primarykey , ${ $keyname } ) ;
+
+					$arCheck = $this -> getData( $arWhere ) ;
+					if ( count( $arCheck ) > 0 )
+						$error .= "・同じIDの企業情報が存在しています。\n" ;
+				}
+				
+				// パスワードチェック
+				$error .= $this -> checkPassword(	$arParam[ $alias . "_passwd"		] ,
+													$arParam[ $alias . "_crypt_passwd"	]
+												) ;
+			}
+		
+			// 社名
+			if ( ${ $alias . "_name" } == "" )
+				$error .= "・組織名が入力されていません。\n" ;
+	
+			// カナ
+			if ( ${ $alias . "_kana" } == "" )
+				$error .= "・カナが入力されていません。\n" ;
+	
+			if ( ${ $alias . "_name_en" } == "" )
+				$error .= "・組織名（英語）が入力されていません。\n" ;
+	
+			// 法人格
+			if ( ${ $alias . "_title" } == -1 )
+				$error .= "・法人格が選択されていません。\n" ;
+	
+			// 法人格位置
+			if ( ${ $alias . "_position" } == -1 )
+				$error .= "・法人格位置が選択されていません。\n" ;
+	
+			// 担当者メールアドレス
+			if ( ${ $alias . "_agent_email" } != "" )
+			{
+				$obMail = new PARTS_Mail() ;
+				if ( $obMail -> checkData( ${ $alias . "_agent_email" } ) != true )
+					$error .= "・メールアドレスが正しくありません。\n" ;
+			}
+
+			// 担当者メールアドレス
+			if ( ${ $alias . "_agent_email" } != "" )
+			{
+				$obMail = new PARTS_Mail() ;
+				if ( $obMail -> checkData( ${ $alias . "_agent_email" } ) != TRUE )
+				{
+					$error .= "・メールアドレスが正しくありません。\n" ;
+				}
+				else
+				{
+					// 重複検定
+					$arWhere = array() ;
+					$arWhere[ "where" ]  = "" ;
+					$arWhere[ "where" ] .= sprintf( "AND %s.agent_email = '%s' " , $alias , $this -> mb_addslashes( ${ $alias . "_agent_email" } ) ) ;
+
+					// 修正の場合、異なるIDで指定のログインIDが存在する際は、重複エラーとする。
+					if ( $mode == "update" )
+						$arWhere[ "where" ] .= sprintf( " AND %s.%s <> %d " , $alias , $primarykey , ${ $keyname } ) ;
+
+					// 重複検査
+					$arCheck = $this -> getData( $arWhere ) ;
+					if ( count( $arCheck ) > 0 )
+						$error .= "・同じ担当者メールアドレスが存在しています。\n" ;
+				}
+			}
+
+			// 都道府県
+			if ( ${ $alias . "_state" } == -1 )
+				$error .= "・都道府県が選択されていません。\n" ;
+	
+			// 市町村
+			if ( ${ $alias . "_city" } == "" )
+				$error .= "・市町村が入力されていません。\n" ;
+	
+			// 住所１
+			if ( ${ $alias . "_addr1" } == "" )
+				$error .= "・住所が入力されていません。\n" ;
+	
+			// 住所２
+	
+			// 郵便番号
+			$error .= $this -> checkZip( $arParam[ $alias . "_zip" ] , ${ $alias . "_zip1" } , ${ $alias . "_zip2" } ) ;
+	
+			// 電話番号
+			$errorTel = $this -> checkTel( $arParam[ $alias . "_tel" ] , false , ${ $alias . "_tel1" } , ${ $alias . "_tel2" } , ${ $alias . "_tel3" } ) ;
+			if ( $errorTel == "" )
+			{
+				// 入力にエラーが無い場合は、重複チェックを行う
+				$arWhere = array() ;
+				$arWhere[ "tel"			] = $arParam[ $alias . "_tel" ] ;
+				if ( $mode == "update" )
+					$arWhere[ "where"	] = sprintf( "AND %s.%s != %d" , $alias , $primarykey , ${ $keyname } ) ;
+		
+				$arCheck = $this -> getData( $arWhere ) ;
+				if ( count( $arCheck ) > 0 )
+					$error .= "・同じ電話番号の会社情報が存在しています。\n" ;
+			}
+			else
+			{
+				$error .= $errorTel ;
+			}
+			
+			// FAX番号
+			$errorFax = $this -> checkTel( $arParam[ $alias . "_fax" ] , false , ${ $alias . "_fax1" } , ${ $alias . "_fax2" } , ${ $alias . "_fax3" } ) ;
+			if ( $errorFax == "" )
+			{
+				// 入力にエラーが無い場合は、重複チェックを行う
+				$arWhere = array() ;
+				$arWhere[ "fax"			] = $arParam[ $alias . "_fax" ] ;
+				if ( $mode == "update" )
+					$arWhere[ "where"	] = sprintf( "AND %s.%s != %d" , $alias , $primarykey , ${ $keyname } ) ;
+		
+				$arCheck = $this -> getData( $arWhere ) ;
+				if ( count( $arCheck ) > 0 )
+					$error .= "・同じFAX番号の会社情報が存在しています。\n" ;
+			}
+			else
+			{
+				$error .= $errorTel ;
+			}
+	
+			// 設立年月
+			$arParam[ $alias . "_foundation_date" ] = DEF_DATE_MIN ;
+			$error .= $this -> checkDate(	$arParam[ $alias . "_foundation_date" ] ,
+											true ,
+											${ $alias . "_foundation_date_y" } ,
+											${ $alias . "_foundation_date_m" } ,
+											null ,
+											true ,
+											"設立年月"
+										) ;
+
+			// 表示開始日
+			$arParam[ $alias . "_start_date" ] = DEF_DATE_MIN ;
+			$error .= $this -> checkDate(	$arParam[ $alias . "_start_date" ] ,
+											true ,
+											${ $alias . "_start_date_y" } ,
+											${ $alias . "_start_date_m" } ,
+											${ $alias . "_start_date_d" } ,
+											true ,
+											"表示開始日"
+										) ;
+
+			// 画像
+			$obPhoto = $this -> obPhoto ;
+			$error .= $obPhoto -> checkData( $alias . "_photoid_img"		, $alias . "_photoid_tmp"		, $arParam , "img"	, "外観"	) ;
+			$error .= $obPhoto -> checkData( $alias . "_photoid1_img"		, $alias . "_photoid1_tmp"		, $arParam , "img"	, "内装"	) ;
+			$error .= $obPhoto -> checkData( $alias . "_photoid_map_img"	, $alias . "_photoid_map_tmp"	, $arParam , "img"	, "地図"	) ;
+	
+			// 備考
+	
+			// スタイル
+			if ( ${ $alias . "_style" } == -1 && ${ $alias . "_url" } == "" )
+			{
+				$error .= "・自動生成のスタイルが指定されていません。\n" ;
+			}
+			
+			// エラーが無い場合は 社名 + 部署名 + 電話番号 重複検査
+			if ( $error == "" )
+			{
+				if ( ${ $alias . "_name" } != "" )
+				{
+					$arWhere = array() ;
+					$arWhere[ "name_unique"			] = ${ $alias . "_name" } ;
+					$arWhere[ "department_unique"	] = ${ $alias . "_department" } ;
+					$arWhere[ "tel"					] = $arParam[ $alias . "_tel" ] ;
+					
+					if ( $mode == "update" )
+						$arWhere[ "where"	] = sprintf( "AND %s.%s != %d" , $alias , $primarykey , ${ $keyname } ) ;
+	
+					$arCheck = $this -> getData( $arWhere ) ;
+					if ( count( $arCheck ) > 0 )
+						$error .= "・同じ名称の企業情報が存在しています。\n" ;
+				}
+			}
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+	
+	// メールアドレスのフォーマットチェック
+	function	checkMailAddress( $arParam )
+	{
+		$error = "" ;
+		$obMail = new PARTS_Mail() ;
+
+		$alias	= $this -> alias ;
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+		
+		if ( ${ $alias . "_agent_email" } != "" )
+		{
+			if ( $obMail -> checkData( ${ $alias . "_agent_email" } ) != true )
+				$error .= "・代表用のメールアドレスが正しくありません。\n" ;
+		}
+		
+		if ( ${ $alias . "_remainder_email" } != "" )
+		{
+			if ( $obMail -> checkData( ${ $alias . "_remainder_email" } ) != true )
+				$error .= "・リマインダ用のメールアドレスが正しくありません。\n" ;
+		}
+		
+		if ( ${ $alias . "_inquire_email" } != "" )
+		{
+			if ( $obMail -> checkData( ${ $alias . "_inquire_email" } ) != true )
+				$error .= "・問い合わせ用のメールアドレスが正しくありません。\n" ;
+		}
+		
+		if ( ${ $alias . "_registered_email" } != "" )
+		{
+			if ( $obMail -> checkData( ${ $alias . "_registered_email" } ) != true )
+				$error .= "・完了通知用のメールアドレスが正しくありません。\n" ;
+		}
+		
+		if ( ${ $alias . "_feedback_email" } != "" )
+		{
+			if ( $obMail -> checkData( ${ $alias . "_feedback_email" } ) != true )
+				$error .= "・システム連絡用のメールアドレスが正しくありません。\n" ;
+		}
+		
+		return $error ;
+	}
+	
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam , $groupflg , $groupparentid )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$arParam[ $alias . "_groupflg"		] = $groupflg ;
+		$arParam[ $alias . "_groupparentid"	] = $groupparentid ;
+		$arParam[ $alias . "_title"			] = DEF_CATEGORY_OTHER ;
+		$arParam[ $alias . "_position"		] = DEF_POSITION_NONE ;
+		$arParam[ $alias . "_state"			] = -1 ;
+		$arParam[ $alias . "_capital"		] = "" ;
+		$arParam[ $alias . "_employees"		] = "" ;
+		$arParam[ $alias . "_ave_age"		] = "" ;
+		$arParam[ $alias . "_dat_subject"	] = array() ;
+		$arParam[ $alias . "_style"			] = -1 ;
+	}
+
+	//
+	// 新規データ登録
+	//
+	function insertData( &$arParam )
+	{
+		$result = false ;
+	
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+	
+		// 関連科目を文字列に展開する
+		$arDatSubject = $arParam[ $alias . "_dat_subject" ] ;
+		$dat_subject = "" ;
+		if( is_array( $arDatSubject ) )
+		{
+			foreach( $arDatSubject as $key => $value )
+			{
+				$dat_subject .= sprintf( "[%s]" , $value ) ;
+			}
+		}
+
+		$caption = "" ;
+		$result = parent::insertData( $arParam , TOPICS_TYPE_CORP , $caption ) ;
+		
+		$arParam[ $alias . "_dat_subject"	] = $arDatSubject ;
+
+		return $result ;
+	}
+
+	//
+	// 新規データ登録
+	//
+	function	updateData( $arParam )
+	{
+		$result = false ;
+	
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+	
+		// 関連科目を文字列に展開する
+		$arDatSubject = $arParam[ $alias . "_dat_subject" ] ;
+		$dat_subject = "" ;
+		if( is_array( $arDatSubject ) )
+		{
+			foreach( $arDatSubject as $key => $value )
+			{
+				$dat_subject .= sprintf( "[%s]" , $value ) ;
+			}
+		}
+		
+		$caption = "" ;
+		$result = parent::updateData( $arParam , TOPICS_TYPE_CORP , $caption ) ;
+
+		return $result ;
+	}
+
+	// リストボックスなどに用いる
+	// $arParam[ id ] = name
+	// の形に整形する
+	function	getList( $arWhere , $page = -1 )
+	{
+		$arList		= $this -> getData( $arWhere , $page ) ;
+		$arResult	= array() ;
+
+		for( $i = 0 ; $i < count( $arList ) ; $i ++ )
+		{
+			$id			= $arList[ $i ][ $this -> alias . "_corpid"		] ;
+			$lname		= $arList[ $i ][ $this -> alias . "_lname"		] ;
+			$value		= sprintf( "%s" , $lname ) ;
+
+			$arResult[ $id ] = $value ;
+		}
+		return $arResult ;
+	}
+
+	// メールアドレスを更新
+	function updateMail( $arParam )
+	{
+		$result = false ;
+		
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+		
+		if ( $this -> isOpen() == true )
+		{
+			$tname		= $this -> tname ;
+			$alias		= $this -> alias ;
+			$primarykey = $this -> primarykey ;
+
+			$id			= $arParam[ $alias . "_" . $primarykey ] ;
+			$del_column	= str_replace( $alias . "_" , "" , $del_column ) ;
+			
+			// データ更新
+			$sql  = sprintf( "UPDATE %s SET "				, $tname ) ;
+			$sql .= sprintf( "corpid = '%d', "				, ${ $alias . "_corpid" } ) ;
+			$sql .= sprintf( "agent_email = '%s', "			, $this -> mb_addslashes( ${ $alias . "_agent_email" } ) ) ;
+			$sql .= sprintf( "remainder_email = '%s', "		, $this -> mb_addslashes( ${ $alias . "_remainder_email" } ) ) ;
+			$sql .= sprintf( "inquire_email = '%s', "		, $this -> mb_addslashes( ${ $alias . "_inquire_email" } ) ) ;
+			$sql .= sprintf( "registered_email = '%s', "	, $this -> mb_addslashes( ${ $alias . "_registered_email" } ) ) ;
+			$sql .= sprintf( "feedback_email = '%s', "		, $this -> mb_addslashes( ${ $alias . "_feedback_email" } ) ) ;
+			$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+			$sql .= sprintf( "WHERE corpid = %d "			, ${ $alias . "_corpid" } ) ;
+			$record = $this -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				$this -> closeRecord( $record ) ;
+				$result = TRUE ;
+			}
+		}
+		
+		return $result ;
+	}
+}
+?>

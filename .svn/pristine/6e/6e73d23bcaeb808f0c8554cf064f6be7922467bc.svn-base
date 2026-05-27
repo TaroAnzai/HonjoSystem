@@ -1,0 +1,1437 @@
+<?php
+/**
+* BLAMS 基本関数郡 カテゴリー用クラス
+*
+* カテゴリー用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+// カテゴリ最大数定義
+define( "MAX_CATEGORY1"			,	64	) ;		// 大項目
+define( "MAX_CATEGORY2"			,	64	) ;		// 中項目
+define( "MAX_CATEGORY3"			,	64	) ;		// 小項目
+
+// カテゴリー
+$_FUNC = 1 ;
+define( "DEF_CATEGORY_PRODUCT"		,	$_FUNC ++	) ;		// 業務
+define( "DEF_CATEGORY_ITEM"			,	$_FUNC ++	) ;		// 商品
+define( "DEF_CATEGORY_MENU"			,	$_FUNC ++	) ;		// メニュー
+define( "DEF_CATEGORY_POST"			,	$_FUNC ++	) ;		// ポスト
+define( "DEF_CATEGORY_LINK"			,	$_FUNC ++	) ;		// リンク種類
+define( "DEF_CATEGORY_DECORATION"	,	$_FUNC ++	) ;		// のし種類
+
+define( "DEF_CATEGORY_STANDARD"		,	1			) ;		// 標準
+define( "DEF_CATEGORY_OTHER"		,	99			) ;		// その他
+
+// システム管理者レベル
+global	$arAdminLevel ;
+$arAdminLevel = array() ;
+
+// 一般会員レベル
+global	$arMemberLevel ;
+$arMemberLevel = array() ;
+
+// 企業会員レベル
+global	$arCorpLevel ;
+$arCorpLevel = array() ;
+
+// 役職種類
+global $arPost ;
+$arPost = array() ;
+
+global	$arKindLabel ;
+$arKindLabel = array() ;
+
+// リンク種別
+global	$arLinkKind ;
+$arLinkKind = array() ;
+
+require_once(	'class/db.class.php' ) ;
+
+class PARTS_Category extends DB_Common
+{
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" , $tname = "" , $alias = "" , $primarykey = "" )
+	{
+		if ( $tname == "" )
+			$tname		= "category_data" ;
+		if ( $alias == "" )
+			$alias		= "c" ;
+		if ( $primarykey == "" )
+			$primarykey	= "categoryid" ;
+
+		parent::__construct(  $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> searchkey = array(
+				"S_KIND"		,
+			) ;
+
+		$this -> fieldsData[] = array( "name" => "srccategory1"					, "type" => "" , "format" => "%d" ) ;
+		$this -> fieldsData[] = array( "name" => "srccategory2"					, "type" => "" , "format" => "%d" ) ;
+		$this -> fieldsData[] = array( "name" => "destcategory1"				, "type" => "" , "format" => "%d" ) ;
+		$this -> fieldsData[] = array( "name" => "destcategory2"				, "type" => "" , "format" => "%d" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 , $arFields = array() )
+	{
+		$alias		= $this -> alias ;
+		$pkey		= $this -> primarykey ;
+		$keyname	= $alias . "_" . $pkey ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields( $arFields ) ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = DB_Common::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = NUMBER_PER_PAGE )
+	{
+		$alias 		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $primarykey ;
+
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+		
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $alias ) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $alias ) ;
+
+		$limit = "" ;
+		if ( is_array( ${ $primarykey } ) == true )
+		{
+			$sql_c = "" ;
+			$idcnt = count( ${ $primarykey } ) ;
+			for ( $id = 0 ; $id < $idcnt ; $id ++ )
+			{
+				if ( $sql_c != "" )
+					$sql_c .= "OR " ;
+				$sql_c .= sprintf( "%s.%s = %d " , $alias , $primarykey , ${ $primarykey }[ $id ] ) ;
+			}
+			if ( $sql_c != "" )
+				$sql .= sprintf( "AND ( %s ) " , $sql_c ) ;
+		}
+		else if ( ${ $primarykey } != -1 )
+		{
+			$sql .= sprintf( "AND %s.%s = %d " , $alias , $primarykey , ${ $primarykey } ) ;
+		}
+		else
+		{
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+		}
+		
+		if ( $kind != -1 )
+			$sql .= sprintf( "AND %s.kind = %d " , $alias , $kind ) ;
+
+		if ( $name != "" && $name != -1 )
+			$sql .= sprintf( "AND %s.name = '%s' " , $alias , $this -> mb_addslashes( $name ) ) ;
+
+		if ( $category1 != -1 )
+			$sql .= sprintf( "AND %s.category1 = %d " , $alias , $category1 ) ;
+
+		if ( $category2 != -1 )
+			$sql .= sprintf( "AND %s.category2 = %d " , $alias , $category2 ) ;
+
+		if ( $category3 != -1 )
+			$sql .= sprintf( "AND %s.category3 = %d " , $alias , $category3 ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.category1 , " , $alias ) ;
+				$sql .= sprintf( "%s.category2 , " , $alias ) ;
+				$sql .= sprintf( "%s.category3   " , $alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		return $sql ;
+	}
+
+	//
+	// パラメータのグローバル変数への登録
+	//
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional , $arParam ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		if ( ${ $alias . "_category1" } == "" )
+			${ $alias . "_category1" } = -1 ;
+
+		if ( ${ $alias . "_category2" } == "" )
+			${ $alias . "_category2" } = -1 ;
+
+		if ( ${ $alias . "_category3" } == "" )
+			${ $alias . "_category3" } = -1 ;
+
+		if ( ${ $alias . "_srccategory1" } == "" )
+			${ $alias . "_srccategory1" } = -1 ;
+
+		if ( ${ $alias . "_srccategory2" } == "" )
+			${ $alias . "_srccategory2" } = -1 ;
+
+		if ( ${ $alias . "_destcategory1" } == "" )
+			${ $alias . "_destcategory1" } = -1 ;
+
+		if ( ${ $alias . "_destcategory2" } == "" )
+			${ $alias . "_destcategory2" } = -1 ;
+
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+	
+	//
+	// データ検査
+	//
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias 		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $primarykey ;
+		
+		$error = "" ;
+		if ( $func == "database" )
+			return $error ;
+
+		// パラメータからデータを取り出す
+		foreach( $arParam as $key => $value )
+			${ $key } = $value ;
+
+		$kind	= $alias . "_kind" ;
+		$c1		= $alias . "_category1" ;
+		$c2		= $alias . "_category2" ;
+		$c3		= $alias . "_category3" ;
+
+		$src1	= $alias . "_srccategory1" ;
+		$src2	= $alias . "_srccategory2" ;
+		$dest1	= $alias . "_destcategory1" ;
+		$dest2	= $alias . "_destcategory2" ;
+
+		$name	= $alias . "_name" ;
+
+		if ( isset( ${ $kind } ) == false )
+			${ $kind } = null ;
+		if ( isset( ${ $c1 } ) == false )
+			${ $c1 } = null ;
+		if ( isset( ${ $c2 } ) == false )
+			${ $c2 } = null ;
+		if ( isset( ${ $c3 } ) == false )
+			${ $c3 } = null ;
+		if ( isset( ${ $name } ) == false )
+			${ $name } = null ;
+		if ( isset( ${ $keyname } ) == false )
+			${ $keyname } = -1 ;
+
+		if ( $this -> isOpen() )
+		{
+			// 新規登録時のデータ初期化
+			if ( $mode == "append" )
+			{
+				$no = $this -> makeNewNo( ${ $kind } , ${ $c1 } , ${ $c2 } , ${ $c3 } ) ;
+				
+				if ( ${ $c1 } == -1 )
+				{
+					if ( ${ $c2 } != -1 || ${ $c3 } != -1 )
+					{
+						// 大項目が新規で 中項目以下が指定されている場合
+						$error .= "・大項目が選択されていません。\n" ;
+					}
+					else if ( $no != -1 )
+					{
+						$arParam[ $c1 ] = $no ;
+						$arParam[ $c2 ] = 0 ;
+						$arParam[ $c3 ] = 0 ;
+					}
+					else
+					{
+						$error .= "・これ以上項目は追加できません。\n" ;
+					}
+				}
+				else if ( ${ $c2 } == -1 )
+				{
+					if ( ${ $kind } == DEF_CATEGORY_ITEM || ${ $kind } == DEF_CATEGORY_PRODUCT )
+					{
+						if ( ${ $c3 } != -1 )
+						{
+							// 中項目が新規で小項目が指定されている場合
+							$error .= "・中項目が選択されていません。\n" ;
+						}
+						else if ( $no != -1 )
+						{
+							$arParam[ $c2 ] = $no ;
+							$arParam[ $c3 ] = 0 ;
+						}
+						else
+						{
+							$error .= "・この大項目に対して、これ以上 中項目は追加できません。\n" ;
+						}
+					}
+					else
+					{
+						$error .= "・このカテゴリーには中項目は作成できません。\n" ;
+					}
+				}
+				else if ( ${ $c3 } == -1 )
+				{
+					if ( $no != -1 )
+					{
+						$arParam[ $c3 ] = $no ;
+					}
+					else
+					{
+						$error .= "・このレベル1／レベル2に対して、これ以上のレベル3項目は追加できません。\n" ;
+					}
+				}
+				else
+				{
+					if ( $func != "database" )
+						$error .= "・新規登録が選択されていません。\n" ;
+				}
+			}
+
+			// 名称の重複チェック
+			if ( $mode == "append" || $mode == "update" )
+			{
+				// カテゴリ名の入力検査
+				if ( $alias . "_name" == "" )
+				{
+					$error .= "・カテゴリ名が入力されていません。\n" ;
+				}
+				else
+				{
+					// カテゴリ名の重複検査
+					$arWhere = array() ;
+					$arWhere[ "name" ] = ${ $alias . "_name" } ;
+					$arWhere[ "kind" ] = ${ $kind } ;
+					
+					if ( $mode == "append" )
+					{
+						if ( ${ $c1 } == -1 )
+						{
+							$arWhere[ "where" ] = sprintf( "AND %s.category1 > 0 " , $alias ) ;
+							$arWhere[ "category2" ] = 0 ;
+							$arWhere[ "category3" ] = 0 ;
+						}
+						else if ( ${ $c2 } == -1 )
+						{
+							$arWhere[ "category1" ] = ${ $c1 } ;
+							$arWhere[ "category3" ] = 0 ;
+							$arWhere[ "where" ] = sprintf( "AND %s.category2 > 0 " , $alias ) ;
+						}
+						else if ( ${ $c3 } == -1 )
+						{
+							$arWhere[ "category1" ] = ${ $c1 } ;
+							$arWhere[ "category2" ] = ${ $c2 } ;
+							$arWhere[ "where" ] = sprintf( "AND %s.category3 > 0 " , $alias ) ;
+						}
+					}
+					
+					// 修正の場合、異なるIDで指定のカテゴリ名が存在する際は、重複エラーとする。
+					else if ( $mode == "update" )
+					{
+						if ( ${ $c1 } != -1 && ${ $c2 } == -1 && ${ $c3 } == -1 )
+						{
+							$arWhere[ "category2" ] = 0 ;
+							$arWhere[ "category3" ] = 0 ;
+							$arWhere[ "where" ] = sprintf( "AND %s.category1 != %d " , $alias , ${ $c1 } ) ;
+							$arWhere[ "where" ] .= sprintf( "AND %s.category1 > 0 " , $alias ) ;
+
+							$arParam[ $c2 ] = 0 ;
+							$arParam[ $c3 ] = 0 ;
+						}
+						else if ( ${ $c1 } != -1 && ${ $c2 } != -1 && ${ $c3 } == -1 )
+						{
+							$arWhere[ "category1" ] = ${ $c1 } ;
+							$arWhere[ "category3" ] = 0 ;
+							$arWhere[ "where" ] = sprintf( "AND %s.category2 != %d " , $alias , ${ $c2 } ) ;
+							$arWhere[ "where" ] .= sprintf( "AND %s.category2 > 0 " , $alias ) ;
+
+							$arParam[ $c3 ] = 0 ;
+						}
+						else if ( ${ $c1 } != -1 && ${ $c2 } != -1 && ${ $c3 } != -1 )
+						{
+							$arWhere[ "category1" ] = ${ $c1 } ;
+							$arWhere[ "category2" ] = ${ $c2 } ;
+							$arWhere[ "where" ]  = sprintf( "AND %s.category3 != %d " , $alias , ${ $c3 } ) ;
+							$arWhere[ "where" ] .= sprintf( "AND %s.category3 > 0 " , $alias ) ;
+						}
+						$arWhere[ $keyname ] = ${ $keyname } ;
+					}
+
+					$arResult = $this -> getData( $arWhere ) ;
+					if ( count( $arResult ) > 0 )
+						$error .= "・同じカテゴリ名が存在しています。\n" ;
+				}
+			}
+			else if ( $mode == "copy" )
+			{
+				if ( ${ $src1 } == -1 || ${ $dest1 } == -1 )
+				{
+					$error .= "・カテゴリーが選択されていません。\n" ;
+				}
+				else
+				{
+					$srcLevel = 1 ;
+					if ( ${ $src2 } != -1 )
+						$srcLevel = 2 ;
+					
+					$destLevel = 1 ;
+					if ( ${ $dest2 } != -1 )
+						$destLevel = 2 ;
+					
+					if ( $srcLevel < $destLevel )
+					{
+						$error .= "・コピー元より低い階層へのコピーはできません。\n" ;
+					}
+					else
+					{
+						// コピー元の階層より コピー先の階層が
+						if ( ${ $src1 } == ${ $dest1 } )
+						{	
+							if ( ${ $dest2 } == -1 )
+								$error .= "・同じカテゴリーにはコピーできません。\n" ;
+							else if ( ${ $src2 } == ${ $dest2 } )
+							{
+								$error .= "・同じカテゴリーにはコピーできません。\n" ;
+							}
+						}
+					}
+				}
+			}
+			else if ( $mode == "delete" )
+			{
+				if ( ${ $c1 } != -1 && ${ $c2 } == -1 && ${ $c3 } == -1 )
+				{
+					$arParam[ ${ $c2 } ] = 0 ;
+					$arParam[ ${ $c3 } ] = 0 ;
+					$current = ${ $c1 } ;
+				}
+				else if ( ${ $c1 } != -1 && ${ $c2 } != -1 && ${ $c3 } == -1 )
+				{
+					$arParam[ ${ $c3 } ] = 0 ;
+					$current = ${ $c2 } ;
+				}
+				else if ( ${ $c1 } != -1 && ${ $c2 } != -1 && ${ $c3 } != -1 )
+				{
+					$current = ${ $c3 } ;
+				}
+	
+				if ( $current == DEF_CATEGORY_STANDARD || $current == DEF_CATEGORY_OTHER )
+					$error = "・「標準」と「その他」は削除できません。" ;
+			}
+			
+		}
+
+		return $error ;
+	}
+	
+	//
+	// 新しいカテゴリNoの作成
+	//
+	function	makeNewNo( $kind , $c1 , $c2 , $c3 )
+	{
+		$alias 		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $primarykey ;
+
+		$no = -1 ;
+	
+		$target	= "" ;
+		$max	= 0 ;
+		
+		$arWhere = array() ;
+		$arWhere[ "kind" ] = $kind ;
+		$arWhere[ "where" ]  = "" ;
+		
+		if ( $c1 == -1 )
+		{
+			$arWhere[ "category2" ] = 0 ;
+			$arWhere[ "where" ] .= sprintf( "AND %s.category1 != %d " , $alias , DEF_CATEGORY_OTHER ) ;
+			$target = "mc1" ;
+			$max = MAX_CATEGORY1 ;
+		}
+		else if ( $c2 == -1 )
+		{
+			$arWhere[ "category1" ] = $c1 ;
+			$arWhere[ "category3" ] = 0 ;
+			$arWhere[ "where" ] .= sprintf( "AND %s.category2 != %d " , $alias , DEF_CATEGORY_OTHER ) ;
+			$arWhere[ "where" ] .= sprintf( "AND %s.category2 != 0 " , $alias ) ;
+			$target = "mc2" ;
+			$max = MAX_CATEGORY2 ;
+		}
+		else if ( $c3 == -1 )
+		{
+			$arWhere[ "category1" ] = $c1 ;
+			$arWhere[ "category2" ] = $c2 ;
+			$arWhere[ "where" ] .= sprintf( "AND %s.category3 != %d " , $alias , DEF_CATEGORY_OTHER ) ;
+			$arWhere[ "where" ] .= sprintf( "AND %s.category3 != 0 " , $alias ) ;
+			$target = "mc3" ;
+			$max = MAX_CATEGORY3 ;
+		}
+	
+		if ( $target != "" )
+		{
+			$arResult = array() ;
+			if ( $this -> isOpen() == true )
+			{
+				$arWhere[ "order" ] = "" ;
+				$fields = "" ;
+				$fields .= sprintf( "max( %s.category1 ) as mc1 , " , $alias ) ;
+				$fields .= sprintf( "max( %s.category2 ) as mc2 , " , $alias ) ;
+				$fields .= sprintf( "max( %s.category3 ) as mc3   " , $alias ) ;
+	
+				$sql = $this -> makeSQL( $arWhere , $fields ) ;
+				
+				$arResult = DB_Common::getData( $sql ) ;
+			}
+
+			$no = 1 ;
+			if ( count( $arResult ) > 0 )
+			{
+				$arResult = $arResult[ 0 ] ;
+				$no = $arResult[ $target ] ;
+				$no ++ ;
+			}
+			
+			if ( $no == 1 )
+				$no ++ ;
+			if ( $no > $max )
+				$no = -1 ;
+		}
+	
+		return $no ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam , $kind )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$arParam[ $alias . "_kind"			] = $kind ;
+		$arParam[ $alias . "_category1"		] = -1 ;
+		$arParam[ $alias . "_category2"		] = -1 ;
+		$arParam[ $alias . "_category3"		] = -1 ;
+		$arParam[ $alias . "_srccategory1"	] = -1 ;
+		$arParam[ $alias . "_srccategory2"	] = -1 ;
+		$arParam[ $alias . "_destcategory1"	] = -1 ;
+		$arParam[ $alias . "_destcategory2"	] = -1 ;
+		$arParam[ $alias . "_name"			] = '' ;
+	}
+	
+	//
+	//  新規データ登録
+	//
+	function insertData( &$arParam )
+	{
+		$alias 		= $this -> alias ;
+		
+		$kind	= $arParam [ $alias . "_kind" ] ;
+		$c1 	= $arParam [ $alias . "_category1" ] ;
+		$c2		= $arParam [ $alias . "_category2" ] ;
+		$c3		= $arParam [ $alias . "_category3" ] ;
+
+		$result = false ;
+
+		$result = parent::insertData( $arParam , -1 , "" ) ;
+		if ( $result && $kind <= DEF_CATEGORY_MENU )
+		{
+			$arParam [ $alias . "_name" ] = "" ;
+			$this -> insertOther( $kind , $c1 , $c2 , $c3 ) ;
+		}
+		return $result ;
+	}
+	
+	//
+	// 「その他」項目の作成
+	//
+	function insertOther( $kind , $c1 , $c2 , $c3 )
+	{
+		$alias 		= $this -> alias ;
+		$result = true ;
+
+		// 同じカテゴリー内にその他があるかどうか検査する
+		$arWhere = array() ;
+		$arWhere[ "kind" ] = $kind ;
+
+		if ( $c1 > 0 && $c2 == 0 && $c3 == 0 ) 
+			$c1 = DEF_CATEGORY_OTHER ;
+		else if ( $c1 > 0 && $c2 > 0 && $c3 == 0 ) 
+			$c2 = DEF_CATEGORY_OTHER ;
+		else if ( $c1 > 0 && $c2 > 0 && $c3 > 0 ) 
+			$c3 = DEF_CATEGORY_OTHER ;
+		else
+			$result = false ;
+
+		$arWhere[ "category1" ] = $c1 ;
+		$arWhere[ "category2" ] = $c2 ;
+		$arWhere[ "category3" ] = $c3 ;
+		
+		if ( $result != false )
+		{
+			$arResult = $this -> getData( $arWhere ) ;
+			if ( count( $arResult ) == 0 )
+			{
+				// 新規作成
+				$arParam = array() ;
+				$arParam[ $alias . "_name"			] = "その他" ;
+				$arParam[ $alias . "_kind"			] = $kind ;
+				$arParam[ $alias . "_category1"		] = $c1 ;
+				$arParam[ $alias . "_category2"		] = $c2 ;
+				$arParam[ $alias . "_category3"		] = $c3 ;
+
+				$arParam[ $alias . "_create_date"	] = "LOCALTIMESTAMP(0)" ;
+				$arParam[ $alias . "_update_date"	] = "LOCALTIMESTAMP(0)" ;
+
+				$result = DB_Common::insertData( $arParam , -1 , "" ) ;
+			}
+		}
+		
+		return $result ;
+	}
+
+	//
+	//  データ更新
+	//
+	function updateData( &$arParam )
+	{
+		$alias 		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $primarykey ;
+
+		// パラメータからデータを取り出す
+		foreach( $arParam as $key => $value )
+			${ $key } = $value ;
+
+		$arWhere = array() ;
+		$arWhere[ "kind"		] = ${ $alias . "_kind" } ;
+		$arWhere[ "category1"	] = ${ $alias . "_category1" } ;
+		$arWhere[ "category2"	] = ${ $alias . "_category2" } ;
+		$arWhere[ "category3"	] = ${ $alias . "_category3" } ;
+		
+		$arParam[ $alias . "_update_date"	] = "LOCALTIMESTAMP(0)" ;
+	
+		$result = DB_Common::updateData( $arParam , -1 , "" , $arWhere ) ;
+
+		$arParam[ $alias . "_name"			] = "" ;
+
+		return $result ;
+	}
+
+	//
+	//  データ更新
+	//
+	function deleteData( $arParam )
+	{
+		$alias 		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $primarykey ;
+
+		// パラメータからデータを取り出す
+		foreach( $arParam as $key => $value )
+			${ $key } = $value ;
+
+		$kind	= ${ $alias . "_kind"		} ;
+		$c1		= ${ $alias . "_category1"	} ;
+		$c2		= ${ $alias . "_category2"	} ;
+		$c3		= ${ $alias . "_category3"	} ;
+		
+		$arWhere = array() ;
+		$arWhere[ "kind"		] = $kind ;
+		$arWhere[ "category1"	] = $c1 ;
+
+		if ( $c2 != -1 )
+			$arWhere[ "category2"	] = $c2 ;
+		else
+			$c2 = 0 ;
+
+		if ( $c3 != -1 )
+			$arWhere[ "category3"	] = $c3 ;
+		else
+			$c3 = 0 ;
+		
+		$result = DB_Common::deleteData( $arParam , -1 , "" , $arWhere ) ;
+		if ( $result )
+		{
+			// 中項目以降で該当する階層にその他しかなくなった場合
+			// その他項目を削除する。
+			if ( $c2 != -1 )
+			{
+				$arWhere = array() ;
+				$arWhere[ "kind"		] = $kind ;
+				$arWhere[ "category1"	] = $c1 ;
+				if ( $c2 != -1 && $c3 == 0 )
+				{
+					$arWhere[ "where"	] = sprintf( "AND %s.category2 != 0 " , $alias ) ;
+				}
+				else if ( $c3 != 0 )
+				{
+					$arWhere[ "category2"	] = $c2 ;
+					$arWhere[ "where"	] = sprintf( "AND %s.category3 != 0 " , $alias ) ;
+				}
+				$arResult = $this -> getData( $arWhere ) ;
+				if ( count( $arResult ) > 0 )
+				{
+					$arResult = $arResult[ 0 ] ;
+
+					// 先頭のデータが「その他」の場合、その階層内のすべてを削除する
+					$dc1 = $arResult[ $alias . "_category1" ] ;
+					$dc2 = $arResult[ $alias . "_category2" ] ;
+					$dc3 = $arResult[ $alias . "_category3" ] ;
+					
+					$del = -1 ;
+					if ( $c2 != 0 && $c3 == 0 )
+					{
+						$c2 = $dc2 ;
+						$del = $dc2 ;
+					}
+					else if ( $c3 != 0 )
+					{
+						$c3 = $dc3 ;
+						$del = $dc3 ;
+					}
+					
+					if ( $del == DEF_CATEGORY_OTHER )
+					{
+						$arWhere = array() ;
+						$arWhere[ "kind"		] = $kind ;
+						$arWhere[ "category1"	] = $c1 ;
+						$arWhere[ "category2"	] = $c2 ;
+						$arWhere[ "category3"	] = $c3 ;
+
+						$result = DB_Common::deleteData( array() , -1 , "" , $arWhere ) ;
+					}
+				}
+			}
+			
+			// データの並び替えを行う
+			$this -> resort( $kind , $c1 , $c2 , $c3 ) ;
+		}
+		return $result ;
+	}
+
+	//
+	//  データ更新
+	//
+	function copyData( &$arParam )
+	{
+		$result = false ;
+		
+		$alias 		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $primarykey ;
+
+		// パラメータからデータを取り出す
+		foreach( $arParam as $key => $value )
+			${ $key } = $value ;
+
+		$srcLevel = 1 ;
+		if ( ${ $alias . "_srccategory2" } != -1 )
+		{
+			$srcLevel = 2 ;
+		}
+		
+		$destLevel = 1 ;
+		if ( ${ $alias . "_destcategory2" } != -1 )
+		{
+			$destLevel = 2 ;
+		}
+
+		if ( $this -> isOpen() )
+		{
+			// コピー先のデータを削除する
+			$arWhere = array() ;
+			$arWhere[ "kind"		] = ${ $alias . "_kind" } ;
+			$arWhere[ "category1"	] = ${ $alias . "_destcategory1" } ;
+			if ( ${ $alias . "_destcategory2" } != -1 )
+			{
+				$arWhere[ "category2"	] = ${ $alias . "_destcategory2" } ;
+				$arWhere[ "where"		] = sprintf( "AND %s.category3 != 0 " , $alias ) ;
+			}
+			else
+			{
+				$arWhere[ "where"		] = sprintf( "AND %s.category2 != 0 " , $alias ) ;
+			}
+			$this -> destroyData( array() , $arWhere ) ;
+			
+			// コピー元になるデータを取得する
+			$arWhere = array() ;
+			$arWhere[ "kind"		] = ${ $alias . "_kind" } ;
+			$arWhere[ "category1"	] = ${ $alias . "_srccategory1" } ;
+			if ( ${ $alias . "_srccategory2" } != -1 )
+			{
+				$arWhere[ "category2"	] = ${ $alias . "_srccategory2" } ;
+				$arWhere[ "where"		] = sprintf( "AND %s.category3 != 0 " , $alias ) ;
+			}
+			else
+			{
+				$arWhere[ "where"		] = sprintf( "AND %s.category2 != 0 " , $alias ) ;
+			}
+			$arResult = $this -> getData( $arWhere ) ;
+			foreach ( $arResult as $arData )
+			{
+				$c1 = $arData[ $alias . "_category1" ] ;
+				$c2 = $arData[ $alias . "_category2" ] ;
+				$c3 = $arData[ $alias . "_category3" ] ;
+
+				$arData[ $alias . "_category1" ] = ${ $alias . "_destcategory1" } ;
+				if ( ${ $alias . "_destcategory2" } != -1 )
+				{
+					$arData[ $alias . "_category2" ] = ${ $alias . "_destcategory2" } ;
+				}
+				else if ( $srcLevel > $destLevel )
+				{
+					$arData[ $alias . "_category2" ] = $c3 ;
+					$arData[ $alias . "_category3" ] = 0 ;
+				}
+
+				$result = $this -> insertData( $arData ) ;
+				if ( $result == false )
+					break ;
+			}
+			$arParam[ $alias . "_srccategory1"	] = -1 ;
+			$arParam[ $alias . "_srccategory2"	] = -1 ;
+			$arParam[ $alias . "_destcategory1"	] = -1 ;
+			$arParam[ $alias . "_destcategory2"	] = -1 ;
+		}
+		return $result ;
+	}
+
+	// カテゴリーの再順番
+	function	resort( $kind , $oc1 = 0 , $oc2 = 0 , $oc3 = 0 )
+	{
+		$alias 		= $this -> alias ;
+
+		$arWhere = array() ;
+		$arWhere[ "kind"	] = $kind ;
+		$arWhere[ "where"	] = "" ;
+
+		if ( $oc1 == -1 )
+			$oc1 = 0 ;
+		if ( $oc2 == -1 )
+			$oc2 = 0 ;
+		if ( $oc3 == -1 )
+			$oc3 = 0 ;
+
+		$tire = 0 ;
+		$pos = 0 ;
+	
+		if ( $this -> isOpen() )
+		{
+			// 該当するカテゴリーを取得する
+			
+			// 大項目の場合
+			if ( $oc2 == 0 )
+			{
+				$arWhere[ "where"		] .= sprintf( "AND %s.category1 != %d " , $alias , DEF_CATEGORY_OTHER ) ; ;
+				$arWhere[ "where"		] .= sprintf( "AND %s.category1 >= %d " , $alias , $oc1 ) ;
+				$arWhere[ "category2"	] = 0 ;
+				$tire	= 1 ;
+				$pos	= $oc1 ;
+			}
+			else if ( $oc3 == 0 )
+			{
+				// 中項目の場合
+				$arWhere[ "where"		] .= sprintf( "AND %s.category2 != %d " , $alias , DEF_CATEGORY_OTHER ) ; ;
+				$arWhere[ "where"		] .= sprintf( "AND %s.category1 = %d "	, $alias , $oc1 ) ;
+				$arWhere[ "where"		] .= sprintf( "AND %s.category2 >= %d "	, $alias , $oc2 ) ;
+				$arWhere[ "category3"	] = 0 ;
+				$tire	= 2 ;
+				$pos	= $oc2 ;
+			}
+			else
+			{
+				// 小項目の場合
+				$arWhere[ "category1"	] = $oc1 ;
+				$arWhere[ "category2"	] = $oc2 ;
+				$arWhere[ "where"		] .= sprintf( "AND %s.category3 != %d " , $alias , DEF_CATEGORY_OTHER ) ; ;
+				$arWhere[ "where"		] .= sprintf( "AND %s.category3 >= %d "	, $alias , $oc3 ) ;
+				$tire	= 3 ;
+				$pos	= $oc3 ;
+			}
+	
+			if ( $pos == -1 )
+				$pos = 1 ;
+
+			$arResult = $this -> getData( $arWhere ) ;
+
+			foreach ( $arResult as $arData )
+			{
+				$c1	= $arData[ $alias . "_category1" ] ;
+				$c2	= $arData[ $alias . "_category2" ] ;
+				$c3	= $arData[ $alias . "_category3" ] ;
+				
+				$arParam = array() ;
+		
+				$arWhere = array() ;
+				$arWhere[ "kind"	] = $kind ;
+
+				switch ( $tire )
+				{
+				case	1 :
+					$arParam[ $alias . "_category1"	] = $pos ;
+					$arWhere[ "category1"			] = $c1 ;
+					break ;
+				
+				case	2 :
+					$arParam[ $alias . "_category2"	] = $pos ;
+					$arWhere[ "category1"			] = $c1 ;
+					$arWhere[ "category2"			] = $c2 ;
+					break ;
+				
+				case	3 :
+					$arParam[ $alias . "_category3"	] = $pos ;
+					$arWhere[ "category1"			] = $c1 ;
+					$arWhere[ "category2"			] = $c2 ;
+					$arWhere[ "category3"			] = $c3 ;
+					break ;
+				}
+
+				// 番号の付け替えの実行
+				if ( $tire != 0 )
+					DB_Common::updateData( $arParam , -1 , "" , $arWhere ) ;
+				
+				$pos ++ ;
+			}
+		}
+	}
+
+
+	// 番号の付け替え（前へ）
+	function	riseup( $kind , $c1 , $c2 , $c3 )
+	{
+		$alias 		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $primarykey ;
+
+		if ( $c1 == -1 )
+			$c1 = 0 ;
+		if ( $c2 == -1 )
+			$c2 = 0 ;
+		if ( $c3 == -1 )
+			$c3 = 0 ;
+		
+		$error	= "" ;
+		
+		if ( $this -> isOpen() )
+		{
+			$oc1	= $c1 ;
+			$oc2	= $c2 ;
+			$oc3	= $c3 ;
+
+			// 自分の1つ上のカテゴリにあるデータとともに取得する
+			$arWhere = array() ;
+			$arWhere[ "kind" ] = $kind ;
+
+			// 大項目の場合
+			if ( $oc1 != 0 && $oc2 == 0 && $oc3 == 0 )
+			{
+				$arWhere[ "where"		] = sprintf( "AND %s.category1 < %d" , $alias , $oc1 ) ;
+				$arWhere[ "category2"	] = 0 ;
+				$arWhere[ "category3"	] = 0 ;
+			}
+			// 中項目の場合
+			else if ( $oc1 != 0 && $oc2 != 0 && $oc3 == 0 )
+			{
+				$arWhere[ "category1"	] = $oc1 ;
+				$arWhere[ "where"		] = sprintf( "AND %s.category2 < %d" , $alias , $oc2 ) ;
+				$arWhere[ "category3"	] = 0 ;
+			}
+			// 小項目の場合
+			else if ( $oc1 != 0 && $oc2 != 0 && $oc3 != 0 )
+			{
+				$arWhere[ "category1"	] = $oc1 ;
+				$arWhere[ "category2"	] = $oc2 ;
+				$arWhere[ "where"		] = sprintf( "AND %s.category3 < %d" , $alias , $oc3 ) ;
+			}
+			else
+			{
+				$error = "・カテゴリーが取得できませんでした。" ;
+			}
+
+			if ( $error == "" )
+			{
+				$arWhere[ "order"	]  = "" ;
+				$arWhere[ "order"	] .= sprintf( "%s.kind , "				, $alias ) ;
+				$arWhere[ "order"	] .= sprintf( "%s.category1 DESC , "	, $alias ) ;
+				$arWhere[ "order"	] .= sprintf( "%s.category2 DESC , "	, $alias ) ;
+				$arWhere[ "order"	] .= sprintf( "%s.category3 DESC   "	, $alias ) ;
+
+				$arResult = $this -> getData( $arWhere ) ;
+
+				if ( count( $arResult ) > 0 )
+				{
+					$arData = $arResult[ 0 ] ;
+					$kind	= $arData[ $alias . "_kind"			] ;
+					$nc1	= $arData[ $alias . "_category1"	] ;
+					$nc2	= $arData[ $alias . "_category2"	] ;
+					$nc3	= $arData[ $alias . "_category3"	] ;
+
+					$this -> swap( $kind , $oc1 , $oc2 , $oc3 , $nc1 , $nc2 , $nc3 ) ;
+				}
+			}
+		}
+	
+		return $error ;
+	}
+
+	// 番号の付け替え（後へ）
+	function	falldown( $kind , $c1 , $c2 , $c3 )
+	{
+		$alias 		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $primarykey ;
+
+		if ( $c1 == -1 )
+			$c1 = 0 ;
+		if ( $c2 == -1 )
+			$c2 = 0 ;
+		if ( $c3 == -1 )
+			$c3 = 0 ;
+
+		$error	= "" ;
+		
+		if ( $this -> isOpen() )
+		{
+			// 現在の番号を取得する
+			$oc1	= $c1 ;
+			$oc2	= $c2 ;
+			$oc3	= $c3 ;
+	
+			// 自分の1つ上のカテゴリにあるデータとともに取得する
+			$arWhere = array() ;
+			$arWhere[ "kind" ] = $kind ;
+	
+			// 大項目の場合
+			if ( $oc1 != 0 && $oc2 == 0 && $oc3 == 0 )
+			{
+				$arWhere[ "where"		]  = sprintf( "AND %s.category1 > %d" , $alias , $oc1 ) ;
+				$arWhere[ "where"		] .= sprintf( "AND %s.category1 != %d" , $alias , DEF_CATEGORY_OTHER ) ;
+				$arWhere[ "category2"	] = 0 ;
+				$arWhere[ "category3"	] = 0 ;
+			}
+			// 中項目の場合
+			else if ( $oc1 != 0 && $oc2 != 0 && $oc3 == 0 )
+			{
+				$arWhere[ "category1"	] = $oc1 ;
+				$arWhere[ "where"		]  = sprintf( "AND %s.category2 > %d" , $alias , $oc2 ) ;
+				$arWhere[ "where"		] .= sprintf( "AND %s.category2 != %d" , $alias , DEF_CATEGORY_OTHER ) ;
+				$arWhere[ "category3"	] = 0 ;
+			}
+			// 小項目の場合
+			else if ( $oc1 != 0 && $oc2 != 0 && $oc3 != 0 )
+			{
+				$arWhere[ "category1"	] = $oc1 ;
+				$arWhere[ "category2"	] = $oc2 ;
+				$arWhere[ "where"		]  = sprintf( "AND %s.category3 > %d" , $alias , $oc3 ) ;
+				$arWhere[ "where"		] .= sprintf( "AND %s.category3 != %d" , $alias , DEF_CATEGORY_OTHER ) ;
+			}
+			else
+			{
+				$error = "・カテゴリーが取得できませんでした。" ;
+			}
+			
+			if ( $error == "" )
+			{
+				$arWhere[ "order"	]  = "" ;
+				$arWhere[ "order"	] .= sprintf( "%s.kind , "		, $alias ) ;
+				$arWhere[ "order"	] .= sprintf( "%s.category1 , "	, $alias ) ;
+				$arWhere[ "order"	] .= sprintf( "%s.category2 , "	, $alias ) ;
+				$arWhere[ "order"	] .= sprintf( "%s.category3   "	, $alias ) ;
+				$arResult = $this -> getData( $arWhere ) ;
+				if ( count( $arResult ) > 0 )
+				{
+					$arData = $arResult[ 0 ] ;
+					$kind	= $arData[ $alias . "_kind"			] ;
+					$nc1	= $arData[ $alias . "_category1"	] ;
+					$nc2	= $arData[ $alias . "_category2"	] ;
+					$nc3	= $arData[ $alias . "_category3"	] ;
+
+					$this -> swap( $kind , $oc1 , $oc2 , $oc3 , $nc1 , $nc2 , $nc3 ) ;
+				}
+			}
+		}
+		return $error ;
+	}
+
+	// 番号の付け替え（入替）
+	function	swap( $kind , $oc1 , $oc2 , $oc3 , $nc1 , $nc2 , $nc3 )
+	{
+		$old = -1 ;
+		$new = -1 ;
+		// 大項目の場合
+		if ( $oc1 != 0 && $oc2 == 0 && $oc3 == 0 )
+		{
+			$old = $oc1 ;
+			$new = $nc1 ;
+			$tc1 = 9999 ;
+			$tc2 = 0 ;
+			$tc3 = 0 ;
+		}
+		// 中項目の場合
+		else if ( $oc1 != 0 && $oc2 != 0 && $oc3 == 0 )
+		{
+			$old = $oc2 ;
+			$new = $nc2 ;
+			$tc1 = $oc1 ;
+			$tc2 = 9999 ;
+			$tc3 = 0 ;
+		}
+		// 小項目の場合
+		else if ( $oc1 != 0 && $oc2 != 0 && $oc3 != 0 )
+		{
+			$old = $oc3 ;
+			$new = $nc3 ;
+			$tc1 = $oc1 ;
+			$tc2 = $oc2 ;
+			$tc3 = 9999 ;
+		}
+	
+		$this -> setNumber( $kind , $oc1 , $oc2 , $oc3 , 9999 ) ;
+		$this -> setNumber( $kind , $nc1 , $nc2 , $nc3 , $old ) ;
+		$this -> setNumber( $kind , $tc1 , $tc2 , $tc3 , $new ) ;
+	}
+
+	// 番号の付け替え（入替）
+	function	setNumber( $kind , $c1 , $c2 , $c3 , $new )
+	{
+		$alias 		= $this -> alias ;
+
+		$arParam = array() ;
+		$arWhere = array() ;
+		$arWhere[ "kind" ] = $kind ;
+
+		// 大項目の場合
+		if ( $c1 != 0 && $c2 == 0 && $c3 == 0 )
+		{
+			$arParam[ $alias . "_category1"	] = $new ;
+			$arWhere[ "category1"			] = $c1 ;
+		}
+		// 中項目の場合
+		else if ( $c1 != 0 && $c2 != 0 && $c3 == 0 )
+		{
+			$arParam[ $alias . "_category2"	] = $new ;
+			$arWhere[ "category2"			] = $c2 ;
+		}
+		// 小項目の場合
+		else if ( $c1 != 0 && $c2 != 0 && $c3 != 0 )
+		{
+			$arParam[ $alias . "_category3"	] = $new ;
+			$arWhere[ "category3"			] = $c3 ;
+		}
+		
+		parent::updateData( $arParam , -1 , "" , $arWhere ) ;
+	}
+
+	// カテゴリテーブル作成
+	// category1 .. ０：全て、その他：大項目指定
+	// category2 .. ０：全て、－１：中項目以下無視（大項目のみ）、その他：中項目指定
+	// category3 .. ０：全て、－１（その他）：小項目以下無視（大・中項目のみ）
+	function	createCategoryArray( $category1 = 0 , $category2 = 0 , $category3 = 0 , $simple = FALSE , $kind = -1 )
+	{
+		$arResult = array() ;
+	
+		// 大項目検索
+		$arWhere = array() ;
+		$arWhere[ "category2"	] = 0 ;
+		$arWhere[ "kind"		] = $kind ;
+		if( $category1 != 0 )
+			$arWhere[ "category1"		] = $category1 ;
+		$arWhere[ "order"		] = "category1" ;
+		$arData = $this -> getData( $arWhere ) ;
+
+		$index = 0 ;
+		$cnt = count( $arData ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			$category_1_id		= $arData[ $i ][ sprintf( "%s_categoryid"	, $this -> alias ) ] ;
+			$category_1_name	= $arData[ $i ][ sprintf( "%s_name"			, $this -> alias ) ] ;
+			$category_1			= $arData[ $i ][ sprintf( "%s_category1"	, $this -> alias ) ] ;
+
+			// 大項目に直接繋がっている事も想定して、大項目表示
+			$arResult[ $index ++  ] = array( $category_1_id => $category_1_name ) ;
+
+			if ( $category2 == -1 )
+			{
+				// 中項目以下無視（大項目のみ）
+				continue ;
+			}
+
+			// 中項目検索
+			$arWhere = array() ;
+			$arWhere[ "category1"	] = $category_1 ;
+			if( $category2 != 0 )
+				$arWhere[ "category2"		] = $category2 ;
+			else
+				$arWhere[ "where"			] = sprintf( "AND %s.category2 <> 0 " , $this -> alias ) ;
+			$arWhere[ "category3"	] = 0 ;
+			$arWhere[ "kind"		] = $kind ;
+			$arWhere[ "order"		] = "category2" ;
+			$arData2 = $this -> getData( $arWhere ) ;
+			$cnt2 = count( $arData2 ) ;
+			for ( $j = 0 ; $j < $cnt2 ; $j ++ )
+			{
+				$category_2_id		= $arData2[ $j ][ sprintf( "%s_categoryid"	, $this -> alias ) ] ;
+				$category_2_name	= $arData2[ $j ][ sprintf( "%s_name"		, $this -> alias ) ] ;
+				$category_2			= $arData2[ $j ][ sprintf( "%s_category2"	, $this -> alias ) ] ;
+				$category_name		= $category_1_name . "－" . $category_2_name ;
+
+				// 中項目に直接繋がっている事も想定して、中項目表示
+				if ( $simple == TRUE )
+					$arResult[ $index ++  ] = array( $category_2_id => $category_2_name ) ;
+				else
+					$arResult[ $index ++  ] = array( $category_2_id => $category_name ) ;
+				
+				if ( $category3 == -1 )
+				{
+					// 小項目以下無視（大・中項目のみ）
+					continue ;
+				}
+
+				// 小項目検索
+				$arWhere = array() ;
+				$arWhere[ "category1"	] = $category_1 ;
+				$arWhere[ "category2"	] = $category_2 ;
+				if( $category3 != 0 )
+					$arWhere[ "category3"		] = $category3 ;
+				else
+					$arWhere[ "where"			] = sprintf( "AND %s.category3 <> 0 " , $this -> alias ) ;
+				$arWhere[ "kind"		] = $kind ;
+				$arWhere[ "order"		] = "category3" ;
+				$arData3 = $this -> getData( $arWhere ) ;
+				$cnt3 = count( $arData3 ) ;
+				for ( $k = 0 ; $k < $cnt3 ; $k ++ )
+				{
+					$category_3_id		= $arData3[ $k ][ sprintf( "%s_categoryid"	, $this -> alias ) ] ;
+					$category_3_name	= $arData3[ $k ][ sprintf( "%s_name"		, $this -> alias ) ] ;
+					$category_name		= $category_1_name . "－" . $category_2_name . "－" . $category_3_name ;
+					if ( $simple == TRUE )
+						$arResult[ $index ++  ] = array( $category_3_id => $category_3_name ) ;
+					else
+						$arResult[ $index ++  ] = array( $category_3_id => $category_name ) ;
+				}
+			}
+		}
+		return $arResult ;
+	}
+
+	// 先頭のカテゴリーIDを取得する。（サブカテゴリーも含む）
+	function	getTopID( $kind )
+	{
+		$categoryid = -1 ;
+	
+		$arWhere = array() ;
+		$arWhere[ "kind" ] = $kind ;
+		$arWhere[ "category2" ] = 0 ;
+		$arWhere[ "category3" ] = 0 ;
+		$arData = $this -> getData( $arWhere , 0 , 1 , array( $this -> primarykey ) ) ;
+
+		if ( count( $arData ) > 0 )
+		{
+			$categoryid = array() ;
+			$categoryid[] = $arData[ 0 ][ sprintf( "%s_%s" , $this -> alias , $this -> primarykey ) ] ;
+		}
+		return $categoryid ;
+	}
+
+	// カテゴリーチェック項目を配列に戻す
+	function	makeArray( $category )
+	{
+		$checkcategory = array() ;
+		
+		$category = trim( $category , "[" ) ;
+		$category = trim( $category , "]") ;
+		
+		$checkcategory = explode( "][" , $category ) ;
+	
+		return $checkcategory ;
+	}
+	
+	function makeIDList( $categoryid , $kind = -1 )
+	{
+		$alias = $this -> alias ;
+	
+		$arWhere = array() ;
+		$arWhere[ "kind"		] = $kind ;
+		$arWhere[ "categoryid"	] = $categoryid ;
+		
+		$arCategory = -1 ;
+		
+		if ( is_array( $categoryid ) )
+		{
+			// 中身が -1のものを取り除く
+			$arKeys = array_keys( $categoryid , -1 ) ;
+			for ( $i = 0 ; $i < count( $arKeys ) ; $i ++ )
+				unset( $categoryid[ $arKeys[ $i ] ] ) ;
+
+			if ( count( $categoryid ) > 0 )
+			{
+				$arCategory = array() ;
+				$arCategoryList = $this -> getData( $arWhere ) ;
+		
+				$cnt = count( $arCategoryList ) ;
+				for ( $i = 0 ; $i < $cnt ; $i ++ )
+				{
+					$arData = $arCategoryList[ $i ] ;
+		
+					$c1 = $arData[ $alias . "_category1" ] ;
+					$c2 = $arData[ $alias . "_category2" ] ;
+					$c3 = $arData[ $alias . "_category3" ] ;
+					
+					$arWhere = array() ;
+					$arWhere[ "kind"		] = $kind ;
+					$arWhere[ "category1"	] = $c1 ;
+					if ( $c2 != 0 )
+						$arWhere[ "category2"	] = $c2 ;
+					if ( $c3 != 0 )
+						$arWhere[ "category3"	] = $c3 ;
+			
+					$arResult = $this -> getData( $arWhere ) ;
+					$ccnt = sizeof( $arResult ) ;
+					for ( $j = 0 ; $j < $ccnt ; $j ++ )
+						$arCategory[ $arResult[ $j ][ $alias . "_categoryid" ] ] = 1 ;
+				}
+				
+				$arCategory = array_keys( $arCategory ) ;
+			}
+		}
+		return $arCategory ;
+	}
+	
+	function getCategoryNameFromIDWithKind( $categoryid , $mode , $kind )
+	{
+		$alias = $this -> alias ;
+		$szCategoryName = "" ;
+		
+		$arWhere = array() ;
+		$arWhere[ "categoryid" ] = $categoryid ;
+		$arCategory = $this -> getData( $arWhere ) ;
+
+		foreach( $arCategory as $arData )
+		{
+			$category_name	= $arData[ $alias . "_name"			] ;
+			$category_1		= $arData[ $alias . "_category1"	] ;
+			$category_2		= $arData[ $alias . "_category2"	] ;
+			$category_3		= $arData[ $alias . "_category3"	] ;
+			$kind			= $arData[ $alias . "_kind"			] ;
+
+			if ( $mode == 0 || $category_2 == 0 )
+			{
+				// 該当カテゴリのみモード指定、或いは当該カテゴリが大項目なので中項目以下は無視
+				$szCategoryName = $category_name ;
+			}
+			else
+			{
+				// 大項目カテゴリ名取得
+				$category1_name = $this -> getCategoryName( $category_1 , 0 , 0 , $kind ) ;
+
+				if ( $mode == 1 )
+				{
+					// 該当カテゴリ大項目のみモード指定なので中項目以下は無視
+					$szCategoryName = $category1_name ;
+				}
+				else
+				{
+					if ( $category_3 == 0 )
+					{
+						// 当該カテゴリが中項目なので小項目以下は無視
+						$szCategoryName = $category1_name . "－" . $category_name ;
+					}
+					else
+					{
+						// 中項目カテゴリ名取得
+						$category2_name = $this -> getCategoryName( $category_1 , $category_2 , 0 , $kind ) ;
+
+						// 当該カテゴリは小項目
+						$szCategoryName = $category1_name . "－" . $category2_name . "－" . $category_name ;
+					}
+				}
+			}
+
+		}
+		
+		if ( $szCategoryName == "" )
+			$szCategoryName = "不明" ;
+	
+		return $szCategoryName ;
+	}
+	
+	// カテゴリ名取得
+	function	getCategoryName( $category1 , $category2 , $category3 , $kind = -1 )
+	{
+		$szCategoryName = "" ;
+
+		$arWhere = array() ;
+		$arWhere[ "category1" ] = $category1 ;
+		$arWhere[ "category2" ] = $category2 ;
+		$arWhere[ "category3" ] = $category3 ;
+		
+		if ( $kind != -1 )
+			$arWhere[ "kind" ] = $kind ;
+
+		$arData = $this -> getData( $arWhere , 0 , 1 , array( $this -> primarykey , "name" ) ) ;
+		
+		if ( count( $arData ) > 0 )
+			$szCategoryName = $arData[ 0 ][ $this -> alias . "_name" ] ;
+		
+		if ( $szCategoryName == "" )
+			$szCategoryName = "不明" ;
+	
+		return $szCategoryName ;
+	}
+
+}
+?>

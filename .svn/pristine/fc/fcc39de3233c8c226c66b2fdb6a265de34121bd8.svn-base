@@ -1,0 +1,8 @@
+<?php
+	require_once( "../../lib/personal.php") ;
+
+	$func = $_GET[ "func" ] ;
+	$funcNo = $arFunction[ $func ] ;
+
+	printf( "%s" , FetchRSS( $funcNo ) ) ;
+?>

@@ -1,0 +1,241 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	// 基本パラメータ変換
+	if ( empty( $mode ) == true )
+		$mode = "update" ;
+	
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	// DB
+	$blams 		= new BLAMS() ;
+	$obCampaign	= new PARTS_Campaign() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obCampaign -> assignGlobal( $additional ) ;
+	
+	// 検索用パラメータ変換
+	$S_SUBJECT = $obCampaign -> mb2sb( $S_SUBJECT ) ;
+
+	if ( $S_EDIT_FLG == "" )
+		$S_EDIT_FLG = -1 ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obCampaign -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name }	;
+	$arParamFind[ "page"	] = $page		;
+
+	$menu = FUNC_CAMPAIGN ;
+
+	// タイトルの表示
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$funcname = $funcname ."（ 一覧 ）" ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	// リスト表示
+	$data = fetchList( $blams , $funcname , $arParamFind , $obCampaign ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+//
+// データの表示
+//
+function	fetchList( $blams , $funcname , $arParamFind , $obCampaign )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$list_flg = TRUE ;
+	$arWhere = array() ;
+	
+	if ( $S_SUBJECT != "" )
+		$arWhere[ "subject_like"	] = $S_SUBJECT ;
+
+	if ( $S_EDIT_FLG != -1 )
+		$arWhere[ "edit_flg" 		] = $S_EDIT_FLG ;
+
+	// 該当データ数取得
+	$cnt = 0 ;
+	if ( $obCampaign -> isOpen() == true )
+	{
+		$cnt		= $obCampaign -> getCpnCount( $arWhere ) ;
+		$arCampaign	= $obCampaign -> getCpnData( $arWhere , $page , NUMBER_PER_PAGE ) ;
+	}
+
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$arList = array() ;
+	$paging = 0 ;
+	$pageJump = 0 ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $obCampaign ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = fetchSearch( $blams , $arParamFind ) ;
+	}
+
+	$arHeader = array(
+		array( "caption" => "タイトル"		, "class" => "w384 left" ) ,
+		array( "caption" => "公開開始日"	, "class" => "w128 center" ) ,
+		array( "caption" => "公開終了日"	, "class" => "w128 center" ) ,
+		array( "caption" => "編集状態"		, "class" => "w128 center" ) ,
+		array( "caption" => "更新日"		, "class" => "w128 center" ) ,
+	) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	fetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	global	$arEditStatus ;
+	$arEditStatus_local = $arEditStatus ;
+	unset( $arEditStatus_local[ DEF_EDITSTATUS_DELETED ] ) ;
+
+	$arFoem = array() ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_SUBJECT" , $S_SUBJECT , 256 - 16  , 64 , IME_ON ) ;
+	$value .= $blams -> fetchTDTD( "タイトル" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form	= $blams -> fetchSelectbox( "S_EDIT_FLG" , $S_EDIT_FLG , $arEditStatus_local , 192 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "状態" , $form , 128 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $start_page , $arParamFind , $obCampaign )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	global	$arEditStatus ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	$arCampaign		= $obCampaign -> arData ;
+	$alias			= $obCampaign -> alias ;
+	$primarykey		= $obCampaign -> primarykey ;
+	$keyname		= $alias . "_" . $primarykey ;
+
+	foreach ( $arCampaign as $arCpData )
+	{
+		$campaignid		= $arCpData[ $alias . "_campaignid"		] ;
+		$subject		= $arCpData[ $alias . "_subject"		] ;
+		$edit_flg		= $arCpData[ $alias . "_edit_flg"		] ;
+		$start_date		= $arCpData[ $alias . "_start_date"		] ;
+		$end_date		= $arCpData[ $alias . "_end_date"		] ;
+		$update_date	= $arCpData[ $alias . "_update_date"	] ;
+
+		$edit_flg = $arEditStatus[ $edit_flg ] ;
+		if ( $edit_flg == "" )
+			$edit_flg = "不明" ;
+
+		$arAnchor[ "url" 			] = "edit.php"				;
+		$arAnchor[ "idname"			] = $alias . "_campaignid"	;
+		$arAnchor[ "id"				] = $campaignid				;
+		$arAnchor[ "param"			] = $param					;
+		$arAnchor[ "anchor"			] = $subject				;
+		$arAnchor[ "caption"		] = $subject				;
+		$arAnchor[ "class"			] = "border left"			;
+		$arAnchor[ "script"			] = ""						;
+		$arAnchor[ "date_format"	] = ""						;
+
+		$arData = array() ;
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $start_date ,	"class" => "border center"	, "date_format" => "%Y/%m/%d"	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $end_date ,		"class" => "border center"	, "date_format" => "%Y/%m/%d"	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $edit_flg ,		"class" => "border center"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $update_date ,	"class" => "border center"	, "date_format" => "%Y/%m/%d"	, "anchor" => "" ) ;
+		$arList[] = $arData ;
+	}
+
+	return $arList ;
+}
+
+?>

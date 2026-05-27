@@ -1,0 +1,319 @@
+<?php
+/**
+* BLAMS 基本関数郡 諸設定用クラス
+*
+* 沿革管理用クラス
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+class PARTS_Mail
+{
+	function	__construct()
+	{
+	}
+	
+	// メール送信処理 (エンコード付)
+	function sendPlane( $from_email , $from_name , $to_email , $to_name , $subject , $body , $suffix = true , $type = false , $exheader = "" , $boundary = "" )
+	{
+		// 様をつけるか？
+		$sama = "" ;
+		if ( $to_name != "" && $suffix == true )
+			$sama = "様" ;
+		$enc_from    = $this -> encodeFrom( $from_email , $from_name ) ;
+		$enc_to      = $this -> encodeTo( $to_email , $to_name . $sama ) ;
+		$enc_subject = $this -> encodeSubject( $subject ) ;
+		$enc_body    = $this -> encodeBody( $body ) ;
+		
+		if ( $type == false )
+			$this -> mail( $enc_to , $from_email , $enc_subject , $enc_body , $enc_from . $exheader ) ;
+		else
+			$this -> mailhtml( $enc_to , $from_email , $enc_subject , $enc_body , $enc_from . $exheader , $boundary ) ;
+	}
+	
+	// メール送信処理
+	function mail( $to , $from , $subject , $mes , $head )
+	{
+		$ex  = "" ;
+		$ex .= "Return-Path: <" . $from . ">\n";
+		$ex .= "MIME-Version: 1.0\n";
+		$ex .= "Content-Type: text/plain; charset=\"ISO-2022-JP\"\n";
+		$ex .= "Content-Transfer-Encoding: 7bit";
+	
+		$head = $head . $ex ;
+		mail( $to , $subject , $mes , $head ) ;
+	}
+	
+	// メール送信処理 (HTML)
+	function mailhtml( $to , $from , $subject , $mes , $head , $boundary )
+	{
+		$ex  = "" ;
+		$ex .= "Return-Path: <" . $from . ">\n";
+		$ex .= "MIME-Version: 1.0\n";
+		$ex .= "X-Mailer: BLAMS Mailer\n";
+		$ex .= $boundary ;
+	
+		$head = $head . $ex ;
+		mail( $to , $subject , $mes , $head ) ;
+	}
+	
+	// メールアドレス エンコード 送信先
+	function encodeTo( $adr , $to_name )
+	{
+		$to_name = $this -> emoji_encode_mimeheader( $to_name ) ;
+	
+		$to = $to_name ;
+		$to .= " <" . $adr . ">" ;
+		return $to ;
+	}
+	
+	// メールサブジェクト エンコード
+	function encodeSubject( $subject )
+	{
+		$subject = $this -> emoji_encode_mimeheader( $subject ) ;
+		$subject = preg_replace( "/(\n|\r|\r\n)/" , "" , $subject ) ;
+		return $subject ;
+	}
+	
+	// メール本文 エンコード
+	function encodeBody( $body )
+	{
+		$body = $this -> emoji_convert_encoding( $body ) ;
+	
+		return $body ;
+	}
+	
+	// メールアドレス エンコード 送信元
+	function EncodeFrom( $adr , $from_name )
+	{
+		$from_name = $this -> emoji_encode_mimeheader( $from_name ) ;
+	
+		$from = "From: " . $from_name ;
+		$from .= " <" . $adr . ">\n" ;
+		return $from ;
+	}
+	
+	function emoji_convert_encoding( $str )
+	{
+		$str = $this -> emoji2code( $str ) ;
+		$str = mb_convert_kana( $str , "KV" ,"SJIS-win" ) ;
+		$str = mb_convert_encoding( $str , "ISO-2022-JP" , "SJIS-win" ) ;
+		$str = $this -> code2emoji( $str ) ;
+		return $str ;
+	}
+	
+	function emoji_encode_mimeheader( $str )
+	{
+		$str = $this -> emoji_convert_encoding( $str ) ;
+		$str = base64_encode( $str ) ;
+	
+		$str = "=?ISO-2022-JP?B?" . $str . "?=" ;
+		return $str ;
+	}
+	
+	// Check E-Mail Address ( xxx@yyy.xxx )
+	function checkData( $email )
+	{
+		$result = TRUE ;
+		if ( $email == "" )
+		{
+			// empty
+			return $result ;
+		}
+	
+		$email_array = explode( "@" , $email ) ;
+		$domain = array_pop( $email_array ) ;
+	
+		if ( preg_match( "/^[-_\.a-zA-Z0-9]+\@[-_a-zA-Z0-9]+\.[-_\.a-zA-Z0-9]+$/" , $email ) == false )
+		{
+			$result = FALSE ;
+		}
+		else if ( strchr( $domain , "." ) == FALSE )
+		{
+			$result = FALSE ;
+		}
+		else if ( $domain != "" )
+		{
+		//	print $domain . "<BR>" ;
+		//	print gethostbyname( $domain ) . "<BR>" ;
+		//	printf( "%d<BR>" , checkdnsrr( $domain ) ) ;
+	
+			if ( getmxrr( $domain , $mxhosts ) != TRUE )
+				if ( gethostbyname( $domain ) == $domain )
+					$result = FALSE ;
+		}
+		return $result ;
+	}
+	
+	// quoted-printable文字列のエンコード
+	function quoted_printable_encode( $str )
+	{
+		$crlf = "\n" ;
+
+		$str = trim( $str ) ;
+
+		$lines   = preg_split( "/(\r\n|\n|\r)/s" , $str ) ;
+		$out     = '';
+		$temp = '' ;
+		foreach ( $lines as $line )
+		{
+			for ( $j = 0 ; $j < strlen( $line ) ; $j ++ )
+			{
+				$char = substr ( $line , $j , 1 ) ;
+				$ascii = ord ( $char ) ;
+
+				if ( $ascii < 32 || $ascii == 61 || $ascii > 126 )
+				{
+					$char = '=' . strtoupper( dechex( $ascii ) ) ;
+				}
+
+				if ( ( strlen( $temp ) + strlen( $char ) ) >= 76 )
+				{
+					$out .= $temp . '=' . $crlf;
+					$temp = '' ;
+				}
+				$temp .= $char ;
+			}
+		}
+		$out .= $temp ;
+
+		return trim( $out ) ;
+	}
+
+	// quoted-printable文字列のデコード
+	function quoted_printable_decode( $str )
+	{
+		$out = preg_replace('/=\r?\n/', '', $str);
+		$out = preg_replace('/=([A-F0-9]{2})/e',  "chr(hexdec ('$1'))" , $out);
+		return trim($out);
+	}
+
+	function emoji2code( $string )
+	{
+		$newstr = $this -> imode_encode( $string , 1 ) ;
+		return $newstr ;
+	}
+
+	function code2emoji( $string )
+	{
+		$newstr = $this -> imode_decode( $string , 1 ) ;
+		return $newstr ;
+	}
+
+	function imode_encode( $str , $mode )
+	{
+		$converted = '';
+		$str_array = unpack("C*",$str);
+	
+		for( $i = 1 ; $i <= count( $str_array ) ; $i ++ )
+		{
+			$c1 = $str_array[ $i ] ;
+	
+			// SJIS漢字1バイト目に該当する場合、
+			if (	( $c1 >= 0x81 && $c1 <= 0x9F ) ||
+					( $c1 >= 0xE0 && $c1 <= 0xEF )
+				)
+			{
+				$i ++ ;
+				$c2 = $str_array[ $i ] ;
+	
+				// SJIS漢字2バイト目に該当する場合、
+				if (	( $c2 >= 0x40 && $c2 <= 0x7E ) ||
+						( $c2 >= 0x80 && $c2 <= 0xFC )
+					)
+				{
+					$converted .= pack( "C" , $c1 ) . pack( "C" , $c2 ) ;
+				}
+			}
+			// 絵文字の1バイト目に該当する場合、
+			else if ( $c1 == 0xF8 )
+			{
+				$i ++ ;
+				$c2 = $str_array[ $i ] ;
+				if ( $c2 >= 0x9F && $c2 <= 0xFC )
+				{
+					if ( $mode )
+					{
+						$hex = dechex( $c1 ) . dechex( $c2 ) ;
+						$converted .= '&#' . hexdec( $hex ) . ';' ;
+					}
+				}
+				else
+				{
+					$converted .= pack( "C" , $c1 ) . pack( "C" , $c2 ) ;
+				}
+			}
+			// 絵文字の1バイト目に該当する場合、
+			else if ( $c1 == 0xF9 )
+			{
+				$i ++ ;
+				$c2 = $str_array[ $i ] ;
+				if (	( $c2 >= 0x40 && $c2 <= 0x49 ) ||
+						( $c2 >= 0x50 && $c2 <= 0x53 ) ||
+						( $c2 >= 0x55 && $c2 <= 0x57 ) ||
+						( $c2 >= 0x5B && $c2 <= 0x7E ) ||
+						( $c2 >= 0x80 && $c2 <= 0xB0 )
+					)
+				{
+					if ( $mode )
+					{
+						$hex = dechex( $c1 ) . dechex( $c2 ) ;
+						$converted .= '&#' . hexdec( $hex ) . ';' ;
+					}
+				}
+				else
+				{
+					$converted .= pack( "C" , $c1 ) . pack( "C" , $c2 ) ;
+				}
+			}
+			else
+			{
+				$converted .= pack( "C" , $str_array[ $i ] ) ;
+			}
+		}
+	    return $converted;
+	}
+
+	function imode_decode ($str,$mode) {
+	    $converted = '';
+	    $str_array = unpack("C*",$str);
+	
+	    for($i = 1;$i <= (count($str_array));$i++){
+	        if($str_array[$i] == 0x26 && $str_array[$i+1] == 0x23) {
+	            $tmp = '';
+	            $i += 2;
+	            while ($str_array[$i] != 0x3B) {
+	                $tmp .= pack("C",$str_array[$i]);
+	                $i++;
+	            }
+	            if (
+	                ($tmp >= 0xF89F && $tmp <= 0xF8FC) ||
+	                ($tmp >= 0xF940 && $tmp <= 0xF949) ||
+	                ($tmp >= 0xF950 && $tmp <= 0xF953) ||
+	                ($tmp >= 0xF955 && $tmp <= 0xF957) ||
+	                ($tmp >= 0xF95B && $tmp <= 0xF97E) ||
+	                ($tmp >= 0xF980 && $tmp <= 0xF9B0)
+	            ) {
+	                if ($mode) {
+	                    $dec1 = intval($tmp / 256);
+	                    $dec2 = $tmp % 256;
+	                    $converted .= pack("C2",$dec1,$dec2);
+	                }
+	            }
+	            else {
+	                $converted .= '&#' . $tmp . ';';
+	            }
+	        }
+	        else{
+	            $converted .= pack("C",$str_array[$i]);
+	        }
+	    }
+	
+	    return $converted;
+	}
+}
+?>

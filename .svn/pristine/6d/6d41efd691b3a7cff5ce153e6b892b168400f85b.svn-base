@@ -1,0 +1,235 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	// 基本パラメータ変換
+	if ( empty( $mode ) == true )
+		$mode = "update" ;
+
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams		= new BLAMS() ;
+	$obPartner	= new PARTS_Partner() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obPartner -> assignGlobal( $additional ) ;
+
+	// 検索用パラメータ変換
+	$S_NAME = $obPartner -> mb2sb( $S_NAME ) ;
+
+	if ( $S_TYPE == "" )
+		$S_TYPE = -1 ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obPartner -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page			;
+
+	$menu = FUNC_PARTNER ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $obPartner ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $obPartner )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$list_flg = TRUE ;
+
+	$arWhere = array() ;
+	$arWhere[ "name"	] = $S_NAME ;
+	$arWhere[ "type"	] = $S_TYPE ;
+
+	// 該当データ数取得
+	$cnt = 0 ;
+	if ( $obPartner -> isOpen() == true )
+	{
+		$cnt		= $obPartner -> getCount( $arWhere ) ;
+		$arPartner	= $obPartner -> getData( $arWhere , $page , NUMBER_PER_PAGE ) ;
+	}
+
+	$paging = "" ;
+	$pageJump = "" ;
+
+	// 登録データがある場合
+	$arList = array() ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $obPartner ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+
+	// 検索フォームの表示
+	$search = FetchSearch( $blams , $arParamFind ) ;
+
+	$arHeader = array(
+		array( "caption" => "社名"			, "class" => "w320 left" ) ,
+		array( "caption" => "社名（カナ）"	, "class" => "w320 left" ) ,
+		array( "caption" => "取引種類"		, "class" => "w128 center" ) ,
+		array( "caption" => "更新日"		, "class" => "w128 center" ) ,
+	) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 取引種類テーブル生成
+	global	$arPartnerTitle ;
+
+	$arForm = array() ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_NAME" , $S_NAME , 256 - 16  , 64 , IME_ON ) ;
+	$value .= $blams -> fetchTDTD( "社名" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form	= $blams -> fetchSelectbox( "S_TYPE" , $S_TYPE , $arPartnerTitle , 120 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "取引種類" , $form , 128 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $start_page , $arParamFind , $obPartner )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	global	$arEditStatus ;
+
+	// 取引タイプ
+	global	$arPartnerTitle ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+	$arPartner = $obPartner -> arData ;
+	$alias 		= $obPartner -> alias ;
+	$primarykey	= $obPartner -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	$cnt = count( $arPartner ) ;
+	for ( $index = 0 ; $index < $cnt ; $index ++ )
+	{
+		// データの取得
+		$arData		= $arPartner[ $index ] ;
+
+		$partnerid	= $arData[ $alias . "_partnerid"	] ;
+		$name		= $arData[ $alias . "_name"			] ;
+		$lname		= $arData[ $alias . "_lname"		] ;
+		$kana		= $arData[ $alias . "_kana"			] ;
+		$type		= $arData[ $alias . "_type"			] ;
+		$update_date= $arData[ $alias . "_update_date"	] ;
+
+		if ( array_key_exists( $type , $arPartnerTitle ) )
+			$type = $arPartnerTitle[ $type ] ;
+		else
+			$type = "不明" ;
+
+		$arAnchor[ "url" 			] = "edit.php"				;
+		$arAnchor[ "idname"			] = $alias . "_partnerid"	;
+		$arAnchor[ "id"				] = $partnerid				;
+		$arAnchor[ "param"			] = $param					;
+		$arAnchor[ "anchor"			] = $lname					;
+		$arAnchor[ "caption"		] = $lname					;
+		$arAnchor[ "class"			] = "border left"			;
+		$arAnchor[ "script"			] = ""						;
+		$arAnchor[ "date_format"	] = ""						;
+
+		$arData = array() ;
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $kana ,			"class" => "border left"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $type ,			"class" => "border center"	, "date_format" => ""			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $update_date ,	"class" => "border center"	, "date_format" => "%Y/%m/%d"	, "anchor" => "" ) ;
+		$arList[] = $arData ;
+	}
+	return $arList ;
+}
+
+?>

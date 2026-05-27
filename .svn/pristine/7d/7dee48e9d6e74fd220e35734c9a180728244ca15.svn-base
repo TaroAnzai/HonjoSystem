@@ -1,0 +1,25 @@
+<?php
+	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	$privatekey = "" ;
+	if ( empty( $_POST[ "privatekey" ] ) == false )
+		$privatekey = $_POST[ "privatekey" ] ;
+
+	$blams	= new BLAMS() ;
+	$db		= new DB_Common() ;
+
+	$result = "" ;
+	if ( empty( $_SERVER[ "HTTP_HOST" ] ) == false && $privatekey != "" )
+	{
+		$name = $db -> decrypt( $privatekey ) ;
+
+		if ( strpos( $_SERVER[ "HTTP_HOST" ] , $name ) !== false )
+		{
+			if ( defined( "WEBAPP_INCLUDE_DIR" ) == true )
+				$result = WEBAPP_INCLUDE_DIR ;
+		}
+	}
+
+	echo $result ;
+?>

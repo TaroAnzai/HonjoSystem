@@ -1,0 +1,70 @@
+<?php
+
+// 標準的なページの生成
+function	fetchWebpage( $func )
+{
+	$type = -1 ;
+	switch ( $func )
+	{
+	case	DEF_PERSONAL_FUNC_PRIVACY :
+		$type = DEF_PAGE_PRIVACY ;
+		$file = "webpage.tmpl" ;
+		break ;
+	case	DEF_PERSONAL_FUNC_RULES :
+		$type = DEF_PAGE_RULES ;
+		$file = "webpage.tmpl" ;
+		break ;
+	case	DEF_PERSONAL_FUNC_PROGRAM :
+		$type = DEF_PAGE_PROGRAM ;
+		$file = "webpage.tmpl" ;
+		break ;
+	case	DEF_PERSONAL_FUNC_ORDERSLAW :
+		$type = DEF_PAGE_ORDERSLAW ;
+		$file = "webpage.tmpl" ;
+		break ;
+	case	DEF_PERSONAL_FUNC_EYECATCH :
+		$type = DEF_PAGE_EYECATCH ;
+		$file = "top/eyecatch.tmpl" ;
+		break ;
+
+	default :
+		$file = "default.tmpl" ;
+	}
+
+	$subject	= "" ;
+	$body		= "" ;
+
+	$arData = array() ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = sprintf( "SELECT * FROM webpage_data WHERE status = 1 " ) ;
+		$sql .= sprintf( "AND type = %d " , $type ) ;
+		$sql .= sprintf( "AND corpid = -1 " ) ;
+		$sql .= sprintf( "AND page = 0 " ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+			{
+				$arData = $obDB -> getValues( $record ) ;
+				
+				$subject	= $arData[ "subject" ] ;
+				$sentence	= $arData[ "sentence" ] ;
+				
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "func"			, $func ) ;
+	$tmpl -> assign( "webpage_data"	, $arData ) ;
+	$data = $tmpl -> fetch( $file ) ;
+	
+	unset( $tmpl ) ;
+
+	return $data ;
+}
+?>

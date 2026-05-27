@@ -1,0 +1,203 @@
+<?php
+/**
+* BLAMS 基本関数郡 ユーザ権限用クラス
+*
+* ユーザ権限用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+
+// カテゴリー
+$_FUNC = 100 ;
+define( "DEF_CATEGORY_SITEADMIN"	,	$_FUNC ++	) ;		// サイト管理者
+define( "DEF_CATEGORY_MEMBER"		,	$_FUNC ++	) ;		// 一般会員レベル
+define( "DEF_CATEGORY_CORP"			,	$_FUNC ++	) ;		// 企業会員レベル
+
+require_once( 'class/category.class.php' ) ;
+
+class PARTS_Permission extends PARTS_Category
+{
+	function	__construct(  $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "permission_data" ;
+		$alias		= "pmn" ;
+		$primarykey	= "permissionid" ;
+
+		parent::__construct(  $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> fieldsData[] = array( "name" => "permission" , "type" => "" , "format" => "%d" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 , $arFields = array() )
+	{
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields( $arFields ) ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+
+			$arData = DB_Common::getData( $sql ) ;
+		}
+
+		return $arData ;
+	}
+
+	//
+	//  データ更新
+	//
+	function updateData( &$arParam )
+	{
+		$alias 		= $this -> alias ;
+
+		unset( $arParam[ $alias . "_permission1" ] ) ;
+		unset( $arParam[ $alias . "_permission2" ] ) ;
+		unset( $arParam[ $alias . "_permission3" ] ) ;
+		unset( $arParam[ $alias . "_permission4" ] ) ;
+
+		$result = parent::updateData( $arParam ) ;
+
+		$arParam[ $alias . "_name"			] = "" ;
+
+		return $result ;
+	}
+
+	// 配列からの更新
+	function setPermission( $arUpdate , $arWhere )
+	{
+		$alias 		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $primarykey ;
+
+		global	$arNavi ;
+	
+		$ncnt = count( $arNavi ) ;
+		
+		if ( $this -> isOpen() )
+		{
+			// パーミッションデータの取得
+			$arPermission = array() ;
+			$arResult = $this -> getData( $arWhere ) ;
+			foreach ( $arResult as $arData )
+				$arPermission[ $arData[ $keyname  ] ] = $arData ;
+		}
+
+		// POSTデータを 各権限データに展開をする
+		$keys = array_keys( $arNavi ) ;
+		foreach ( $arNavi as $mid => $mval )
+		{
+			if ( $mid < FUNC_CTRL_POSTGRESQL )
+			{
+				foreach ( $arPermission as $pid => $pval )
+				{
+					$pos = floor( $mid / 30 ) + 1 ;
+	
+					$bit = $arPermission[ $pid ][ $alias . "_permission" . $pos ] ;
+	
+					if ( empty( $arUpdate[ $mid ][ $pid ] ) == false && $arUpdate[ $mid ][ $pid ] == true )
+						$bit |= ( 1 << ( $mid % 30 ) ) ;
+					else
+						$bit &= ~( 1 << ( $mid % 30 ) ) ;
+					$arPermission[ $pid ][ $alias . "_permission" . $pos ] = $bit ;
+				}
+			}
+		}
+
+		// 変更した内容を保存する
+		foreach ( $arPermission as $pid => $pval )
+		{
+			$arResult = $arPermission[ $pid ] ;
+
+			parent::updateData( $arResult ) ;
+		}
+	}
+
+	//
+	// 権限フラグからリストを作成する
+	//
+	function makeList( $arWhere , &$arHeader = array() )
+	{
+		$alias 		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $primarykey ;
+
+		$arList = array() ;
+		
+		if ( $this -> isOpen() )
+		{
+			$arPermission = array() ;
+
+			$arResult = $this -> getData( $arWhere ) ;
+			foreach ( $arResult as $arData )
+			{
+				$name = $arData[ $alias . "_name" ] ;
+				$arHeader[] = array( "caption" => $name , "class" => "w016 center top" ) ;
+				
+				$arPermission[ $arData[ $keyname ]  ] = $arData ;
+			}
+
+			// 登録データがある場合
+			if ( count( $arPermission ) > 0 )
+			{
+				global	$arMenuTitle ;
+				global	$arNavi ;
+				
+				$mcnt = count( $arMenuTitle ) ;
+				$ncnt = count( $arNavi ) ;
+
+				// メニューの並び替え
+				$arNaviNew = array() ;
+				for ( $m = 0 ; $m < $mcnt ; $m ++ )
+				{
+					$keys = array_keys( $arNavi ) ;
+					foreach ( $arNavi as $keys => $values )
+					{
+						if ( $values[ 0 ] == $m && $keys < FUNC_CTRL_POSTGRESQL && $keys > FUNC_TOPMENU )
+							$arNaviNew[ $keys ] = $values ;
+					}
+				}
+				
+				// リストの作成
+				foreach ( $arNaviNew as $keys => $values )
+				{
+					$arData = array() ;
+					
+					$arData[ "key"	] = $keys ;
+					$arData[ "menu"	] = $values[ 0 ] ;
+					$arData[ "name"	] = $values[ "anchor" ] ;
+			
+					$arBit = array() ;
+					$arLevel = array() ;
+					foreach ( $arPermission as $pkeys => $pvalues )
+					{
+						$pos = floor( $keys / 30 ) + 1 ;
+						$pm = $pvalues[ $alias . "_permission" . $pos ] ;
+			
+						$arBit[ $pkeys ] = false ;
+						if ( ( $pm & ( 1 << ( $keys % 30 ) ) ) != 0 )
+							$arBit[ $pkeys ] = true ;
+			
+						$arLevel[ $pkeys ] = $pvalues[ $alias . "_category1" ] ;
+					}
+					$arData[ "data" ] = $arBit ;
+					$arData[ "level" ] = $arLevel ;
+			
+					$arList[] = $arData ;
+				}
+			}
+		}
+		
+		return $arList ;
+	}
+}
+
+?>

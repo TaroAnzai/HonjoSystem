@@ -1,0 +1,338 @@
+<?php
+
+require_once 'PEAR.php';
+require_once 'HTTP/Request2.php';
+require_once 'XML/Parser2.php';
+
+if (!defined('SERVICES_YAHOO_WEATHER_BASEURL')) {
+	define('SERVICES_YAHOO_WEATHER_BASEURL',
+		   'http://rss.weather.yahoo.co.jp/rss/');
+}
+
+/**
+ * Class for accessing and retrieving information
+ * from Yahoo's Weather Web Service
+ *
+ * @package Services_Yahoo
+ * @access	public
+ * @version Release: @package_version@
+ * @uses	PEAR
+ * @uses	HTTP_Request
+ * @uses	XML_Unserializer
+ */
+class Services_Yahoo_Weather
+{
+
+	var $_baseurl = SERVICES_YAHOO_WEATHER_BASEURL;
+
+	var $_lasturl = null;
+
+
+	function Services_Yahoo_Weather()
+	{
+	}
+
+	function getApiVersion()
+	{
+		return '0.1.0';
+	}
+
+	function getLastUrl()
+	{
+		return $this->_lasturl;
+	}
+
+	/**
+	 * Retrieves weather and forecast information around the city
+	 *
+	 * Example:
+	 * <code>
+	 * <?php
+	 * $lwws = new Services_Yahoo_Weather();
+	 * $result = $lwws->get('“Œ‹ž', 'days');
+	 * ?>
+	 * </code>
+	 *
+	 * @access public
+	 * @param  mixed  $city City name or id
+	 * @param  string $type	days | warn
+	 * @return array The array of information returned by the query
+	 */
+	function get($city, $type='days')
+	{
+		$params = array();
+		$city_id = $this->getCityIdByCityName($city);
+		if (PEAR::isError($city_id)) return $city_id;
+		$params['city'] = $city_id;
+		$params['type'] = $type;
+		return $this->_sendRequest($params);
+	}
+
+	function getCityIdByCityName($name)
+	{
+		static $cities;
+		if (!isset($cities)) {
+			$cities = array(
+				'“¹–k'	   => '1a',
+				'’t“à'	   => '1100',
+				'ˆ®ì'	   => '1200',
+				'—¯–G'	   => '1300',
+				'“¹“Œ'	   => '1c',
+				'–Ô‘–'	   => '1710',
+				'–kŒ©'	   => '1720',
+				'–ä•Ê'	   => '1730',
+				'ªŽº'	   => '1800',
+				'‹ú˜H'	   => '1900',
+				'‘ÑL'	   => '2000',
+				'“¹‰›'	   => '1b',
+				'ŽD–y'	   => '1400',
+				'ŠâŒ©‘ò'   => '1500',
+				'‹ä’mˆÀ'   => '1600',
+				'“¹“ì'	   => '1d',
+				'Žº—–'	   => '2100',
+				'‰Y‰Í'	   => '2200',
+				'”ŸŠÙ'	   => '2300',
+				']·'	   => '2400',
+				'ÂXŒ§'   => '2',
+				'ÂX'	   => '3110',
+				'‚Þ‚Â'	   => '3120',
+				'”ªŒË'	   => '3130',
+				'ŠâŽèŒ§'   => '3',
+				'·‰ª'	   => '3310',
+				'‹{ŒÃ'	   => '3320',
+				'‘å‘D“n'   => '3330',
+				'‹{éŒ§'   => '4',
+				'å‘ä'	   => '3410',
+				'”’Î'	   => '3420',
+				'H“cŒ§'   => '5',
+				'H“c'	   => '3210',
+				'‰¡Žè'	   => '3220',
+				'ŽRŒ`Œ§'   => '6',
+				'ŽRŒ`'	   => '3510',
+				'•Ä‘ò'	   => '3520',
+				'Žð“c'	   => '3530',
+				'V¯'	   => '3540',
+				'•Ÿ“‡Œ§'   => '7',
+				'•Ÿ“‡'	   => '3610',
+				'¬–¼•l'   => '3620',
+				'Žá¼'	   => '3630',
+				'“Œ‹ž“s'   => '13',
+				'“Œ‹ž'	   => '4410',
+				'‘å“‡'	   => '4420',
+				'”ªä“‡'   => '4430',
+				'•ƒ“‡'	   => '9600',
+				'_“ÞìŒ§' => '14',
+				'‰¡•l'	   => '4610',
+				'¬“cŒ´'   => '4620',
+				'é‹ÊŒ§'   => '11',
+				'‚³‚¢‚½‚Ü' => '4310',
+				'ŒF’J'	   => '4320',
+				'’•ƒ'	   => '4330',
+				'ç—tŒ§'   => '12',
+				'ç—t'	   => '4510',
+				'’¶Žq'	   => '4520',
+				'ŠÙŽR'	   => '4530',
+				'ˆïéŒ§'   => '8',
+				'…ŒË'	   => '4010',
+				'“y‰Y'	   => '4020',
+				'“È–ØŒ§'   => '9',
+				'‰F“s‹{'   => '4110',
+				'‘å“cŒ´'   => '4120',
+				'ŒQ”nŒ§'   => '10',
+				'‘O‹´'	   => '4210',
+				'‚Ý‚È‚©‚Ý' => '4220',
+				'ŽR—œŒ§'   => '19',
+				'b•{'	   => '4910',
+				'‰ÍŒûŒÎ'   => '4920',
+				'VŠƒŒ§'   => '15',
+				'VŠƒ'	   => '5410',
+				'’·‰ª'	   => '5420',
+				'‚“c'	   => '5430',
+				'‘Šì'	   => '5440',
+				'’·–ìŒ§'   => '20',
+				'’·–ì'	   => '4810',
+				'¼–{'	   => '4820',
+				'”Ñ“c'	   => '4830',
+				'•xŽRŒ§'   => '16',
+				'•xŽR'	   => '5510',
+				'•š–Ø'	   => '5520',
+				'ÎìŒ§'   => '17',
+				'‹à‘ò'	   => '5610',
+				'—Ö“‡'	   => '5620',
+				'•ŸˆäŒ§'   => '18',
+				'•Ÿˆä'	   => '5710',
+				'“Ö‰ê'	   => '5720',
+				'ˆ¤’mŒ§'   => '23',
+				'–¼ŒÃ‰®'   => '5110',
+				'–L‹´'	   => '5120',
+				'Šò•ŒŒ§'   => '21',
+				'Šò•Œ'	   => '5210',
+				'‚ŽR'	   => '5220',
+				'Ã‰ªŒ§'   => '22',
+				'Ã‰ª'	   => '5010',
+				'–Ô‘ã'	   => '5020',
+				'ŽO“‡'	   => '5030',
+				'•l¼'	   => '5040',
+				'ŽOdŒ§'   => '24',
+				'’Ã'	   => '5310',
+				'”ö˜h'	   => '5320',
+				'‘åã•{'   => '27',
+				'‘åã'	   => '6200',
+				'•ºŒÉŒ§'   => '28',
+				'_ŒË'	   => '6310',
+				'–L‰ª'	   => '6320',
+				'‹ž“s•{'   => '26',
+				'•‘’ß'	   => '400',
+				'‹ž“s'	   => '6100',
+				'Ž ‰êŒ§'   => '25',
+				'‘å’Ã'	   => '6010',
+				'•Fª'	   => '6020',
+				'“Þ—ÇŒ§'   => '29',
+				'“Þ—Ç'	   => '6410',
+				'•—‰®'	   => '6420',
+				'˜a‰ÌŽRŒ§' => '30',
+				'˜a‰ÌŽR'   => '6510',
+				'’ª–¦'	   => '6520',
+				'’¹ŽæŒ§'   => '31',
+				'’¹Žæ'	   => '6910',
+				'•ÄŽq'	   => '6920',
+				'“‡ªŒ§'   => '32',
+				'¼]'	   => '6810',
+				'•l“c'	   => '6820',
+				'¼‹½'	   => '6830',
+				'‰ªŽRŒ§'   => '33',
+				'‰ªŽR'	   => '6610',
+				'’ÃŽR'	   => '6620',
+				'L“‡Œ§'   => '34',
+				'L“‡'	   => '6710',
+				'¯Œ´'	   => '6720',
+				'ŽRŒûŒ§'   => '35',
+				'‰ºŠÖ'	   => '8110',
+				'ŽRŒû'	   => '8120',
+				'–öˆä'	   => '8130',
+				'”‹'	   => '8140',
+				'“¿“‡Œ§'   => '36',
+				'“¿“‡'	   => '7110',
+				'“ú˜a²'   => '7120',
+				'ìŒ§'   => '37',
+				'‚¼'	   => '7200',
+				'ˆ¤•QŒ§'   => '38',
+				'¼ŽR'	   => '7310',
+				'V‹•l'   => '7320',
+				'‰F˜a“‡'   => '7330',
+				'‚’mŒ§'   => '39',
+				'‚’m'	   => '7410',
+				'ŽºŒË'	   => '7420',
+				'´…'	   => '7430',
+				'•Ÿ‰ªŒ§'   => '40',
+				'•Ÿ‰ª'	   => '8210',
+				'”ª”¦'	   => '8220',
+				'”Ñ’Ë'	   => '8230',
+				'‹v—¯•Ä'   => '8240',
+				'²‰êŒ§'   => '41',
+				'²‰ê'	   => '8510',
+				'ˆÉ–œ—¢'   => '8520',
+				'’·èŒ§'   => '42',
+				'ŒµŒ´'	   => '700',
+				'•Ÿ]'	   => '800',
+				'’·è'	   => '8410',
+				'²¢•Û'   => '8420',
+				'ŒF–{Œ§'   => '43',
+				'ŒF–{'	   => '8610',
+				'ˆ¢‘h‰³•P' => '8620',
+				'‹['	   => '8630',
+				'l‹g'	   => '8640',
+				'‘å•ªŒ§'   => '44',
+				'‘å•ª'	   => '8310',
+				'’†’Ã'	   => '8320',
+				'“ú“c'	   => '8330',
+				'²”Œ'	   => '8340',
+				'‹{èŒ§'   => '45',
+				'‹{è'	   => '8710',
+				'‰„‰ª'	   => '8720',
+				'“sé'	   => '8730',
+				'‚ç•ä'   => '8740',
+				'Ž­Ž™“‡Œ§' => '46',
+				'–¼£'	   => '1000',
+				'Ž­Ž™“‡'   => '8810',
+				'Ž­‰®'	   => '8820',
+				'ŽíŽq“‡'   => '8830',
+				'‰«“êŒ§'   => '47',
+				'“ß”e'	   => '9110',
+				'–¼Œì'	   => '9120',
+				'‹v•Ä“‡'   => '9130',
+				'“ì‘å“Œ“‡' => '9200',
+				'‹{ŒÃ“‡'   => '9300',
+				'ÎŠ_“‡'   => '9400',
+				'—^“ß‘“‡' => '9500',
+				);
+		}
+		if (is_int($name) && in_array($name, $cities)) return $name;
+		return isset($cities[$name]) ? $cities[$name] : PEAR::raiseError('Invalid City');
+	}
+
+	function getWeatherIcon($name)
+	{
+		static	$arWeather ;
+		if ( !isset( $arWeather ) )
+		{
+			$arWeather = array(
+				"°‚ê"		=> "sun" ,
+				"°ŽžX“Ü"	=> "sun_clouds_st" ,
+				"°ŽžX‰J"	=> "sun_rain_st" ,
+				"°ŽžXá"	=> "sun_snow_st" ,
+				"°Œã“Ü"	=> "sun_clouds_af" ,
+				"°Œã‰J"	=> "sun_rain_af" ,
+				"°Œãá"	=> "sun_snow_af" ,
+				"“Ü‚è"		=> "sun" ,
+				"“ÜŽžX°"	=> "clouds_sun_st" ,
+				"“ÜŽžX‰J"	=> "clouds_rain_st" ,
+				"“ÜŽžXá"	=> "clouds_snow_st" ,
+				"“ÜŒã°"	=> "clouds_sun_af" ,
+				"“ÜŒã‰J"	=> "clouds_rain_af" ,
+				"“ÜŒãá"	=> "clouds_snow_af" ,
+				"‰J"		=> "rain" ,
+				"‰JŽžX°"	=> "rain_sun_st" ,
+				"‰JŽžX“Ü"	=> "rain_clouds_st" ,
+				"‰JŽžXá"	=> "rain_snow_st" ,
+				"‰JŒã°"	=> "rain_sun_af" ,
+				"‰JŒã“Ü"	=> "rain_clouds_af" ,
+				"‰JŒãá"	=> "rain_snow_af" ,
+				"–\•—‰J"	=> "rainstorm" ,
+				"á"		=> "snow" ,
+				"áŽžX°"	=> "snow_sun_st" ,
+				"áŽžX“Ü"	=> "snow_clouds_st" ,
+				"áŽžX‰J"	=> "snow_rain_st" ,
+				"áŒã°"	=> "snow_sun_af" ,
+				"áŒã“Ü"	=> "snow_clouds_af" ,
+				"áŒã‰J"	=> "snow_rain_af" ,
+			) ;
+		}
+		if (is_int( $name ) && in_array( $name , $arWeather ) ) return $name ;
+		return isset( $arWeather[ $name ]) ? $arWeather[ $name ] : PEAR::raiseError('Invalid Weather Icon' ) ;
+	}
+	
+	function _sendRequest($params)
+	{
+		$this->_errors = array();
+
+		$url = $this->_baseurl . $params['type'] . '/' . $params['city'] . '.xml';
+		$this->_lasturl = $url;
+
+		$http = new HTTP_Request2( $url ) ;
+		$http->sendRequest();
+
+		if ($http->getResponseCode() != 200){
+			return PEAR::raiseError('Yahoo returned invalid HTTP response code ' . $http->getResponseCode());
+		}
+		$result = $http->getResponseBody();
+
+//		$xml = new XML_Unserializer();
+//		$xml->setOption(XML_UNSERIALIZER_OPTION_ATTRIBUTES_PARSE, true);
+//		$xml->unserialize($result, false);
+		return "" ; //$xml->getUnserializedData();
+	}
+
+}
+
+?>

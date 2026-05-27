@@ -1,0 +1,202 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../lib/common.php" )  ;
+
+	$arColor = array(
+		0xD4D9D4 ,			// 1月
+		0x3B5E67 ,			// 2月
+		0x838370 ,			// 3月
+		0x772100 ,			// 4月
+		0xBB5830 ,			// 5月
+		0x5C7886 ,			// 6月
+		0x6B4C52 ,			// 7月
+		0xBEB59A ,			// 8月
+		0xB47B4F ,			// 9月
+		0xD5B965 ,			// 10月
+		0xE5E3D2 ,			// 11月
+		0x89A0AC ,			// 12月
+	) ;
+
+	$year = date( "Y" ) ;
+	$month = date( "n" ) ;
+
+	// パスよりパラメータを取得する
+	$path = $_SERVER['PATH_INFO'] ;
+	$path = str_replace( ".png" , "" , $path ) ;
+	$path = str_replace( ".gif" , "" , $path ) ;
+	$path = str_replace( ".jpg" , "" , $path ) ;
+	$arList = explode( "/" , $path ) ;
+	for ( $i = 1 ; $i < count( $arList ) ; $i ++ )
+	{
+		$flg   = substr( $arList[ $i ] , 0 , 1 ) ;
+		$value = substr( $arList[ $i ] , 1 ) ;
+		switch( $flg )
+		{
+		case	"C" :	// color
+			$color = $value ;
+			break ;
+		case	"B" :	// bgcolor
+			$bgcolor = $value ;
+			break ;
+		case	"W" :	// width
+			$specify_wid = intval( $value ) ;
+			break ;
+		case	"H" :	// height
+			$specify_hgt = intval( $value ) ;
+			break ;
+		case	"Y" :	// year
+			$year = intval( $value ) ;
+			break ;
+		case	"M" : 	// month
+			$month = intval( $value ) ;
+			break ;
+		case	"F" : 	// font size
+			$fontsize = intval( $value ) ;
+			break ;
+		case	"D" : 	// display year
+			$dispyear = $value ;
+			break ;
+		}
+	}
+
+	if ( $specify_wid == 0 || is_numeric( $specify_wid ) != TRUE )
+		$specify_wid = 80 ;
+
+	if ( $specify_hgt == 0 || is_numeric( $specify_hgt ) != TRUE )
+		$specify_hgt = 48 ;
+
+	$date = time() ;
+	if (
+		$year != "" && is_numeric( $year ) != FALSE &&
+		$month != "" && is_numeric( $month ) != FALSE
+		)
+	{
+		$date = mktime( 0 , 0 , 0 , $month , 1 , $year ) ;
+	}
+	$year = date( "Y" , $date ) ;
+	$month = date( "n" , $date ) ;
+	$month_short = date( "M" , $date ) ;
+	$month_title = mb_convert_encoding( "月" , "UTF-8" , "SJIS" ) ;
+
+	if ( $color == "" )
+		$color_s = $arColor[ $month - 1 ] ;
+	else
+		$color_s = base_convert( $color , 16 , 10 ) ;
+	
+	$color_s_r	= ( $color_s >> 16 ) & 0xff ;
+	$color_s_g	= ( $color_s >>  8 ) & 0xff ;
+	$color_s_b	= ( $color_s       ) & 0xff ;
+
+	if ( $bgcolor == "" )
+		$bgcolor_s = 0xffffff ;
+	else
+		$bgcolor_s = base_convert( $bgcolor , 16 , 10 ) ;
+	
+	$bgcolor_s_r	= ( $bgcolor_s >> 16 ) & 0xff ;
+	$bgcolor_s_g	= ( $bgcolor_s >>  8 ) & 0xff ;
+	$bgcolor_s_b	= ( $bgcolor_s       ) & 0xff ;
+
+	// 画像の作成
+	$maxX = $specify_wid ;
+	$maxY = $specify_hgt ;
+	$imgh = ImageCreateTrueColor( $maxX , $maxY ) ;
+
+	$back = ImageColorAllocate( $imgh , $bgcolor_s_r , $bgcolor_s_g , $bgcolor_s_b ) ;
+	ImageColorTransparent( $imgh , $back ) ;
+	ImageFill( $imgh , 0 , 0 , $back ) ;
+
+	$color  = imageColorAllocate( $imgh , $color_s_r , $color_s_g , $color_s_b ) ;
+
+	$font_jp = DEF_FONT_FILE_JP_GOTH ;
+	$font_en = DEF_FONT_FILE_ENG ;
+
+	$pos1 = array() ;
+	$pos2 = array() ;
+
+	if ( $fontsize == 0 || is_numeric( $fontsize ) != TRUE )
+		$size1 = 36 ;
+	else
+		$size1 = $fontsize ;
+		
+	$size2 = floor( $size1 / 2 ) ;
+	$size3 = floor( $size1 / 3 ) ;
+
+	if ( $dispyear == 1 ) 
+	{
+		DrawText( $imgh , $size3 , 0 , 0 , $font_en , $color , $year , "left"  , "top" ) ;
+	}
+
+	DrawText( $imgh , $size1 , $maxX / 3 * 2 , $maxY / 2 , $font_en , $color , $month       , "right" , "middle" ) ;
+	DrawText( $imgh , $size2 , $maxX / 3 * 2 , $maxY     , $font_jp , $color , $month_title , "left"  , "bottom" ) ;
+	DrawText( $imgh , $size3 , $maxX         , $maxY / 2 , $font_en , $color , $month_short , "right"  , "bottom" ) ;
+
+	header( "Content-type: image/gif" ) ;
+	header( "Cache-control: no-cache" ) ;
+	imagePNG( $imgh ) ;
+
+	ImageDestroy($imgh) ;
+	
+	exit ;
+
+function	DrawText( $imgh , $size , $start_x , $start_y , $font , $color , $text , $align = "left" , $valign = "top" )
+{
+	$start_x -- ;
+	$start_y -- ;
+	
+	// 必要なサイズを取得する
+	$rect = ImageTTFBbox( $size , 0 , $font , $text ) ;
+	$blx = $rect[ 0 ] ;
+	$bly = $rect[ 1 ] ;
+	$brx = $rect[ 2 ] ;
+	$bry = $rect[ 3 ] ;
+	$trx = $rect[ 4 ] ;
+	$try = $rect[ 5 ] ;
+	$tlx = $rect[ 6 ] ;
+	$tly = $rect[ 7 ] ;
+
+	$width	= abs( $blx - $brx ) ;
+	$height	= abs( $bly - $tly ) ;
+
+	switch ( $align )
+	{
+	case	"left" :
+		$x = $start_x - $blx ;
+		break ;
+	case	"center" :
+		$x = $start_x - ( $width / 2 ) - $blx ;
+		break ;
+	case	"right" :
+		$x = $start_x - $width - $blx ;
+		break ;
+	}
+	
+	switch ( $valign )
+	{
+	case	"top" :
+		$y = $start_y + $height - $bry ;
+		break ;
+	case	"middle" :
+		$y = $start_y + ( $height / 2 ) - $bly ;
+		break ;
+	case	"bottom" :
+		$y = $start_y - $bly ;
+		break ;
+	}
+
+	$x -- ;
+	$y -- ;
+
+	$shadow = imageColorAllocate( $imgh , 96 , 96 , 96 ) ;
+
+	ImageTTFText(	$imgh , $size, 0 ,
+					$x + 1 ,
+					$y + 1 ,
+					$shadow , $font , $text ) ;
+
+	ImageTTFText(	$imgh , $size, 0 ,
+					$x ,
+					$y ,
+					$color , $font , $text ) ;
+}
+
+?>

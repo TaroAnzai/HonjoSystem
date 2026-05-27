@@ -1,0 +1,481 @@
+<?php
+/**
+* BLAMS 基本関数郡 キャンペーン用クラス
+*
+* キャンペーン用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+define( "DEF_CAMPAIGN_CONDITION_OVER"	,	1 ) ;
+define( "DEF_CAMPAIGN_CONDITION_UNDER"	,	2 ) ;
+
+global	$arCampaignCondition ;
+$arCampaignCondition = array(
+	DEF_CAMPAIGN_CONDITION_OVER			=> "以上" ,
+	DEF_CAMPAIGN_CONDITION_UNDER		=> "以下" ,
+) ;
+
+// キャンペーン種類
+$_FUNC = 1 ;
+define( "DEF_CAMPAIGN_MERCHANDISE"		,	$_FUNC ++ ) ;
+define( "DEF_CAMPAIGN_TRANSPORT"		,	$_FUNC ++ ) ;
+define( "DEF_CAMPAIGN_PRESENT"			,	$_FUNC ++ ) ;
+define( "DEF_CAMPAIGN_KEYWORD"			,	$_FUNC ++ ) ;
+define( "DEF_CAMPAIGN_KEYWORD_SEASON"	,	$_FUNC ++ ) ;
+
+global	$arCampaignKind ;
+$arCampaignKind = array(
+	DEF_CAMPAIGN_MERCHANDISE			=> "商品" ,
+	DEF_CAMPAIGN_TRANSPORT				=> "送料" ,
+	DEF_CAMPAIGN_PRESENT				=> "プレゼント" ,
+	DEF_CAMPAIGN_KEYWORD				=> "絞込一覧" ,
+	DEF_CAMPAIGN_KEYWORD_SEASON			=> "絞込一覧(シーズン限定)" ,
+) ;
+
+require_once( 'class/db.class.php' ) ;
+require_once( 'class/merchandise.class.php' ) ;
+require_once( 'class/merchandise_master.class.php' ) ;
+
+class PARTS_Campaign extends DB_Common
+{
+	var $obMerchandise ;
+	var $obMaster ;
+	var	$obPhoto ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "campaign_data" ;
+		$alias		= "cmp" ;
+		$primarykey	= "campaignid" ;
+		
+		parent::__construct(  $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+		
+		$this -> obMerchandise	= new PARTS_Merchandise( $this -> conn ) ;
+		$this -> obMaster		= new PARTS_MerchandiseMaster( $this -> conn ) ;
+		$this -> obPhoto		= new PARTS_Photo( $this -> conn ) ;
+
+		$this -> searchkey = array(
+				"S_SUBJECT"	,
+				"S_EDIT_FLG"	,
+			) ;
+
+		$this -> images = array( "photoid" ) ;
+
+		// 追加項目
+		$this -> fieldsData[] = array( "name" => "open_date_y"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "open_date_m"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "open_date_d"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_y"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_m"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "start_date_d"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "end_date_y"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "end_date_m"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "end_date_d"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tmp_select_code"		, "type" => "" , "format" => "%s" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s " , $this -> makeAliaseFields() ) ;
+
+			if ( $this -> obMerchandise -> isOpen() )
+				$fields .= sprintf( ", %s " , $this -> obMerchandise -> makeAliaseFields() ) ;
+			if ( $this -> obMaster -> isOpen() )
+				$fields .= sprintf( ", %s " , $this -> obMaster -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$cnt = count( $arData ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arMerchandise = array() ;
+				$mid = trim( $arData[ $i ][ $alias ."_" . $mkey ] , "{}" ) ;
+				if ( empty( $mid ) == false )
+				{
+					$arWhere[ "where" ] = sprintf( "AND %s.%s in ( %s )" , $malias , $mkey , $mid ) ;
+					$arMerchandise = $this -> obMerchandise -> getData( $arWhere , 0 , false ) ;
+				}
+/*
+printf( "<!--\n" ) ;
+print_r( $arWhere ) ;
+print_r( $arMerchandise ) ;
+printf( "-->\n" ) ;
+*/
+				$arData[ $i ][ $mtname ] = $arMerchandise ;
+			}
+		}
+		
+		return $arData ;
+	}
+
+	function	getCpnData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page , false ) ;
+			$arData = parent::getData( $sql ) ;
+			
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	getCpnCount( $arParam , $page = -1 , $per_page = -1 )
+	{
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+	
+		$this -> arData = array() ;
+		$cnt = 0 ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = sprintf( "count( %s.%s ) as count " , $this -> alias , $this -> primarykey ) ;
+
+			$arParam[ "order" ] = "" ;
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page , false ) ;
+			$arData = DB_Common::getData( $sql ) ;
+
+			if ( isset( $arData[ 0 ][ "count" ] ) == true )
+				$cnt = $arData[ 0 ][ "count" ] ;
+		}
+
+		return $cnt ;
+	}
+	
+	function	getCpnAt( $id )
+	{
+		$arWhere = array() ;
+		$arWhere[ $this -> primarykey ] = $id ;
+		$arWhere[ "order"		] = sprintf( "%s.update_date DESC" , $this -> alias ) ;
+
+		$arResult = $this -> getCpnData( $arWhere ) ;
+		if ( count( $arResult ) > 0 )
+			$arResult = $arResult[ 0 ] ;
+
+		return $arResult ;
+	}
+	
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 , $bJoin = true )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "subject_like" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		
+		if ( $bJoin == false )
+		{
+			$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+			
+			$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+			$limit = "" ;
+			if ( ${ $this -> primarykey } != -1 )
+				$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+			else
+				if ( $page != -1 )
+					$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+			// subjectによる検索
+			if ( $subject_like != -1 )
+				$sql .= sprintf( "AND %s.subject LIKE '%%%s%%' " , $this -> alias , $subject_like ) ;
+
+			// edit_flgによる検索
+			if ( $edit_flg != -1 )
+				$sql .= sprintf( "AND %s.edit_flg = %d " , $this -> alias , $edit_flg ) ;
+		}
+		else
+		{
+			$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+	
+			if ( $this -> obMerchandise -> isOpen() )
+			{
+				$sql .= sprintf( "JOIN %s %s ON %s.merchandiseid = ALL( %s.merchandiseid ) " , 
+									$this -> obMerchandise -> tname , 
+									$this -> obMerchandise -> alias , 
+									$this -> obMerchandise -> alias ,
+									$this -> alias 
+								) ;
+			}
+			
+			if ( $this -> obMaster -> isOpen() )
+			{
+				$sql .= sprintf( "LEFT JOIN %s %s ON %s.merchandise_masterid = %s.merchandise_masterid " , 
+									$this -> obMaster -> tname , 
+									$this -> obMaster -> alias , 
+									$this -> obMerchandise -> alias , 
+									$this -> obMaster -> alias 
+								) ;
+			}
+			$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+	
+			$limit = "" ;
+			if ( $campaignid != -1 )
+				$sql .= sprintf( "AND %s.campaignid = %d " , $this -> alias , $campaignid ) ;
+			else
+				if ( $page != -1 )
+					$limit = sprintf( "LIMIT %d OFFSET %d " , NUMBER_PER_PAGE , ( $page * NUMBER_PER_PAGE ) ) ;
+	
+			if ( $edit_flg != -1 )
+				$sql .= sprintf( "AND %s.edit_flg = %d " , $this -> alias , $edit_flg ) ;
+	
+			if ( $kind != -1 )
+				$sql .= sprintf( "AND %s.kind = %d " , $this -> alias , $kind ) ;
+		}
+		
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			else
+				$sql .= sprintf( "ORDER BY %s.open_date DESC , %s.kind " , $this -> alias , $this -> alias ) ;
+		}
+		$sql .= $limit ;
+		
+		return $sql ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// 表題
+			if ( ${ $alias . "_subject" } == "" )
+				$error .= "・タイトルが入力されていません。\n" ;
+
+			// 本文
+			if ( ${ $alias . "_body" } == "" )
+				$error .= "・内容が入力されていません。\n" ;
+
+			if( ${ $alias . "_kind" } == DEF_CAMPAIGN_MERCHANDISE )
+			{	// キャンペーン種類：商品の条件チェック
+			}
+			else if( ${ $alias . "_kind" } == DEF_CAMPAIGN_TRANSPORT )
+			{	// キャンペーン種類：送料の条件チェック
+			}
+			else if( ${ $alias . "_kind" } == -1 )
+			{
+				$error .= "・キャンペーン種類を選択して下さい。\n" ;
+			}
+
+			// 表示開始日
+			$arParam[ $alias . "_open_date" ] = "" ;
+			if ( ( is_numeric( ${ $alias . "_open_date_y" } ) ) &&
+				 ( is_numeric( ${ $alias . "_open_date_m" } ) ) &&
+				 ( is_numeric( ${ $alias . "_open_date_d" } ) ) )
+			{
+				if ( checkdate( ${ $alias . "_open_date_m" } , ${ $alias . "_open_date_d" } , ${ $alias . "_open_date_y" } ) )
+				{
+					// 公開開始日の更新
+					$obOpen_date = new DateTime();
+					$obOpen_date -> setDate( ${ $alias . "_open_date_y" } , ${ $alias . "_open_date_m" } , ${ $alias . "_open_date_d" } ) ;
+					$obOpen_date -> setTime( DEF_DATE_MIN_HOUR , DEF_DATE_MIN_MINUTE , DEF_DATE_MIN_SECOND ) ;
+					$open_date_new = $obOpen_date -> format( "Y-m-d H:i:s" ) ;
+					$arParam[ $alias . "_open_date" ] = $open_date_new ;
+				}
+				else
+				{
+					$error .= "・指定された表示開始日は正しくありません。\n" ;
+				}
+			}
+			else
+			{
+				$error .= "・表示開始日が正しく入力されていません。\n" ;
+			}
+
+			// キャンペーン開始日
+			$arParam[ $alias . "_start_date" ] = "" ;
+			if ( ( is_numeric( ${ $alias . "_start_date_y" } ) ) &&
+				 ( is_numeric( ${ $alias . "_start_date_m" } ) ) &&
+				 ( is_numeric( ${ $alias . "_start_date_d" } ) ) )
+			{
+				if ( checkdate( ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } , ${ $alias . "_start_date_y" } ) )
+				{
+					// 公開開始日の更新
+					$obStart_date = new DateTime();
+					$obStart_date -> setDate( ${ $alias . "_start_date_y" } , ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } ) ;
+					$obStart_date -> setTime( DEF_DATE_MIN_HOUR , DEF_DATE_MIN_MINUTE , DEF_DATE_MIN_SECOND ) ;
+					$start_date_new = $obStart_date -> format( "Y-m-d H:i:s" ) ;
+					$arParam[ $alias . "_start_date" ] = $start_date_new ;
+				}
+				else
+				{
+					$error .= "・指定されたキャンペーン開始日は正しくありません。\n" ;
+				}
+			}
+			else
+			{
+				$error .= "・キャンペーン開始日が正しく入力されていません。\n" ;
+			}
+
+			// キャンペーン終了日
+			$arParam[ $alias . "_end_date" ] = "" ;
+			if ( ( is_numeric( ${ $alias . "_end_date_y" } ) ) &&
+				 ( is_numeric( ${ $alias . "_end_date_m" } ) ) &&
+				 ( is_numeric( ${ $alias . "_end_date_d" } ) ) )
+			{
+				if ( checkdate( ${ $alias . "_end_date_m" } , ${ $alias . "_end_date_d" } , ${ $alias . "_end_date_y" } ) )
+				{
+					// 公開開始日の更新
+					$obEnd_date = new DateTime();
+					$obEnd_date -> setDate( ${$alias . "_end_date_y" } , ${ $alias . "_end_date_m" } , ${ $alias . "_end_date_d" } ) ;
+					$obEnd_date -> setTime( DEF_DATE_MAX_HOUR , DEF_DATE_MAX_MINUTE , DEF_DATE_MAX_SECOND ) ;
+					$end_date_new = $obEnd_date -> format( "Y-m-d H:i:s" ) ;
+					$arParam[ $alias . "_end_date" ] = $end_date_new ;
+				}
+				else
+				{
+					$error .= "・指定されたキャンペーン終了日は正しくありません。\n" ;
+				}
+			}
+			else
+			{
+				$error .= "・キャンペーン終了日が正しく入力されていません。\n" ;
+			}
+
+			// キャンペーン開始日がキャンペーン終了日を越えている場合はエラー
+			if ( ( is_numeric( ${ $alias . "_start_date_y" } ) ) &&
+				 ( is_numeric( ${ $alias . "_start_date_m" } ) ) &&
+				 ( is_numeric( ${ $alias . "_start_date_d" } ) ) &&
+				 ( is_numeric( ${ $alias . "_end_date_y" } ) ) &&
+				 ( is_numeric( ${ $alias . "_end_date_m" } ) ) &&
+				 ( is_numeric( ${ $alias . "_end_date_d" } ) ) )
+			{
+				$chk_start_date	= sprintf( "%04d%02d%02d" , ${ $alias . "_start_date_y" } , ${ $alias . "_start_date_m" } , ${ $alias . "_start_date_d" } ) ;
+				$chk_end_date	= sprintf( "%04d%02d%02d" , ${ $alias . "_end_date_y" } , ${ $alias . "_end_date_m" } , ${ $alias . "_end_date_d" } ) ;
+				if( $chk_start_date  > $chk_end_date )
+				{
+					$error .= "・キャンペーン開始日とキャンペーン終了日に矛盾があります。\n" ;
+				}
+			}
+
+			// 編集状態
+			if ( ${ $alias . "_edit_flg" } == -1 )
+				$error .= "・編集状態が選択されていません。\n" ;
+
+			// 画像
+			$obPhoto = $this -> obPhoto ;
+			$error .= $obPhoto -> checkData( $alias . "_photoid_img"	, $alias . "_photoid_tmp"	, $arParam	, "img"	, "画像"		) ;
+
+			if( $func == "database" )
+			{
+				$arParam[ $alias . "_open_date"		] = sprintf( "'%s'" , ${ $alias . "_open_date" } ) ; 
+				$arParam[ $alias . "_start_date"	] = sprintf( "'%s'" , ${ $alias . "_start_date" } ) ; 
+				$arParam[ $alias . "_end_date"		] = sprintf( "'%s'" , ${ $alias . "_end_date" } ) ; 
+			}
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+
+		return $error ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ $alias . "_campaignid"		] = -1 ;
+		$arParam[ $alias . "_kind"				] = 0	;
+		$arParam[ $alias . "_merchandiseid"		] = array( -1 )	;
+		$arParam[ $alias . "_carriage"			] = 0	;
+		$arParam[ $alias . "_state"				] = -1	;
+		$arParam[ $alias . "_subject"			] = ""	;
+		$arParam[ $alias . "_catch"				] = ""	;
+		$arParam[ $alias . "_body"				] = ""	;
+		$arParam[ $alias . "_condition_price"	] = -1	;
+		$arParam[ $alias . "_condition_packing"	] = -1	;
+		$arParam[ $alias . "_condition_number"	] = -1	;
+		$arParam[ $alias . "_condition_weight"	] = -1	;
+		$arParam[ $alias . "_price"				] = 0	;
+		$arParam[ $alias . "_packing"			] = 0	;
+		$arParam[ $alias . "_number"			] = 0	;
+		$arParam[ $alias . "_weight"			] = 0	;
+
+		$arParam[ $alias . "_photoid"			] = "" ;
+
+		$arParam[ $alias . "_open_date"			] = $now ;
+		$arParam[ $alias . "_open_date_y"		] = $now_date -> format( "Y" ) ;
+		$arParam[ $alias . "_open_date_m"		] = $now_date -> format( "n" ) ;
+		$arParam[ $alias . "_open_date_d"		] = $now_date -> format( "j" ) ;
+
+		$arParam[ $alias . "_start_date"		] = $now ;
+		$arParam[ $alias . "_start_date_y"		] = $now_date -> format( "Y" ) ;
+		$arParam[ $alias . "_start_date_m"		] = $now_date -> format( "n" ) ;
+		$arParam[ $alias . "_start_date_d"		] = $now_date -> format( "j" ) ;
+
+		$arParam[ $alias . "_end_date"			] = $now ;
+		$arParam[ $alias . "_end_date_y"		] = $now_date -> format( "Y" ) ;
+		$arParam[ $alias . "_end_date_m"		] = $now_date -> format( "n" ) ;
+		$arParam[ $alias . "_end_date_d"		] = $now_date -> format( "j" ) ;
+
+		$arParam[ $alias . "_edit_flg"			] = DEF_EDITSTATUS_EDITTING ;
+		$arParam[ $alias . "_status"			] = DEF_EVENT_PRIORITY_NONE ;
+		$arParam[ $alias . "_create_date"		] = $now ;
+		$arParam[ $alias . "_update_date"		] = $now ;
+
+		$arParam[ $alias . "_tmp_select_code"	] = -1 ;
+	}
+
+}
+?>

@@ -1,0 +1,513 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	// 基本パラメータ変換
+	if ( empty( $mode ) == true )
+		$mode = "update" ;
+
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$obCorp		= new PARTS_Corp() ;
+	$obCategory	= new PARTS_Category() ;
+	$obM		= new PARTS_Merchandise() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obM -> assignGlobal( $additional ) ;
+
+	if ( $S_CORPID == "" )
+		$S_CORPID = -1 ;
+
+	if ( $S_CATEGORYID == "" )
+		$S_CATEGORYID = -1 ;
+
+	if ( $S_ITEM_STATUS == "" )
+		$S_ITEM_STATUS = -1 ;
+
+	if ( $S_TOP_PRIORITY == "" )
+		$S_TOP_PRIORITY = -1 ;
+
+	if ( $S_NOR_PRIORITY == "" )
+		$S_NOR_PRIORITY = -1 ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obM -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page			;
+
+	// WHERE句の初期化
+	$arWhere = array() ;
+	$arWhere[ "where" ] = "" ;
+
+	// 品番で検索
+	if ( $S_MERCHANDISECODE != "" )
+		$arWhere[ "where" ] .= sprintf( "AND %s.merchandisecode LIKE '%%%s%%' " , $obM -> obMaster -> alias , $S_MERCHANDISECODE ) ;
+
+	// 品番（janコード）で検索
+	if ( $S_JANCODE != "" )
+		$arWhere[ "where" ] .= sprintf( "AND %s.jancode LIKE '%%%s%%' " , $obM -> obMaster -> alias , $S_JANCODE ) ;
+
+	// 商品名で検索
+	if ( $S_NAME != "" )
+		$arWhere[ "where" ] .= sprintf( "AND %s.name LIKE '%%%s%%' " , $obM -> obMaster -> alias , $S_NAME ) ;
+
+	// 製造元・蔵元IDで検索
+	if ( $S_CORPID != -1 )
+		$arWhere[ "where" ] .= sprintf( "AND %s.corpid = %d " , $obM -> obMaster -> alias , $S_CORPID ) ;
+
+	// 商品カテゴリで検索
+	if ( $S_CATEGORYID != -1 )
+	{
+		$arWhereCa = array() ;
+		$arWhereCa[ "categoryid"	] = $S_CATEGORYID ;
+		$arWhereCa[ "kind"			] = DEF_CATEGORY_ITEM ;
+		$arCategory = $obCategory -> getData( $arWhereCa ) ;
+		$arCategory = $arCategory[ 0 ] ;
+
+		$arTargetCategory = array() ;
+		$category1	= $arCategory[ $obCategory -> alias . "_category1" ] ;
+		$category2	= $arCategory[ $obCategory -> alias . "_category2" ] ;
+		$category3	= $arCategory[ $obCategory -> alias . "_category3" ] ;
+
+		// 該当するカテゴリを全て列挙する
+		$arCurrent = $obCategory -> createCategoryArray( $category1 , $category2 , $category3 , false , DEF_CATEGORY_ITEM ) ;
+
+		$start = 0 ;
+		if ( $category2 != 0 )
+			$start = 1 ;
+		if ( $category3 != 0 )
+			$start = 2 ;
+		for ( $c = $start ; $c < count( $arCurrent ) ; $c ++ )
+		{
+			$keys = array_keys( $arCurrent[ $c ] ) ;
+			$arTargetCategory[ $keys[ 0 ] ] = $arCurrent[ $c ][ $keys[ 0 ] ] ;
+		}
+
+		$sql = "" ;
+		$sql_re = "( " ;
+		$keys = array_keys( $arTargetCategory ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		{
+			if ( $sql != "" )
+				$sql .= "OR " ;
+			$sql .= sprintf( "%s.categoryid = '%d' " , $obM -> obMaster -> alias , $keys[ $i ] ) ;
+			$sql_re .= sprintf( "%s.relationid LIKE '%%[%s]%%' OR " , $obM -> alias , $keys[ $i ] ) ;
+		}
+		$sql_re  = substr( $sql_re , 0 , -3 ) ;
+		$sql_re .= ") " ;
+		$arWhere[ "where" ] .= sprintf( "AND ( ( %s ) OR ( %s ) ) " , $sql , $sql_re ) ;
+	}
+
+	// 掲載状態で検索
+	if ( $S_ITEM_STATUS != -1 )
+	{
+//		$now = date( "Y-m-d H:i:s" ) ;
+		$now = date( "Ymd" ) ;
+		switch ( $S_ITEM_STATUS )
+		{
+		case 1 : // 掲載前
+			$arWhere[ "where" ] .= sprintf( "AND %s.start_date > to_date( '%s' , 'YYYYMMDD' ) " , $obM -> alias , $now ) ;
+			break ;
+
+		case 2 : // 掲載中
+			$arWhere[ "where" ] .= sprintf( "AND %s.start_date <= to_date( '%s' , 'YYYYMMDD' ) " , $obM -> alias , $now ) ;
+			$arWhere[ "where" ] .= sprintf( "AND %s.end_date >= to_date( '%s' , 'YYYYMMDD' ) " , $obM -> alias , $now ) ;
+			break ;
+
+		case 3 : // 掲載終了
+			$arWhere[ "where" ] .= sprintf( "AND %s.end_date < to_date( '%s' , 'YYYYMMDD' ) " , $obM -> alias , $now ) ;
+			break ;
+		}
+	}
+
+	$menu = FUNC_MERCHANDISE ;
+
+	$blams = new BLAMS() ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $arWhere , true ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $arWhere , $list_flg )
+{
+	global $obM ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$cnt = 0 ;
+	if ( $obM -> isOpen() == true )
+	{
+		$cnt	= $obM -> getCount( $arWhere ) ;
+		$qqq	= $obM -> getData( $arWhere , $page , NUMBER_PER_MERCHANDISE ) ;
+	}
+	
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$arList = array() ;
+	$paging = 0 ;
+	$pageJump = 0 ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_MERCHANDISE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_MERCHANDISE ;
+		$nEnd = $page * NUMBER_PER_MERCHANDISE + NUMBER_PER_MERCHANDISE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_MERCHANDISE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $arWhere ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_MERCHANDISE ) ;
+	}
+
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = FetchSearch( $blams , $arParamFind ) ;
+	}
+	$arHeader = array(
+		array(
+			array( "caption" => "商品コード"		, "class" => "w088 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "商品名"			, "class" => "w200 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "税込価格"			, "class" => "w072 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "キャッチコピー"	, "class" => "w488 left"	 , "row" => "1" , "col" => "6" ) ,
+		) ,
+		array(
+			array( "caption" => "JANコード"			, "class" => "w088 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "製造元"			, "class" => "w200 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "消費税"			, "class" => "w072 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "商品カテゴリー"	, "class" => "w096 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "掲載状態"			, "class" => "w064 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "優先度(T/通)"		, "class" => "w088 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "発売開始日"		, "class" => "w080 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "掲載開始日"		, "class" => "w080 left"	 , "row" => "1" , "col" => "1" ) ,
+			array( "caption" => "掲載終了日"		, "class" => "w080 left"	 , "row" => "1" , "col" => "1" ) ,
+		) ,
+		
+	) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_MERCHANDISE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "merchandise/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	global $obCorp ;
+	global $obCategory ;
+
+	$arCorp				= array() ;
+	$arCategory_local	= array() ;
+	$arCategory			= array() ;
+
+	// 製造元テーブル作成
+	$arWhere = array() ;
+	$arCorp = $obCorp -> getList( $arWhere , 0 , false ) ;
+
+	// カテゴリテーブル作成
+	$arCategory_local = $obCategory -> createCategoryArray( 0 , 0 , 0 , false , DEF_CATEGORY_ITEM ) ;
+	for( $i = 0 ; $i < count( $arCategory_local ) ; $i ++ )
+	{
+		$key = key( $arCategory_local[ $i ] ) ;
+		$value = $arCategory_local[ $i ][ $key ] ;
+		$arCategory[ $key ] = $value ;
+	}
+
+	$arFoem = array() ;
+
+	// 掲載状態テーブル作成
+	$arItemStatus = array( 1 => "掲載前" , 2 => "掲載中" , 3 => "掲載終了" ) ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_MERCHANDISECODE" , $S_MERCHANDISECODE , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "商品コード" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+	$form   = $blams -> fetchInputbox( "S_JANCODE" , $S_JANCODE , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "JANコード" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_NAME" , $S_NAME , 640 - 16  , 64 , IME_ON ) ;
+	$value .= $blams -> fetchTDTD( "商品名" , $form , 128 , 640 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form	= $blams -> fetchSelectbox( "S_CORPID" , $S_CORPID , $arCorp , 192 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "製造元" , $form , 128 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+	$form	= $blams -> fetchSelectbox( "S_CATEGORYID" , $S_CATEGORYID , $arCategory , 192 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "商品カテゴリ" , $form , 128 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form	= $blams -> fetchSelectbox( "S_ITEM_STATUS" , $S_ITEM_STATUS , $arItemStatus , 192 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "掲載状態" , $form , 128 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	global $arSortOrder ;
+	$value = "" ;
+	$form	= $blams -> fetchSelectbox( "S_TOP_PRIORITY" , $S_TOP_PRIORITY , $arSortOrder , 192 - 16 , "条件なし" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "TOP表示優先度" , $form , 128 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+	$form	= $blams -> fetchSelectbox( "S_NOR_PRIORITY" , $S_NOR_PRIORITY , $arSortOrder , 192 - 16 , "条件なし" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "通常表示優先度" , $form , 128 , 192 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $page , $arParamFind , $arWhere )
+{
+	global $obM ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$alias		= $obM -> alias ;
+	$alias_m	= $obM -> obMaster -> alias ;
+	$alias_c	= $obM -> obCategory -> alias ;
+
+	// ソート条件
+	$arWhere[ "order" ] = "" ;
+
+	if( $S_TOP_PRIORITY != -1 )
+		$arWhere[ "order" ] .= sprintf( "%s.top_priority %s , " , $alias , $S_TOP_PRIORITY ) ;
+
+	if( $S_NOR_PRIORITY != -1 )
+		$arWhere[ "order" ] .= sprintf( "%s.item_priority %s , " , $alias , $S_NOR_PRIORITY ) ;
+
+	$arWhere[ "order" ] .= sprintf( "%s.corpid , " , $alias_m ) ;
+	$arWhere[ "order" ] .= sprintf( "%s.category1 , " , $alias_c ) ;
+	$arWhere[ "order" ] .= sprintf( "%s.category2 , " , $alias_c ) ;
+	$arWhere[ "order" ] .= sprintf( "%s.category3 , " , $alias_c ) ;
+	$arWhere[ "order" ] .= sprintf( "%s.merchandisecode , " , $alias_m ) ;
+	$arWhere[ "order" ] .= sprintf( "%s.jancode " , $alias_m ) ;
+
+	if ( $obM -> isOpen() == true )
+	{
+		$arM	= $obM -> getData( $arWhere , $page , NUMBER_PER_MERCHANDISE ) ;
+	}
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	$now_date = new DateTime();
+	$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+
+	// 掲載状態テーブル作成
+	$arItemStatus = array( 1 => "掲載前" , 2 => "掲載中" , 3 => "掲載終了" ) ;
+
+	$cnt = count( $arM ) ;
+	for ( $index = 0 ; $index < $cnt ; $index ++ )
+	{
+		// データの取得
+		$arDataDB			= $arM[ $index ] ;
+		
+		$merchandiseid		= $arDataDB[ $alias . "_merchandiseid"		] ;
+		$start_date			= $arDataDB[ $alias . "_start_date"			] ;
+		$end_date			= $arDataDB[ $alias . "_end_date"			] ;
+		$sell_date			= $arDataDB[ $alias . "_sell_date"			] ;
+		$tax				= $arDataDB[ $alias . "_tax"				] ;
+		$price				= $arDataDB[ $alias . "_price"				] ;
+		$top_priority		= $arDataDB[ $alias . "_top_priority"		] ;
+		$item_priority		= $arDataDB[ $alias . "_item_priority"		] ;
+		$info				= $arDataDB[ $alias . "_info"				] ;
+		$edit_flg			= $arDataDB[ $alias . "_edit_flg"			] ;
+
+		$corpid				= $arDataDB[ $alias_m . "_corpid"			] ;
+		$merchandisecode	= $arDataDB[ $alias_m . "_merchandisecode"	] ;
+		$jancode			= $arDataDB[ $alias_m . "_jancode"			] ;
+		$productname		= $arDataDB[ $alias_m . "_name"				] ;
+		$categoryid			= $arDataDB[ $alias_m . "_categoryid"		] ;
+
+		$c_name				= $arDataDB[ $alias_c . "_name"				] ;
+
+		$obStart_date	= new DateTime( $start_date ) ;
+		$start_date_y	= $obStart_date -> format( "Y" ) ;
+		$start_date_m	= $obStart_date -> format( "m" ) ;
+		$start_date_d	= $obStart_date -> format( "d" ) ;
+		$obEnd_date		= new DateTime( $end_date ) ;
+		$end_date_y		= $obEnd_date -> format( "Y" ) ;
+		$end_date_m		= $obEnd_date -> format( "m" ) ;
+		$end_date_d		= $obEnd_date -> format( "d" ) ;
+
+		if( $start_date_y == DEF_DATE_LIMIT_YEAR )
+		{
+			$obStart_date -> setDate( $now_date -> format( "Y" ) , $start_date_m , $start_date_d ) ;
+			$start_date = $obStart_date -> format( "Y-m-d H:i:s" ) ;
+			$start_date_pattern = "%m/%d" ;
+		}
+		else
+		{
+			$start_date_pattern = "%Y/%m/%d" ;
+		}
+
+		if( $end_date_y == DEF_DATE_LIMIT_YEAR || $end_date_y == DEF_DATE_LIMIT_YEAR + 1 )
+		{
+			$obEnd_date -> setDate( $now_date -> format( "Y" ) , $end_date_m , $end_date_d ) ;
+			if( $end_date_y == DEF_DATE_LIMIT_YEAR + 1 )
+				$obEnd_date -> setDate( $now_date -> format( "Y" ) + 1 , $end_date_m , $end_date_d ) ;
+			$end_date = $obEnd_date -> format( "Y-m-d H:i:s" ) ;
+			$end_date_pattern = "%m/%d" ;
+		}
+		else
+		{
+			$end_date_pattern = "%Y/%m/%d" ;
+		}
+
+		if ( $price == 0 )
+			$price = "（内税）" ;
+
+		if( $merchandisecode == "" )
+			$merchandisecode = "---" ;
+
+		if ( $jancode == "" )
+			$jancode = "---" ;
+
+		if ( $productname == "" )
+			$productname = "不明" ;
+
+		// 製造元・蔵元
+		$szCorp = "" ;
+		$arCorp = $obM -> obMaster -> obCorp -> getAt( $corpid ) ;
+		if( count( $arCorp ) )
+			$szCorp = $arCorp[ $obM -> obMaster -> obCorp -> alias . "_lname" ] ;
+
+		if ( $szCorp == "" )
+			$szCorp = "指定なし" ;
+
+		// 掲載状態
+		global	$arEditStatus ;
+		if ( $edit_flg == DEF_EDITSTATUS_OPENED )
+		{
+			$now = date( "YmdHis" ) ;
+			if( ( $obStart_date -> format( "YmdHis" ) <= $now ) && ( $obEnd_date -> format( "YmdHis" ) >= $now ) )
+				$szItemStatus = $arItemStatus[ 2 ] ;
+			else if ( $obStart_date -> format( "YmdHis" ) > $now )
+				$szItemStatus = $arItemStatus[ 1 ] ;
+			else if ( $obEnd_date -> format( "YmdHis" ) < $now )
+				$szItemStatus = $arItemStatus[ 3 ] ;
+			else
+				$szItemStatus = "不明" ;
+		}
+		else
+		{
+			$szItemStatus = $arEditStatus[ $edit_flg ] ;
+		}
+
+		// 優先度
+		$szPriority = sprintf( "%s/%s" , $top_priority , $item_priority ) ;
+
+		$arAnchor[ "url" 			] = "edit.php"			;
+		$arAnchor[ "idname"			] = $alias . "_merchandiseid"		;
+		$arAnchor[ "id"				] = $merchandiseid		;
+		$arAnchor[ "param"			] = $param				;
+		$arAnchor[ "anchor"			] = $merchandisecode	;
+		$arAnchor[ "caption"		] = $merchandisecode	;
+		$arAnchor[ "class"			] = "border left"		;
+		$arAnchor[ "row"			] = 1					;
+		$arAnchor[ "col"			] = 1					;
+		$arAnchor[ "number_format"	] = ""					;
+		$arAnchor[ "date_format"	] = ""					;
+
+		$arLine = array() ;
+
+		$arData = array() ;
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $productname ,		"class" => "border left bold"		, "row" => "1" , "col" => "1"	, "number_format" => ""					, "date_format" => ""					, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $tax		 ,		"class" => "border right bold"		, "row" => "1" , "col" => "1"	, "number_format" => "number_format"	, "date_format" => ""					, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $info		 ,		"class" => "border left bold"		, "row" => "1" , "col" => "6"	, "number_format" => ""					, "date_format" => ""					, "anchor" => "" ) ;
+		
+		$arLine[] = $arData ;
+
+		$arData = array() ;
+		$arData[] = array( "caption" => $jancode ,			"class" => "border left"			, "row" => "1" , "col" => "1"	, "number_format" => ""					, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szCorp ,			"class" => "border left"			, "row" => "1" , "col" => "1"	, "number_format" => ""					, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $price ,			"class" => "border right"			, "row" => "1" , "col" => "1"	, "number_format" => "number_format"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $c_name ,			"class" => "border center middle"	, "row" => "1" , "col" => "1"	, "number_format" => ""					, "date_format" => ""					, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szItemStatus ,		"class" => "border center middle"	, "row" => "1" , "col" => "1"	, "number_format" => ""					, "date_format" => ""					, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $szPriority ,		"class" => "border center middle"	, "row" => "1" , "col" => "1"	, "number_format" => ""					, "date_format" => ""					, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $sell_date ,		"class" => "border center middle"	, "row" => "1" , "col" => "1"	, "number_format" => ""					, "date_format" => "%Y/%m/%d"			, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $start_date ,		"class" => "border center middle"	, "row" => "1" , "col" => "1"	, "number_format" => ""					, "date_format" => $start_date_pattern	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $end_date ,			"class" => "border center middle"	, "row" => "1" , "col" => "1"	, "number_format" => ""					, "date_format" => $end_date_pattern	, "anchor" => "" ) ;
+		
+		$arLine[] = $arData ;
+
+		$arList[] = $arLine ;
+	}
+	return $arList ;
+}
+
+?>

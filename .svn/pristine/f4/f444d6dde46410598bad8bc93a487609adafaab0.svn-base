@@ -1,0 +1,274 @@
+<?php
+/**
+* BLAMS 基本関数郡 管理者情報用クラス
+*
+* 管理者情報用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+//
+// 管理者レベル
+//
+define( "DEF_SYSTEM"			,	1	) ;		// システム管理者
+define( "DEF_ADMIN"				,	100	) ;		// アドミン
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Admin extends DB_Common
+{
+	var	$db ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "admin_data" ;
+		$alias		= "adm" ;
+		$primarykey	= "adminid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> searchkey = array(
+				"S_NAME"			,
+				"S_LEVEL"			,
+			) ;
+
+		// 追加項目
+		$this -> fieldsData[] = array( "name" => "crypt_passwd"			, "type" => "" , "format" => "%s" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = NUMBER_PER_PAGE )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			for ( $i = 0 ; $i < count( $arData ) ; $i ++ )
+			{
+				$passwd			= $arData[ $i ][ $alias . "_passwd"			] ;
+
+				// パスワードを暗号化する
+				if ( $passwd != "" )
+				{
+					$passwd = $this -> encrypt( $passwd ) ;
+					$arData[ $i ][ $alias . "_passwd"		] = $passwd ;
+					$arData[ $i ][ $alias . "_crypt_passwd"	] = $passwd ;
+				}
+			}
+			
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+	
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = NUMBER_PER_PAGE )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$arParamList = $this -> fields ;
+		$arParamList[] = "not_level" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+		
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $alias ) ;
+		
+		$sql .= sprintf( "WHERE %s.status = 1 " , $alias ) ;
+
+		$limit = "" ;
+		if ( ${ $primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $alias , $primarykey , ${ $primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+		
+		// longinIDによる検索
+		if ( $loginid != -1 )
+			$sql .= sprintf( "AND %s.loginid = '%s' " , $alias , $this -> mb_addslashes( $loginid ) ) ;
+
+		// passwdによる検索
+		if ( $passwd != -1 )
+			$sql .= sprintf( "AND %s.passwd = '%s' " , $alias , $this -> mb_addslashes( $passwd ) ) ;
+
+		// nameによる検索
+		if ( $name != "" && $name != -1 )
+			$sql .= sprintf( "AND %s.name like '%s%%' " , $alias , $this -> mb_addslashes( $name ) ) ;
+
+		// レベルによる検索
+		if ( $level != -1 )
+			$sql .= sprintf( "AND %s.level = %d " , $alias , $level ) ;
+
+		// レベルによる検索（否定）
+		if ( $not_level != -1 )
+			$sql .= sprintf( "AND %s.level != %d " , $alias , $not_level ) ;
+
+		// emailによる検索
+		if ( $email != -1 )
+			$sql .= sprintf( "AND %s.email like '%%%s%%' " , $alias , $this -> mb_addslashes( $email ) ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY   " ) ;
+				$sql .= sprintf( "%s.level , " , $alias ) ;
+				$sql .= sprintf( "%s.name    " , $alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		return $sql ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// ログインIDの入力検査
+			if ( ${ $alias . "_loginid" } == "" )
+			{
+				$error .= "・ログインIDが入力されていません。\n" ;
+			}
+			else
+			{
+				$arWhere = array() ;
+				$arWhere[ "where" ]  = "" ;
+				$arWhere[ "where" ] .= sprintf( "AND %s.loginid = '%s' " , $alias , $this -> mb_addslashes( ${ $alias . "_loginid" } ) ) ;
+
+				// 修正の場合、異なるIDで指定のログインIDが存在する際は、重複エラーとする。
+				if ( $mode == "update" )
+					$arWhere[ "where" ] .= sprintf( " AND %s.%s <> %d " , $alias , $primarykey , ${ $keyname } ) ;
+	
+				// 重複ID検査
+				$arCheck = $this -> getData( $arWhere ) ;
+				if ( count( $arCheck ) > 0 )
+					$error .= "・同じログインIDが存在しています。\n" ;
+			}
+
+			// パスワードチェック
+			$error .= $this -> checkPassword(	$arParam[ $alias . "_passwd"		] ,
+												$arParam[ $alias . "_crypt_passwd"	]
+											) ;
+	
+			// 会員レベル
+			if ( ${ $alias . "_level" } == -1 )
+				$error .= "・管理者レベルが選択されていません。\n" ;
+	
+			// 名前（姓 名）
+			if ( ${ $alias . "_name" } == "" )
+				$error .= "・名前が入力されていません。\n" ;
+	
+			// メールアドレス
+			if ( ${ $alias . "_email" } != "" )
+			{
+				$obMail = new PARTS_Mail() ;
+				if ( $obMail -> checkData( ${ $alias . "_email" } ) != TRUE )
+				{
+					$error .= "・メールアドレスが正しくありません。\n" ;
+				}
+				else
+				{
+					// 重複検定
+					$arWhere = array() ;
+					$arWhere[ "where" ]  = "" ;
+					$arWhere[ "where" ] .= sprintf( "AND %s.level <> %d " , $alias , DEF_MEMBER_LEVEL_NON ) ;
+					$arWhere[ "where" ] .= sprintf( "AND %s.email = '%s' " , $alias , $this -> mb_addslashes( ${ $alias . "_email" } ) ) ;
+
+					// 修正の場合、異なるIDで指定のログインIDが存在する際は、重複エラーとする。
+					if ( $mode == "update" )
+						$arWhere[ "where" ] .= sprintf( " AND %s.%s <> %d " , $alias , $primarykey , ${ $keyname } ) ;
+
+					// 重複検査
+					$arCheck = $this -> getData( $arWhere ) ;
+					if ( count( $arCheck ) > 0 )
+						$error .= "・同じメールアドレス（自宅）が存在しています。\n" ;
+				}
+			}
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+/*
+	function	insertData( &$arParam )
+	{
+		$result = false ;
+	
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+	
+		$result = parent::insertData( $arParam ) ;
+
+		return $result ;
+	}
+
+	function	updateData( $arParam )
+	{
+		$result = false ;
+	
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		$result = parent::updateData( $arParam ) ;
+
+		return $result ;
+	}
+*/
+}
+?>

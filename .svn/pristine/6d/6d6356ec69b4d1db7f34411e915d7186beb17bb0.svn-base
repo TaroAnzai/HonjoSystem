@@ -1,0 +1,76 @@
+<?php
+	ini_set( "display_errors" ,1 ) ;
+	define( "DEF_INTERNAL_ENCODE"	, "UTF-8" ) ;
+	define( "DEF_SHEET_ENCODE"		, "UTF-8" ) ;
+	require_once( "server.ini.php" ) ;
+	require_once( "conf/user.ini.php" ) ;
+	require_once( "class/blams.class.php" ) ;
+	require_once( "class/terminal.class.php" ) ;
+
+	// Excel出力
+	
+	ob_implicit_flush() ;
+	
+	//print_r( $argv ) ;
+
+	// データを保存するフォルダの作成
+	$date	= new DateTime() ;
+//	$date -> modify ( "-1 day" ) ;
+	$year	= intval( $date -> format( "Y" ) ) ;
+	$month	= intval( $date -> format( "m" ) ) ;
+
+	@mkdir( sprintf( "%s/%04d" , NAC_DATA_FOLDER_REPORT , $year ) ) ;
+	@mkdir( sprintf( "%s/%04d/%02d" , NAC_DATA_FOLDER_REPORT , $year , $month ) ) ;
+
+	$path = sprintf( "%s/%04d/%02d" , NAC_DATA_FOLDER_REPORT , $year , $month ) ;
+
+	$tmpfile = sprintf( "%s%s.~~~" , NAC_REPORT , $date -> format( "ymd" ) ) ;
+	$orgfile = sprintf( "%s%s.xls" , NAC_REPORT , $date -> format( "ymd" ) ) ;
+	$tmppath = sprintf( "%s/%s" , $path , $tmpfile ) ;
+	$orgpath = sprintf( "%s/%s" , $path , $orgfile ) ;
+
+	// 該当する日付のデータを取得する
+	$obTerminal = new PARTS_Terminal() ;
+	$alias = $obTerminal -> alias ;
+	
+	$arWhere = array() ;
+	$arWhere[ "command"			] = NAC_STORAGE_PRODUCT ;
+	$arWhere[ "create_date_d"	] = $date -> format( "Y-m-d 00:00:00" ) ;
+	
+	$arResult = $obTerminal -> getData( $arWhere ) ;
+
+	// Excelデータの出力
+	require_once( "Spreadsheet/Excel/Writer.php" ) ;
+
+	// ワークブックを作成します
+	$objBook = new Spreadsheet_Excel_Writer( $orgpath ) ;
+	$objBook -> setVersion( 8 ) ;
+
+	$objSheet =& $objBook -> addWorksheet() ;
+
+	$objSheet =& $objBook -> addWorksheet() ;
+
+	$objSheet -> setInputEncoding( DEF_INTERNAL_ENCODE ) ;
+
+	$title = sprintf( "生産ライン入庫データ(%04d年%02d月)" , $year , $month ) ;
+	
+	SetTitle( $objBook , $objSheet , $title ) ;
+
+	// この場合でも、ワークブックを明示的に閉じる必要があります
+	$objBook -> close() ;
+
+exit ;
+
+function	SetTitle( $objBook , $objSheet , $title )
+{
+	$format =& $objBook -> addFormat() ;
+	$format -> setFontFamily( "MS UI Gothic" ) ;
+	$format -> setBold( 0 ) ;
+	$format -> setTextWrap( 1 ) ;
+	$format -> setAlign( "left" ) ;
+
+	$objSheet -> setMerge( 0 , 0 , 0 , 10 ) ;
+	$objSheet -> write( 0 , 0 , $title , $format ) ;
+}
+
+?>

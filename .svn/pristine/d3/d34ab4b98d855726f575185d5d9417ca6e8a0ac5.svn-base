@@ -1,0 +1,270 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	// 基本パラメータ変換
+	if ( empty( $page ) == true )
+		$page = 0 ;
+		
+	if ( empty( $opage ) == true )
+		$opage = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	// DB
+	$blams		= new BLAMS() ;
+	$obRecruit	= new PARTS_Recruit() ;
+
+	$alias		= $obRecruit -> alias ;
+
+	$menu = FUNC_RECRUIT ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$additional[] = "opage" ;
+	$obRecruit -> assignGlobal( $additional ) ;
+
+	// 検索用パラメータ変換
+	$S_SUBJECT = $obRecruit -> mb2sb( $S_SUBJECT ) ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obRecruit -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page ;
+	$arParamFind[ "opage"	] = $opage ;
+
+	// 現在掲載中のイベント情報を検索
+	$list_flg = FALSE ;
+	$now_date = new DateTime();
+	$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+	$where = "" ;
+	$where .= sprintf( "AND %s.edit_flg = %d "		, $alias , DEF_EDITSTATUS_OPENED ) ;
+	$where .= sprintf( "AND %s.start_date <= '%s' " , $alias , $now ) ;
+	$where .= sprintf( "AND %s.end_date >= '%s' "	, $alias , $now ) ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$funcname = $funcname ."（ 掲載中 ）" ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	// 現在表示中のrecruitid
+	$arOpened = array() ;
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $where , $list_flg , $obRecruit , $arOpened , 5 , FALSE ) ;
+
+	// ---- 現在掲載中以外を検索 ----
+	$list_flg = TRUE ;
+	$where = "" ;
+
+	// 取得済みの採用情報を除く
+	for ( $i = 0 ; $i < sizeof ( $arOpened ) ; $i ++ )
+		$where .= sprintf( "AND %s.recruitid <> %d " , $alias , $arOpened[ $i ][ $alias . "_recruitid" ] ) ;
+
+	// タイトルで検索
+	if ( $S_SUBJECT != "" )
+		$where .= sprintf( "AND %s.subject LIKE '%%%s%%' " , $alias , $S_SUBJECT ) ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$funcname = $funcname ."（ 非掲載中 ）" ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	// リスト表示
+	$data .= FetchList( $blams , $funcname , $arParamFind , $where , $list_flg , $obRecruit ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+		
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $where , $list_flg , $obRecruit , &$arOpened = array() , $number_per_page = NUMBER_PER_PAGE , $page_flg = TRUE )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$page_local	= $page ;
+	$page_name	= "page" ;
+	if( $page_flg == FALSE )
+	{
+		$page_local	= $opage ;
+		$page_name	= "opage" ;
+	}
+
+	// 該当データ数取得
+	$arWhere[ "where" ] = $where ;
+	$cnt = 0 ;
+	if ( $obRecruit -> isOpen() == true )
+	{
+		$cnt		= $obRecruit -> getCount( $arWhere ) ;
+		$arOpened	= $obRecruit -> getData( $arWhere , $page_local , $number_per_page ) ;
+	}
+
+	$paging = "" ;
+	$pageJump = "" ;
+	
+	// 登録データがある場合
+	// ページ番号の修正があるので、検索フォームの表示　は下へ
+	$arList = array() ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / $number_per_page ) ;
+		if ( $page_local == "" )
+			$page_local = 0 ;
+		else if ( $page_local >= $maxpage )
+			$page_local = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page_local * $number_per_page ;
+		$nEnd = $page_local * $number_per_page + $number_per_page ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , $number_per_page , $page_name ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page_local , $arParamFind , $obRecruit ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , $number_per_page , $page_name ) ;
+	}
+	
+	// 一覧表示時のみ検索フォームが有効
+	$search = "" ;
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = FetchSearch( $blams , $arParamFind ) ;
+	}
+
+	$arHeader = array(
+		array( "caption" => "タイトル"		, "class" => "w384 left" ) ,
+		array( "caption" => "掲載開始日"	, "class" => "w128 center" ) ,
+		array( "caption" => "掲載終了日"	, "class" => "w128 center" ) ,
+		array( "caption" => "状態"			, "class" => "w128 center" ) ,
+		array( "caption" => "更新日"		, "class" => "w128 center" ) ,
+	) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page_local		) ;
+	$tmpl -> assign( "maxline"			, $number_per_page	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$arFoem = array() ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_SUBJECT" , $S_SUBJECT , 256 - 16  , 64 , IME_ON ) ;
+	$value .= $blams -> fetchTDTD( "タイトル" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $start_page , $arParamFind , $obRecruit )
+{	
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	global	$arEditStatus ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	$arRecruits	= $obRecruit -> arData ;
+	$alias		= $obRecruit -> alias ;
+	$primarykey	= $obRecruit -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	foreach ( $arRecruits as $arRecruit )
+	{
+		// データの取得
+		$recruitid	= $arRecruit[ $alias . "_recruitid"		] ;
+		$subject	= $arRecruit[ $alias . "_subject"		] ;
+		$edit_flg	= $arRecruit[ $alias . "_edit_flg"		] ;
+		$start_date	= $arRecruit[ $alias . "_start_date"	] ;
+		$end_date	= $arRecruit[ $alias . "_end_date"		] ;
+		$update_date= $arRecruit[ $alias . "_update_date"	] ;
+
+		$edit_flg = $arEditStatus[ $edit_flg ] ;
+		if ( $edit_flg == "" )
+			$edit_flg = "不明" ;
+
+		$arAnchor[ "url" 			] = "edit.php"				;
+		$arAnchor[ "idname"			] = $alias . "_recruitid"	;
+		$arAnchor[ "id"				] = $recruitid				;
+		$arAnchor[ "param"			] = $param					;
+		$arAnchor[ "anchor"			] = $subject				;
+		$arAnchor[ "caption"		] = $subject				;
+		$arAnchor[ "class"			] = "border left"			;
+		$arAnchor[ "script"			] = ""						;
+		$arAnchor[ "date_format"	] = ""						;
+
+		$arData = array() ;
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $start_date ,	"class" => "border center"	, "date_format"=>"%Y/%m/%d"	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $end_date ,		"class" => "border center"	, "date_format"=>"%Y/%m/%d"	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $edit_flg ,		"class" => "border center"	, "date_format" => ""		, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $update_date ,	"class" => "border center"	, "date_format"=>"%Y/%m/%d"	, "anchor" => "" ) ;
+		$arList[] = $arData ;
+	}
+
+	return $arList ;
+}
+
+?>

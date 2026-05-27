@@ -1,0 +1,168 @@
+<?php
+	ini_set( "display_errors" , 1 ) ;
+
+	$lib_path  = realpath( dirname( __FILE__ ) . "/../../../lib" ) ;
+	$lib_path .= sprintf( ":%s" , ini_get( "include_path" ) ) ;
+	ini_set( "include_path" , $lib_path ) ;
+
+	require_once( "blams.ini.php" )  ;
+	require_once( "ping.ini.php" )  ;
+
+	require_once( "class/db.class.php" )  ;
+	require_once( "class/mail.class.php" )  ;
+	
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql = sprintf( "SELECT * FROM host_data WHERE status = 1 ORDER BY hostid" ) ;
+		$record = $obDB -> ExecuteSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$up = false ;
+				$down = false ;
+
+				$arData   = $obDB -> getValues( $record , $i ) ;
+				$hostid   = $arData[ "hostid"	] ;
+				$hostname = $arData[ "hostname"	] ;
+				$name     = $arData[ "name"		] ;
+				$email    = $arData[ "email"	] ;
+				$count    = $arData[ "count"	] ;
+				
+				$loss = 0 ;
+				
+				// exec the ping
+				$cmd = sprintf( "ping %s -q -c 3" , $hostname ) ;
+				exec( $cmd , $stdout ) ;
+				$stdout = implode( "," , $stdout ) ;
+				$token = explode( "," , $stdout ) ;
+				for ( $j = 0 ; $j < count( $token ) ; $j ++ )
+				{
+					$token[ $j ] = trim( $token[ $j ] ) ;
+					if ( strstr( $token[ $j ] , "packet loss" ) !== FALSE )
+					{
+						$arLoss = explode( "%" , $token[ $j ] ) ;
+						$loss = $arLoss[ 0 ] ;
+					}
+				}
+				
+				// Server Down
+				$obMail = new PARTS_Mail() ;
+				if ( $loss == 100 )
+				{
+					if ( $count < 5 )
+					{
+						if ( $count < 1 )
+							$down = true ;
+
+						$body  = "" ;
+						$body .= "-- Server Down --\n" ;
+						$body .= "Name:\n" ;
+						$body .= $name . "\n" ;
+						$body .= "HostName:\n" ;
+						$body .= $hostname . "\n" ;
+						$body .= "Date/Time:\n" ;
+						$body .= date( "Y/m/d H:i:s\n" ) ;
+						// $body = mb_convert_encoding( $body , "SJIS" , "EUC-JP" ) ;
+						
+						// メール送信
+						$obMail -> sendPlane(
+										"service@blazinghills.com" ,
+										"サーバ監視" ,
+										"rodenbarg.zebuxoruk@docomo.ne.jp" ,
+										"" ,
+										"Server Down" ,
+										$body
+									) ;
+
+						// メール送信
+						$obMail -> sendPlane(
+										"service@blazinghills.com" ,
+										"サーバ監視" ,
+										"hsaitoh@blazinghills.com" ,
+										"" ,
+										"Server Down" ,
+										$body
+									) ;
+
+						if ( $email != "" )
+						{
+							// 担当者もあればメール送信
+							$obMail -> sendPlane(
+											"service@blazinghills.com" ,
+											"サーバ監視" ,
+											$email ,
+											"" ,
+											"Server Down" ,
+											$body
+										) ;
+						}
+					}
+					else
+						$count = 5 ;
+					$count ++ ;
+				}
+				else
+				{
+					// 前回 ダウンしていたか？
+					if ( $count != 0 )
+					{
+						$up = true ;
+
+						$body  = "" ;
+						$body .= "-- Server Wakeup --\n" ;
+						$body .= "Name:\n" ;
+						$body .= $name . "\n" ;
+						$body .= "HostName:\n" ;
+						$body .= $hostname . "\n" ;
+						$body .= "Date/Time:\n" ;
+						$body .= date( "Y/m/d H:i:s\n" ) ;
+						// $body = mb_convert_encoding( $body , "SJIS" , "EUC-JP" ) ;
+						
+						// メール送信
+						$obMail -> sendPlane(
+										"service@blazinghills.com" ,
+										"サーバ監視" ,
+										"rodenbarg.zebuxoruk@docomo.ne.jp" ,
+										"" ,
+										"Server Wakeup" ,
+										$body
+									) ;
+
+						// メール送信
+						$obMail -> sendPlane(
+										"service@blazinghills.com" ,
+										"サーバ監視" ,
+										"hsaitoh@blazinghills.com" ,
+										"" ,
+										"Server Wakeup" ,
+										$body
+									) ;
+					}
+				
+					$count = 0 ;
+				}
+				
+				printf( "%s : [ %d%% ]\n" , $hostname , $loss ) ;
+				$sql  = sprintf( "UPDATE host_data SET " ) ;
+				$sql .= sprintf( "count = %d , " , $count ) ;
+
+				if ( $up == true )
+					$sql .= sprintf( "up_date = LOCALTIMESTAMP(0) , " ) ;
+				else if ( $down == true )
+					$sql .= sprintf( "down_date = LOCALTIMESTAMP(0) , " ) ;
+
+				$sql .= sprintf( "update_date = now() " ) ;
+				$sql .= sprintf( "WHERE hostid = %d" , $hostid ) ;
+
+				$countup = $obDB -> executeSQL( $sql ) ;
+				if ( $countup )
+					$obDB -> closeRecord( $countup ) ;
+			}
+			
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+?>

@@ -1,0 +1,517 @@
+<?php
+/**
+* BLAMS 基本関数郡 画像情報用クラス
+*
+* 画像情報用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+define( "DEF_IMAGETYPE_GIF"		, IMAGETYPE_GIF		) ;
+define( "DEF_IMAGETYPE_PNG"		, IMAGETYPE_PNG		) ;
+define( "DEF_IMAGETYPE_JPEG"	, IMAGETYPE_JPEG	) ;
+define( "DEF_IMAGETYPE_PSD"		, IMAGETYPE_PSD		) ;
+
+$_FUNC = 100  ;
+define( "DEF_IMAGETYPE_AI"		, $_FUNC ++			) ;
+define( "DEF_IMAGETYPE_AVI"		, $_FUNC ++			) ;
+define( "DEF_IMAGETYPE_WMV"		, $_FUNC ++			) ;
+define( "DEF_IMAGETYPE_MPEG4"	, $_FUNC ++			) ;
+define( "DEF_IMAGETYPE_FLV"		, $_FUNC ++			) ;
+
+$_FUNC = 200  ;
+define( "DEF_IMAGETYPE_PDF"		, $_FUNC ++			) ;
+
+$_FUNC = 300  ;
+define( "DEF_IMAGETYPE_ZIP"		, $_FUNC ++			) ;
+
+$_FUNC = 1 ;
+define( "DEF_UPLOAD_NORMAIL"		, $_FUNC ++			) ;
+define( "DEF_UPLOAD_MERCHANDISE"	, $_FUNC ++			) ;
+$_FUNC = 100 ;
+define( "DEF_UPLOAD_CKEDITOR"		, $_FUNC ++			) ;
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Photo extends DB_Common
+{
+	var	$db ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "photo_data" ;
+		$alias		= "pht" ;
+		$primarykey	= "photoid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+	
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+		
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		// ファイル名による検索
+		if ( $name != -1 )
+			$sql .= sprintf( "AND %s.name like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $name ) ) ;
+
+		// ディレクトリ名による検索
+		if ( $dir != -1 )
+			$sql .= sprintf( "AND %s.dir = '%s' " , $this -> alias , $this -> mb_addslashes( $dir ) ) ;
+
+		// 種類による検索
+		if ( $kind != -1 )
+			$sql .= sprintf( "AND %s.kind = '%s' " , $this -> alias , $this -> mb_addslashes( $kind ) ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.dir  , " , $this -> alias ) ;
+				$sql .= sprintf( "%s.name   " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+		return $sql ;
+	}
+
+	// 画像データの登録
+	function	insertData( $upload_filename , $photo_name , $imagetype , $kind = 0 , $dir = "" )
+	{
+		$new_photoid = -1 ;
+	
+		// 画像ファイルの読み込み
+		if ( is_uploaded_file( $upload_filename ) )
+		{
+			switch ( $imagetype )
+			{
+			case	DEF_IMAGETYPE_GIF	:
+			case	DEF_IMAGETYPE_PNG	:
+			case	DEF_IMAGETYPE_JPEG	:
+			case	DEF_IMAGETYPE_PSD	:
+			case	DEF_IMAGETYPE_AI	:
+			case	DEF_IMAGETYPE_AVI	:
+			case	DEF_IMAGETYPE_WMV	:
+			case	DEF_IMAGETYPE_MPEG4	:
+			case	DEF_IMAGETYPE_FLV	:
+			case	DEF_IMAGETYPE_PDF	:
+			case	DEF_IMAGETYPE_ZIP	:
+				$fp = @fopen( $upload_filename , "rb" ) ;
+				if ( $fp != FALSE )
+				{
+					$filesize = filesize( $upload_filename ) ;
+					$imagedata = fread( $fp , $filesize ) ;
+					fclose ( $fp ) ;
+	
+					// base64エンコード
+					$imagedata = base64_encode( $imagedata ) ;
+				}
+				break ;
+			default :
+				break ;
+			}
+		}
+
+		if ( $imagetype != -1 && $imagedata != "" )
+		{
+			// 次のシーケンスID取得
+			$sql = sprintf( "SELECT NEXTVAL( '%s_photoid_seq' ) " , $this -> tname ) ;
+			$record = $this -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				$new_photoid = $this -> getValue( $record , "nextval" ) ;
+				$this -> closeRecord( $record ) ;
+			}
+
+			// 写真情報の新規登録
+			if ( $new_photoid != -1 )
+			{
+				$sql  = sprintf( "INSERT INTO %s ( " , $this -> tname ) ;
+				$sql .= sprintf( "photoid , " ) ;
+				$sql .= sprintf( "name , " ) ;
+				$sql .= sprintf( "type , " ) ;
+				$sql .= sprintf( "data , " ) ;
+
+				$sql .= sprintf( "dir , " ) ;
+				$sql .= sprintf( "kind , " ) ;
+	
+				$sql .= sprintf( "status , " ) ;
+				$sql .= sprintf( "create_date , " ) ;
+				$sql .= sprintf( "update_date   " ) ;
+				$sql .= sprintf( " ) VALUES ( " ) ;
+	
+				$sql .= sprintf( "%d   , "		, $new_photoid ) ;
+				$sql .= sprintf( "'%s' , "		, $photo_name ) ;
+				$sql .= sprintf( "%d   , "		, $imagetype ) ;
+				$sql .= sprintf( "'%s' , "		, $imagedata ) ;
+
+				$sql .= sprintf( "'%s' , "		, $dir ) ;
+				$sql .= sprintf( "%d   , "		, $kind ) ;
+
+				$sql .= sprintf( "'1'  , " ) ;
+				$sql .= sprintf( "LOCALTIMESTAMP(0) , " ) ;
+				$sql .= sprintf( "LOCALTIMESTAMP(0) " ) ;
+				$sql .= sprintf( " ) " ) ;
+				$record = $this -> executeSQL( $sql ) ;
+				if ( $record )
+					$this -> closeRecord( $record ) ;
+				else
+					$new_photoid = -1 ;
+			}
+		}
+	
+		return $new_photoid ;
+	}
+
+	// 写真情報レコード削除
+	function	deleteData( $photoid )
+	{
+		$this -> destroyData( $photoid ) ;
+	}
+
+	// 参照元のテーブルのIDを-1でクリアにし
+	// 画像データそのものを削除する。
+	function	deleteEach( $arParam , $obDB )
+	{
+		$result = false ;
+
+		$del_column		= $arParam[ "del_column"	] ;
+		$del_photoid	= $arParam[ "del_photoid"	] ;
+	
+		if ( $this -> isOpen() == true )
+		{
+			if ( is_object( $obDB ) )
+			{
+				$tname		= $obDB -> tname ;
+				$alias		= $obDB -> alias ;
+				$primarykey = $obDB -> primarykey ;
+
+				$id			= $arParam[ $alias . "_" . $primarykey ] ;
+				$del_column	= str_replace( $alias . "_" , "" , $del_column ) ;
+				
+				// データ更新
+				$db_column = "photoid_" . $del_column ;
+				$sql  = sprintf( "UPDATE %s SET "					, $tname ) ;
+				$sql .= sprintf( "%s = '%d' , "						, $del_column , -1 ) ;
+				$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+				$sql .= sprintf( "WHERE %s = %d "					, $primarykey , $id ) ;
+
+				$record = $this -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					$this -> closeRecord( $record ) ;
+		
+					// 既存画像ファイルがあれば削除する
+					if ( $del_photoid != -1 )
+						$this -> deleteData( $del_photoid ) ;
+		
+					$result = true ;
+				}
+			}
+		}
+	
+		return $result ;
+	}
+
+	// 更新画面から戻るボタンで戻ってきた時に
+	// テンポラリー画像を削除し、IDを-1にする
+	function	deleteWhenBack( &$arParam , $obDB )
+	{
+		if ( $this -> isOpen() == true )
+		{
+			if ( is_object( $obDB ) )
+			{
+				$alias		= $obDB -> alias ;
+
+				foreach( $obDB -> images as $name )
+				{
+					$key = $alias . "_" . $name ;
+					if( $arParam[ $key . "_tmp" ] != -1 )
+					{
+						$this -> deleteData( $arParam[ $key . "_tmp" ] ) ;
+						$arParam[ $key . "_tmp" ] = -1 ;
+					}
+				}
+			}
+		}
+	}
+
+	// 画像ファイルの入力チェック
+	// 正しければ ファイルをDBへ登録しIDを返す
+	function	checkData( $name , $idname , &$arParam , $mode = "img" , $suffix = "" , $kind = DEF_UPLOAD_NORMAIL , $dir = "" )
+	{
+		$photo		= $arParam[ $name 			] ;
+		$photo_name	= $arParam[ $name . "_name" ] ;
+		$photo_type	= $arParam[ $name . "_type" ] ;
+	
+		$photoid	= $arParam[ $idname			] ;
+	
+		$error = "" ;
+
+		if ( $this -> isOpen() == false )
+			$error = "・データベースに接続できませんでした。\n" ;
+			
+		// 画像
+		if ( $photo != "" )
+		{
+			$error_occurred = false ;
+	
+			if ( $suffix != "" )
+				$suffix = sprintf( "(%s)" , $suffix ) ;
+			
+			$ext = "" ;
+			if ( $mode == "img" )
+			{
+				$suffix = sprintf( "画像ファイル%s" , $suffix ) ;
+				$ext = "(gif、jpeg、png形式のみ)" ;
+			}
+			else if ( $mode == "pdf" )
+			{
+				$suffix = sprintf( "PDFファイル" , $suffix ) ;
+			}
+			
+			// 画像ファイル形式検定
+			$imagetype = $this -> checkFileType( $photo , $mode ) ;
+			if ( $imagetype == -1 )
+			{
+				$error .= sprintf( "・%sの形式が不正です（%s）\n" , $suffix , $ext ) ;
+				$error_occurred = true ;
+			}
+	
+			// 指定ファイルが正常ならばテンポラリに移動
+			if ( $error_occurred == false )
+			{
+				// 既にテンポラリファイルが存在していれば削除する
+				if ( $photoid != -1 )
+					$this -> deleteData( $photoid ) ;
+	
+				// アップロード画像ファイルを写真情報へ保存
+				$photoid = $this -> insertData( $photo , $photo_name , $imagetype , $kind , $dir ) ;
+				if ( $photoid != -1 )
+				{
+					// テンポラリ画像ファイルIDを更新
+					$arParam[ $idname ] = $photoid ;
+				}
+				else
+				{
+					$error .= sprintf( "・%sのアップロードに失敗しました。\n" , $suffix ) ;
+				}
+			}
+		}
+		
+		return $error ;
+	}
+
+	// 画像ファイル形式検定
+	function	checkFileType( $filename , $mode )
+	{
+		$result = -1 ;
+		if ( $mode == "img" || $mode == "both" )
+		{
+			$imageinfo = getimagesize( $filename ) ;
+			if ( ( $result = $imageinfo[ 2 ] ) === false )
+				$result = -1 ;
+			switch ( $result )
+			{
+			case	DEF_IMAGETYPE_GIF :
+			case	DEF_IMAGETYPE_PNG :
+			case	DEF_IMAGETYPE_JPEG :
+				break ;
+			default : 
+				$result = -1 ;
+			}
+		}
+
+		if ( $mode == "pdf" || $mode == "both" )
+		{
+			$fp = @fopen( $filename , "rb" ) ;
+			if ( $fp != FALSE )
+			{
+				$data = fread( $fp , 5 ) ;
+				fclose ( $fp ) ;
+
+				if ( $data == "%PDF-" )
+					$result = DEF_IMAGETYPE_PDF ;
+			}
+		}
+
+		if ( $mode == "zip" || $mode == "both" )
+		{
+			$fp = @fopen( $filename , "rb" ) ;
+			if ( $fp != FALSE )
+			{
+				$data = fread( $fp , 2 ) ;
+				fclose ( $fp ) ;
+
+				if ( $data == "PK" )
+					$result = DEF_IMAGETYPE_ZIP ;
+			}
+		}
+		
+		return $result ;
+	}
+	
+	function	uploadExist( $fields , &$arResult )
+	{
+		$error = -1 ;
+	
+		global	$_FILES ;
+		if ( is_array( $_FILES ) == true )
+		{
+			if ( is_array( $_FILES[ $fields ] ) == true )
+			{
+				$arResult = $_FILES[ $fields ] ;
+				$error = $arResult[ "error" ] ;
+			}
+		}
+		
+		return $error ;
+	}
+	
+	function	errorMessage( $error )
+	{
+		$error = "" ;
+		switch ( $error )
+		{
+		case	UPLOAD_ERR_OK :
+			$error = "正常に終了しました。。" ;
+			break ;
+		case	UPLOAD_ERR_INI_SIZE :
+		case	UPLOAD_ERR_FORM_SIZE :
+			$error = "アップロードされたファイルは、可能サイズを超えています。" ;
+			break ;
+			
+		case	UPLOAD_ERR_PARTIAL :
+			$error = "アップロードされたファイルは一部のみしかアップロードされていません。" ;
+			break ;
+		
+		case	UPLOAD_ERR_NO_FILE :
+			$error = "ファイルはアップロードされませんでした。 " ;
+			break ;
+			
+		case	UPLOAD_ERR_NO_TMP_DIR :
+			$error = "テンポラリフォルダがありません。" ;
+			break ;
+
+		case	UPLOAD_ERR_CANT_WRITE :
+			$error = "ディスクへの書き込みに失敗しました。" ;
+			break ;
+	
+		case	UPLOAD_ERR_EXTENSION :
+			$error = "ファイルのアップロードが拡張モジュールによって停止されました。" ;
+			break ;
+			
+		default :
+			$error = "不明なエラーです。" ;
+		}
+		
+		return $error ;
+	}
+	
+	function	getExt( $type )
+	{
+		$ext = image_type_to_extension( $type ) ;
+		if ( empty( $ext ) == true )
+		{
+			switch( $type )
+			{
+			case	DEF_IMAGETYPE_AI :		$ext = "ai" ;	break ;
+			case	DEF_IMAGETYPE_AVI :		$ext = "avi" ;	break ;
+			case	DEF_IMAGETYPE_MPEG4 :	$ext = "mp4" ;	break ;
+			case	DEF_IMAGETYPE_WMV :		$ext = "wmv" ;	break ;
+			case	DEF_IMAGETYPE_FLV :		$ext = "flv" ;	break ;
+			case	DEF_IMAGETYPE_ZIP :		$ext = "zip" ;	break ;
+			case	DEF_IMAGETYPE_PDF :		$ext = "pdf" ;	break ;
+			}
+		}
+		
+		return $ext ;
+	}
+	
+	function	getMime( $type )
+	{
+		$mime = image_type_to_mime_type( $type ) ;
+		if ( empty( $mime ) == true )
+		{
+			switch ( $type )
+			{
+			case	DEF_IMAGETYPE_AI :		$mime = "application/octet-stream" ;	break ;
+			case	DEF_IMAGETYPE_AVI :		$mime = "video/avi" ;					break ;
+			case	DEF_IMAGETYPE_MPEG4 :	$mime = "video/mp4" ;					break ;
+			case	DEF_IMAGETYPE_WMV :		$mime = "video/x-ms-wmv" ;				break ;
+			case	DEF_IMAGETYPE_FLV :		$mime = "video/x-flv" ;					break ;
+			case	DEF_IMAGETYPE_ZIP :		$mime = "application/zip" ;				break ;
+			case	DEF_IMAGETYPE_PDF :		$mime = "application/pdf" ;				break ;
+
+			default :
+				$mime = "application/octet-stream" ;
+			}
+		}
+		
+		return $mime ;
+	}
+
+}
+?>

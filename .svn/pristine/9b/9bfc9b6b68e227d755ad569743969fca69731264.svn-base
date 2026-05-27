@@ -1,0 +1,101 @@
+/*
+-------------------------------------------------------------------------------
+	Slider Menu
+-------------------------------------------------------------------------------
+*/
+
+#slidemenu
+{
+	display : block ;
+	background-color : #474747 ;
+	margin : 0px ;
+	padding : 0px ;
+}
+
+#slidemenu ul
+{
+	margin : 0px ;
+	padding : 0px ;
+	list-style-type : none ;
+	list-style-position : outside ;
+	position : relative ;
+	line-height : 1.5em ; 
+}
+
+#slidemenu:after
+{
+	content : "." ;
+	display : block ;
+	height : 0px ;
+	clear : both ;
+	visibility : hidden ;
+}
+* html #slidemenu				{	height : 1% ;	}
+*:first-child+html	#slidemenu	{	height : 1% ;	}
+
+#slidemenu a ,
+#slidemenu p
+{
+	display : block ;
+	color : #fff ;
+	text-align : left ;
+	text-decoration : none ;
+	font-size : 0.9em ;
+	background-color : #474747 ;
+	padding : 0px 5px ;
+	border : 1px solid #333 ;
+}
+#slidemenu p		{	color : #C6E2FF ;	background-color : #27408B ; }
+
+#slidemenu a:hover
+{
+	background-color : #63B8FF ;
+	color : #191970 ;
+}
+
+#slidemenu li
+{
+	float : left ;
+	position : relative ;
+}
+
+#slidemenu ul ul
+{
+	position : absolute ;
+	display : none ;
+	width : 192px ;
+	top : 1.5em ;
+}
+
+#slidemenu li ul a ,
+#slidemenu li ul p
+{
+	width : 192px ;
+	height : auto ;
+}
+
+#slidemenu ul ul
+{
+	top : auto ;
+}	
+
+#slidemenu li ul ul
+{
+	left : 192px ;
+	margin : 0px 0 0 10px ;
+}
+
+#slidemenu li:hover ul ul ,
+#slidemenu li:hover ul ul ul ,
+#slidemenu li:hover ul ul ul ul
+{
+	display : none ;
+}
+
+#slidemenu li:hover ul ,
+#slidemenu li li:hover ul ,
+#slidemenu li li li:hover ul ,
+#slidemenu li li li li:hover ul
+{
+	display : block ;
+}

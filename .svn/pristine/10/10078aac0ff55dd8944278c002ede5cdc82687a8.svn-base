@@ -1,0 +1,377 @@
+<?php
+/**
+* BLAMS 基本関数郡 商品マスター用クラス
+*
+* 商品マスター用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_MerchandiseMaster extends DB_Common
+{
+	var	$obCorp ;
+	var	$obCategory ;
+	var	$obPhoto ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "merchandise_master_data" ;
+		$alias		= "mm" ;
+		$primarykey	= "merchandise_masterid" ;
+
+		parent::__construct(  $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> obCorp		= new PARTS_Corp( $this -> conn ) ;
+		$this -> obCategory	= new PARTS_Category( $this -> conn ) ;
+		$this -> obPhoto	= new PARTS_Photo( $this -> conn ) ;
+
+		$this -> searchkey = array(
+				"S_MERCHANDISECODE"		,
+				"S_JANCODE"	,
+				"S_NAME"	,
+				"S_CORPID"		,
+				"S_CATEGORYID"		,
+			) ;
+
+		$this -> images = array( "iconid" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$alias = $this -> alias ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s , " , $this -> makeAliaseFields() ) ;
+			$fields .= sprintf( "%s , " , $this -> obCorp -> makeAliaseFields() ) ;
+			$fields .= sprintf( "%s   " , $this -> obCategory -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "merchandisecode_unique" ;
+		$arParamList[] = "jancode_unique" ;
+		$arParamList[] = "name_unique" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "LEFT JOIN %s %s ON %s.corpid = %s.corpid " , 
+							$this -> obCorp -> tname , 
+							$this -> obCorp -> alias , 
+							$this -> alias , 
+							$this -> obCorp -> alias 
+						) ;
+		$sql .= sprintf( "LEFT JOIN %s %s ON %s.categoryid = %s.categoryid " , 
+							$this -> obCategory -> tname , 
+							$this -> obCategory -> alias , 
+							$this -> alias , 
+							$this -> obCategory -> alias 
+						) ;
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( $merchandise_masterid != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		// 商品番号で検索（曖昧検索）
+		if ( $merchandisecode != "" && $merchandisecode != -1 )
+			$sql .= sprintf( "AND %s.merchandisecode like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $merchandisecode ) ) ;
+
+		// 商品番号検索（厳密検索）
+		if ( $merchandisecode_unique != "" && $merchandisecode_unique != -1 )
+			$sql .= sprintf( "AND %s.merchandisecode = '%s' " , $this -> alias , $this -> mb_addslashes( $merchandisecode_unique ) ) ;
+
+		// JANコードで検索（曖昧検索）
+		if ( $jancode != "" && $jancode != -1 )
+			$sql .= sprintf( "AND %s.jancode like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $jancode ) ) ;
+
+		// JANコードで検索（厳密検索）
+		if ( $jancode_unique != "" && $jancode_unique != -1 )
+			$sql .= sprintf( "AND %s.jancode = '%s' " , $this -> alias , $this -> mb_addslashes( $jancode_unique ) ) ;
+
+		// 名前で検索（曖昧検索）
+		if ( $name != "" && $name != -1 )
+			$sql .= sprintf( "AND %s.name like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $name ) ) ;
+
+		// 名前で検索（厳密検索）
+		if ( $name_unique != "" && $name_unique != -1 )
+			$sql .= sprintf( "AND %s.name = '%s' " , $this -> alias , $this -> mb_addslashes( $name_unique ) ) ;
+
+		// corpid で検索
+		if ( $corpid != -1 )
+			$sql .= sprintf( "AND %s.corpid = %d " , $this -> alias , $corpid ) ;
+
+		// カテゴリーで検索
+		if ( $categoryid != -1 )
+		{
+			$arWhere = array() ;
+			$arWhere[ "categoryid" ] = $categoryid ;
+			$arCategory = array() ;
+			$arTargetCategory = array() ;
+			$arCategory = $this -> obCategory -> getData( $arWhere ) ;
+			if( count( $arCategory ) > 0 )
+			{
+				$category1 = $arCategory[ 0 ][ $this -> obCategory -> alias . "_category1" ] ;
+				$category2 = $arCategory[ 0 ][ $this -> obCategory -> alias . "_category2" ] ;
+				$category3 = $arCategory[ 0 ][ $this -> obCategory -> alias . "_category3" ] ;
+				if ( $category3 == 0 )
+				{
+					// 該当するカテゴリを全て列挙する
+					$arTargetCategory = $this -> obCategory -> createCategoryArray( $category1 , $category2 , 0 , false , DEF_CATEGORY_ITEM ) ;
+				}
+				else
+				{
+					// 該当するカテゴリは一つしかない
+					$arTargetCategory[ 0 ] = array( $categoryid => "dummy" ) ;
+				}
+
+				$count = count( $arTargetCategory ) ;
+				if ( $count != 0 )
+				{
+					$where2 = "" ;
+					for ( $i = 0 ; $i < $count ; $i ++ )
+					{
+						if ( $where2 != "" )
+							$where2 .= " , " ;
+		
+						$keys = array_keys( $arTargetCategory[ $i ] ) ;
+						$where2 .= sprintf( "%d" , $keys[ 0 ] ) ;
+					}
+					$sql .= sprintf( "AND %s.categoryid IN ( %s ) " , $this -> alias , $where2 ) ;
+				}
+			}
+		}
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.corpid " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		if( ${ $alias . "_merchandise_masterid" } == "" )
+			${ $alias . "_merchandise_masterid" } = -1 ;
+
+		if( ${ $alias . "_corpid" } == "" )
+			${ $alias . "_corpid" } = -1 ;
+
+		if( ${ $alias . "_categoryid" } == "" )
+			${ $alias . "_categoryid" } = -1 ;
+
+		if( ${ $alias . "_fixed_price" } == "" )
+			${ $alias . "_fixed_price" } = 0 ;
+
+		if( ${ $alias . "_unit" } == "" )
+			${ $alias . "_unit" } = 1 ;
+
+		if( ${ $alias . "_net" } == "" )
+			${ $alias . "_net" } = 0 ;
+
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$arParam[ $alias . "_merchandise_masterid"	] = -1 ;
+		$arParam[ $alias . "_corpid"				] = -1 ;
+		$arParam[ $alias . "_jancode"				] = "" ;
+		$arParam[ $alias . "_merchandisecode"		] = "" ;
+		$arParam[ $alias . "_name"					] = "" ;
+		$arParam[ $alias . "_categoryid"			] = -1 ;
+		$arParam[ $alias . "_fixed_price"			] = 0 ;
+		$arParam[ $alias . "_standard"				] = "" ;
+		$arParam[ $alias . "_unit"					] = 1 ;
+		$arParam[ $alias . "_net"					] = 0 ;
+		$arParam[ $alias . "_tag"					] = "" ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		$alias_cp	= $this -> obCorp -> alias ;
+		$alias_c	= $this -> obCategory -> alias ;
+
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// 商品コードの入力検査
+			if ( ${ $alias . "_merchandisecode" } == "" )
+			{
+				$error .= "・商品コードが入力されていません。\n" ;
+			}
+			else
+			{
+				$arWhere = array() ;
+				$arWhere[ "merchandisecode"	] = ${ $alias . "_merchandisecode" } ;
+				$arWhere[ "where" ] = "" ;
+
+				// 修正の場合、異なるIDで指定の商品コードが存在する際は、重複エラーとする。
+				if ( $mode == "update" )
+					$arWhere[ "where" ] .= sprintf( " AND %s.%s <> %d " , $alias , $primarykey , ${ $keyname } ) ;
+	
+				// 重複ID検査
+				$arCheck = $this -> getData( $arWhere ) ;
+				if ( count( $arCheck ) > 0 )
+					$error .= "・同じ商品コードが存在しています。\n" ;
+			}
+
+			// JANコードの入力検査
+			if( ${ $alias . "_jancode" } != "" )
+			{
+				$arWhere = array() ;
+				$arWhere[ "jancode"	] = ${ $alias . "_jancode" } ;
+				$arWhere[ "where" ] = "" ;
+
+				// 修正の場合、異なるIDで指定のJANコードが存在する際は、重複エラーとする。
+				if ( $mode == "update" )
+					$arWhere[ "where" ] .= sprintf( " AND %s.%s <> %d " , $alias , $primarykey , ${ $keyname } ) ;
+	
+				// 重複ID検査
+				$arCheck = $this -> getData( $arWhere ) ;
+				if ( count( $arCheck ) > 0 )
+					$error .= "・同じJANコードが存在しています。\n" ;
+			}
+
+			// 商品名の入力検査
+			if( ${ $alias . "_name" } == "" )
+				$error .= "・商品名が入力されていません。\n" ;
+
+			// 製造元
+			if( ${ $alias . "_corpid" } == -1 )
+			{
+				$arParam[ $alias_cp . "_name" ] = "" ;
+			}
+			else
+			{
+				$arWhere = array() ;
+				$arWhere[ "corpid" ] = ${ $alias . "_corpid" } ;
+				$arCorp = array() ;
+				$arCorp = $this -> obCorp -> getData( $arWhere ) ;
+				$arParam[ $alias_cp . "_name" ] = $arCorp[ 0 ][ $alias_cp . "_name" ] ;
+			}
+
+			// 商品カテゴリ
+			if( ${ $alias . "_categoryid" } == -1 )
+			{
+				$error .= "・商品カテゴリが選択されていません。\n" ;
+			}
+			else
+			{
+				$arWhere = array() ;
+				$arWhere[ "categoryid" ] = ${ $alias . "_categoryid" } ;
+				$arCategory = array() ;
+				$arCategory = $this -> obCategory -> getData( $arWhere ) ;
+				$arParam[ $alias_c . "_name" ] = $arCategory[ 0 ][ $alias_c . "_name" ] ;
+			}
+
+			// 定価
+			if( is_numeric( ${ $alias . "_fixed_price" } ) == FALSE )
+				$error .= "・定価が正しく入力されていません。\n" ;
+
+			// 容量
+			if( is_numeric( ${ $alias . "_net" } ) == FALSE )
+				$error .= "・容量が正しく入力されていません。\n" ;
+
+			// 内容数
+			if( is_numeric( ${ $alias . "_unit" } ) == FALSE )
+				$error .= "・内容数が正しく入力されていません。\n" ;
+
+			// 画像
+			$obPhoto = $this -> obPhoto ;
+			$error .= $obPhoto -> checkData( $alias . "_iconid_img" , $alias . "_iconid_tmp" , $arParam , "img" , "マスター画像" , DEF_UPLOAD_MERCHANDISE ) ;
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+}
+?>

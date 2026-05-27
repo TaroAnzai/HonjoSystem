@@ -1,0 +1,196 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+//
+//	引数
+//		$photoid
+//		$width
+//		$height
+//
+//	ini_set( "display_errors" , 1 ) ;
+
+	define( "DEF_INTERNAL_ENCODE" , "utf8" ) ;
+	define( "DEF_TEMPLATE_ENCODE" , "utf8" ) ;
+
+	$self = dirname( __FILE__ ) . "/" ;
+	define( "SELF_PATH"			, realpath( $self ) ) ;
+	define( "SELF_LIB"			, realpath( $self . "../../lib" ) ) ;
+	define( "SELF_HTDOCS"		, realpath( $self . "../htdocs" ) ) ;
+	define( "SELF_COMMAND"		, "power_background.php" ) ;
+	define( "SELF_FULLCOMMAND"	, SELF_PATH . "/" . SELF_COMMAND ) ;
+
+	$root = dirname( $_SERVER[ 'SCRIPT_FILENAME' ] ) ;
+	$root = str_replace( "/htdocs/../lib/cron" , "" , $root ) ;
+	define(	"SITE_INCLUDE_DIR"		, realpath( $root . "/conf" ) ) ;
+
+	ini_set( "include_path"		,	ini_get( "include_path" ) . ":" . SELF_LIB ) ;
+
+	require_once( "class/power.class.php" )  ;
+
+	$bg_r = 255 ;
+	$bg_g = 255 ;
+	$bg_b = 255 ;
+
+	$trimming	= 0 ;
+	$plane		= false ;
+	$edge		= 0 ;
+
+	$width = 234 ;
+	$height = 60 ;
+	$innerX = 0 ;
+	$innerY = 0 ;
+
+	$corpid = -1 ;
+
+	// パスよりパラメータを取得する
+	$path = "" ;
+	if ( empty( $_SERVER['PATH_INFO'] ) == false )
+		$path = $_SERVER['PATH_INFO'] ;
+	$path = str_replace( ".png" , "" , $path ) ;
+	$path = str_replace( ".gif" , "" , $path ) ;
+	$path = str_replace( ".jpg" , "" , $path ) ;
+	$arList = explode( "/" , $path ) ;
+
+	for ( $i = 1 ; $i < count( $arList ) ; $i ++ )
+	{
+		$flg   = substr( $arList[ $i ] , 0 , 1 ) ;
+		$value = substr( $arList[ $i ] , 1 ) ;
+		switch( $flg )
+		{
+		case	"c" :	// color
+		case	"C" :	// color
+			$corpid = $value ;
+			break ;
+		}
+	}
+
+	$bFind = false ;
+	$subject = "" ;
+	$percent = 0 ;
+
+	$time = time() ;
+	$h = intval( date( "H" , $time ) ) ;
+	if ( $h == 0 )
+	{
+		$h = 23 ;
+		$time -= 86400 ;
+	}
+	$arWhere = array() ;
+	$arWhere[ "corpid" ] = $corpid ;
+	$arWhere[ "date" ] = date( "Y-m-d" , $time ) ;
+
+	$obPower = new PARTS_Power() ;
+
+	$alias = $obPower -> alias ;
+
+	$arResult = $obPower -> getData( $arWhere ) ;
+	if ( count( $arResult ) > 0 )
+	{
+		$arResult = $arResult[ 0 ] ;
+
+		$bFind = true ;
+	}
+
+	$imgh = ImageCreateTrueColor( $width , $height ) ;
+
+	$back = ImageColorAllocate( $imgh , 255 , 255 , 255 ) ;
+	ImageFill( $imgh , 0 , 0 , $back ) ;
+
+	$x = 8 ;
+	$y = 28 ;
+	if ( $bFind == true )
+	{
+		$bg = ImageCreateFromPNG( "./bgPower.png" ) ;
+		if ( $bg )
+		{
+			ImageCopyreSampled( $imgh , $bg , 0 , 0 , 0 , 0 , $width , $height , $width , $height ) ;
+			ImageDestroy( $bg ) ;
+		}
+
+		$curpower = 0 ;
+		for ( $l = $h ; $l >= 0 ; $l -- )
+		{
+			$curpower = $arResult[ $alias . "_log" ][ $l ][ $alias . "_log_current" ] ;
+			
+			if ( $curpower != 0 )
+				break ;
+		}
+		$h = $l ;
+
+		$subject = sprintf( "%s %02d時台の\n電力使用量" , date( "m月d日" ) , $h ) ;
+		drawText( $subject , $imgh , 86 , 22 , 7 , 0x66 , 0x66 , 0x66 , "left", 0 , 0 ) ;
+		
+		$maxpower = $arResult[ $alias . "_maxpower" ] ;
+	
+		if ( $maxpower != 0 )
+			$percent = intval( $curpower * 100 / $maxpower ) ;
+
+		if ( $percent < 100 )
+		{
+			$p = $percent ;
+			if ( $p < 50 )
+				$p  = 50 ;
+			
+			$start = 120 * ( $p - 50 ) / 50 ;
+	
+			$x1 = $x + 32 + $start ;
+			$x2 = $x + 151 ;
+	
+			$y1 = $y ;
+			$y2 = $y1 + 23 ;
+			
+			ImageFilledRectangle( $imgh , $x1 , $y1 , $x2 , $y2 , $back ) ;
+		}
+		
+		drawText( "使用" , $imgh , 170 , 20 , 7 , 0x66 , 0x66 , 0x66 , "left", 0 , 0 ) ;
+		drawText( "供給" , $imgh , 170 , 31 , 7 , 0x66 , 0x66 , 0x66 , "left", 0 , 0 ) ;
+
+		drawText( number_format( $curpower ) , $imgh , $width - 12 , 20 , 7 , 0x33 , 0x33 , 0x33 , "right", 2 , 0 ) ;
+		drawText( number_format( $maxpower ) , $imgh , $width - 12 , 31 , 7 , 0x33 , 0x00 , 0x00 , "right", 2 , 0 ) ;
+	
+		$subject = sprintf( "%d%%" , $percent ) ;
+		drawText( $subject , $imgh , $width - 13 , $height - 8 , 16 , 0x33 , 0x33 , 0x33 , "right", 1 , 1 ) ;
+	}
+	else
+	{
+		$subject = "電力使用量は提供されていません。" ;
+		drawText( $subject , $imgh , $x , 51 , 11 , 0x33 , 0x33 , 0x33 , "left", 0 , 2 ) ;
+	}
+
+	$subject = $obPower -> arPowerCorp[ $corpid ][ 0 ] ;
+	drawText( $subject , $imgh , $x , $y , 11 , 0x33 , 0x33 , 0x33 , "left", 0 , 5 ) ;
+
+	header( "Content-type: image/png" ) ;
+	header( "Cache-control: no-cache" ) ;
+	imagePNG( $imgh ) ;
+
+	ImageDestroy( $imgh );
+	
+	exit ;
+
+function drawText( $subject , $img , $x , $y , $size , $c_r , $c_g , $c_b , $align = "left", $px = 0 , $py = 0 )
+{
+	$font = SELF_LIB . "/font/monapo.ttf" ;
+
+	$pos = array() ;
+	$pos = ImageTTFBbox( $size , 0 , $font, $subject ) ;
+
+	$color  = imageColorAllocate( $img , $c_r , $c_g , $c_b ) ;
+
+	if ( $align == "left" )
+	{
+		$x1 = $x + $px ;
+		$y1 = $y - abs( $pos[ 3 ] ) - $py ;
+	}
+	else if ( $align == "right" )
+	{
+		$x1 = $x - abs( $pos[ 4 ] ) - $px ;
+		$y1 = $y - abs( $pos[ 3 ] ) - $py ;
+	}
+	
+	ImageTTFText(	$img , $size , 0 ,
+					$x1 ,
+					$y1 ,
+					$color , $font , $subject ) ;
+}
+
+?>

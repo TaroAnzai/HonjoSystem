@@ -1,0 +1,61 @@
+<?php
+
+// 採用情報の表示
+function	fetchRecruit( $func )
+{
+	$arRecriut = GetRecruit() ;
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	$tmplFils = "recruit.tmpl" ;
+
+	// 生成された会社情報がある場合は テンプレートを表示する
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "recruit_data"	, $arRecriut ) ;
+	$tmpl -> assign( "corp_data"	, $arCorp ) ;
+	$data = $tmpl -> fetch( $tmplFils ) ;
+	unset( $tmpl ) ;
+
+	return $data ;
+}
+
+
+// 採用情報の取得
+/*
+function	GetRecruit()
+{
+	$arData = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Ymd" ) ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT * FROM topics_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 and edit_flg = %d " , DEF_EDITSTATUS_OPENED ) ;
+		$sql .= sprintf( "and to_char( start_date , 'YYYYMMDD' ) <= '%s' " , $now ) ;
+		$sql .= sprintf( "order by update_date desc " ) ;
+		$sql .= sprintf( "limit %d offset 0 " , 1 ) ;
+
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData[ $i ] = $obDB -> getValues( $record , $i ) ;
+			}
+			
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+	return $arData ;
+}
+*/
+
+?>

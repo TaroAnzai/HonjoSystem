@@ -1,0 +1,24 @@
+/*
+-------------------------------------------------------------------------------
+	Copyright
+-------------------------------------------------------------------------------
+*/
+
+p#blams
+{
+	width : 960px ;
+	color : #666 ;
+	font-size : 0.8em ;
+	text-align : right ;
+	margin : 4px auto 0px ;
+}
+
+p#blams	a
+{
+	color : #666 ;
+}
+
+.hide	{
+	display : none ;
+	visibility : hidden ;
+}

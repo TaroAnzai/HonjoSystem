@@ -1,0 +1,1584 @@
+<?php
+/**
+* DB処理クラス (oci8) 
+*
+* DBアクセス<br>
+* 
+* @author A
+* @copyright Copyright(c)  foo. All rights reserved.
+* @filesource
+* @package どこでもMy病院
+*/
+/**
+* DBアクセスクラス (PostgreSQL) 
+*
+* DBへのアクセスメソッドを提供します<br>
+*
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+// //ini_set( "display_errors" ,1 ) ;
+
+/** Error reporting */
+if ( defined( "DEF_ERROR_LEVEL" ) == true )
+	error_reporting( DEF_ERROR_LEVEL ) ;
+
+define( "DEF_DB_RESOURCE"				,	"oci link"	) ;
+
+class DB_Oci
+{
+	var	$conn ;			// Connection
+	var	$record ;		// Record
+	
+	var	$dbname ;
+	var	$dbuser ;
+	var	$dbpasswd ;
+	var	$dbhost ;
+	var	$dbport ;
+
+	var	$tname ;
+	var	$alias ;
+	var	$primarykey	;
+	var $searchkey ;
+	
+	var $fieldsData ;
+	var $fields ;
+	var $images ;
+
+	var $per_page = -1 ;
+
+	var	$arData ;
+
+	var	$privkey ;
+	var	$pubkey ;
+
+	var	$bView ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" , $tname = "" , $alias = "" , $primarykey = "" )
+	{
+		$this -> conn = -1 ;
+
+		$this -> dbname			= $dbname ;
+		$this -> dbuser			= $user ;
+		$this -> dbpasswd		= $passwd ;
+		$this -> dbhost			= $host ;
+		$this -> dbport			= $port ;
+	
+		$this -> tname			= $tname ;
+		$this -> alias			= $alias ;
+		$this -> primarykey		= $primarykey ;
+		$this -> searchkey		= array() ;
+
+		$this -> fieldsData		= array() ;
+		$this -> fields			= array() ;
+		$this -> images			= array() ;
+
+		$this -> arData			= array() ;
+
+		$this -> privkey		= DEF_DB_CRYPT_PRIVATEKEY ;
+		$this -> pubkey			= DEF_DB_CRYPT_PUBLICKEY ;
+
+		$this -> connectDatabase( $dbname , $user , $passwd , $host , $port ) ;
+		if ( $this -> isOpen() == true )
+		{
+			$this -> fieldsData	= $this -> getFieldsOnTable( $this -> tname ) ;
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+		}
+	}
+
+	function	__destruct()
+	{
+		$this -> disconnectDatabase() ;
+	}
+
+	function	isOpen()
+	{
+		if ( is_resource( $this -> conn ) == true )
+		{
+			// テーブル名が指定されていれば オープン成功
+			if ( $this -> tname != "" )
+			{
+				// テーブルが存在をしなければクローズ
+				if ( $this -> tableExists( $this -> tname ) != true )
+					$this -> disconnectDatabase() ;
+			}
+			else
+			{
+				// テーブル名が指定されてなければ クローズ
+				$this -> disconnectDatabase() ;
+			}
+		}
+		else
+		{
+			$this -> disconnectDatabase() ;
+		}
+		return is_resource( $this -> conn ) ;
+	}
+
+	function	connectDatabase( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		if ( $this -> isOpen() == true )
+			return $this -> conn ;
+	
+		if ( $dbname == "" )
+			$dbname = DB_NAME ;
+	
+		if ( $user == "" )
+			$user = DB_USER ;
+	
+		if ( $passwd == "" )
+			$passwd = DB_PASSWD ;
+	
+		if ( $host == "" && defined( "DB_HOST" ) == true )
+			$host = DB_HOST ;
+	
+		if ( $port == "" && defined( "DB_PORT" ) == true )
+			$port = DB_PORT ;
+	
+		$this -> conn = @oci_new_connect( DB_USER , DB_PASSWD , DB_NAME , "JA16SJISTILDE" ) ;
+		if ( $this -> conn )
+		{
+			$this -> dbname		= $dbname ;
+			$this -> dbuser		= $user ;
+			$this -> dbpasswd	= $passwd ;
+			$this -> dbhost		= $host ;
+			$this -> dbport		= $port ;
+
+			// 日付のフォーマット変更
+			$this -> executeSQL( "ALTER SESSION SET NLS_DATE_FORMAT = 'YYYY-MM-DD HH24:MI:SS'" ) ;
+		}
+		
+		return $this -> conn ;
+	}
+	
+	// Disconnect DataBase
+	function	disconnectDatabase()
+	{
+		$result = false ;
+
+		if ( is_resource( $this -> conn ) == true )
+		{
+			$result = @oci_close( $this -> conn ) ;
+		}
+		
+		return $result ;
+	}
+
+	function	commit()
+	{
+		$result = false ;
+
+		if ( is_resource( $this -> conn ) == true )
+		{
+			$result = oci_commit( $this -> conn ) ;
+		}
+		
+		return $result ;
+	}
+
+	function	rollback()
+	{
+		$result = false ;
+
+		if ( is_resource( $this -> conn ) == true )
+		{
+			$result = oci_rollback( $this -> conn ) ;
+		}
+		
+		return $result ;
+	}
+
+	// Execute SQL
+	function	executeSQL( $sql , $arError = array() )
+	{
+		$result = false ;
+		
+		if ( is_resource( $this -> conn ) == true )
+		{
+			$result = oci_parse( $this -> conn  , $sql ) ;
+			if ( $result )
+			{
+				if ( !oci_execute( $result , OCI_DEFAULT) )
+				{
+					$cmd = mb_strimwidth( $sql , 0 , 30 , "..." ) ;
+					if ( ( $pos = strpos( $sql , "FROM" ) ) !== false )
+						$cmd .= mb_strimwidth( $sql , $pos , 30 , "..." ) ;
+					if ( ( $pos = strpos( $sql , "WHERE" ) ) !== false )
+						$cmd .= mb_strimwidth( $sql , $pos , 30 , "..." ) ;
+					
+					printf( "%s:%s\n" , $this -> alias , $cmd ) ;
+					$arError = oci_error( $result ) ;
+					$result = false ;
+				}
+			}
+			else
+			{
+				$arError = oci_error( $result ) ;
+				$result = false ;
+			}
+		}
+		else
+		{
+			$result = false ;
+		}
+		
+		return $result ;
+	}
+
+	// Exists Table
+	function	tableExists( $tablename )
+	{
+		$result = false ;
+	
+		if ( is_resource( $this -> conn ) == true )
+		{
+			if ( $this -> bView == false )
+				$sql = sprintf( "SELECT * FROM user_tables WHERE table_name = '%s' " , $tablename ) ;
+			else
+				$sql = sprintf( "SELECT * FROM user_views WHERE view_name = '%s' " , $tablename ) ;
+			
+			$record = $this -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				if ( DB_Oci::getDataCount( $sql ) > 0 )
+					$result = true ;
+			
+				$this -> closeRecord( $record ) ;
+			}
+		}
+	
+		return $result ;
+	}
+
+	// ID の取得
+	function getID( $index = 0 )
+	{
+		$id = -1 ;
+		
+		if ( $this -> isOpen() == true )
+		{
+			if ( is_array( $this -> arData ) == true )
+			{
+				$alias		= $this -> alias ;
+				$primarykey	= $this -> primarykey ;
+				$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+				
+				if ( isset( $this -> arData[ $index ][ $keyname ] ) == true )
+				{
+					$id = $this -> arData[ $index ][ $keyname ] ;
+				}
+			}
+		}
+		
+		return $id ;
+	}
+
+	// 指定されたIDのデータを1件だけ取得する。
+	function getAt( $id )
+	{
+		$arWhere = array() ;
+		$arWhere[ $this -> primarykey ] = $id ;
+		$arWhere[ "order"		] = sprintf( "%s.UPDATE_DATE DESC" , $this -> alias ) ;
+
+		$arResult = $this -> getData( $arWhere ) ;
+		if ( count( $arResult ) > 0 )
+			$arResult = $arResult[ 0 ] ;
+
+		return $arResult ;
+	}
+
+	// Get Fields on Table
+	function	getFieldsOnTable( $tablename )
+	{
+		$arFields = array() ;
+	
+		if ( $this -> isOpen() == true )
+		{
+			$sql  = sprintf( "SELECT * FROM user_tab_columns utc " ) ;
+			
+			if ( $this -> bView == false )
+			{
+				$sql .= sprintf( "INNER JOIN user_tables ut ON utc.table_name = ut.table_name " ) ;
+				$sql .= sprintf( "WHERE ut.table_name = '%s' " , $tablename ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "INNER JOIN user_views uv ON utc.table_name = uv.view_name " ) ;
+				$sql .= sprintf( "WHERE uv.view_name = '%s' " , $tablename ) ;
+			}
+
+			$record = $this -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				while ( ( $arResult	= $this -> getValues( $record ) ) !== false )
+				{
+					$typename	= $arResult[ "DATA_TYPE" ] ;
+					$attname	= $arResult[ "COLUMN_NAME" ] ;
+					
+					$format = "" ;
+					switch ( $typename )
+					{
+					case	"NUMBER" :
+//						$format = "%d" ;
+						$format = "%.2f" ;
+						break ;
+					case	"real" :
+						$format = "%f" ;
+						break ;
+					case	"CHAR" :
+					case	"VARCHAR2" :
+						$format = "'%s'" ;
+						break ;
+//2012/01/28 SAMES Add Start カラムタイプ追加
+					case	"TIMESTAMP(6)" :
+//2012/01/28 SAMES Add End
+					case	"DATE" :
+						$format = "%s" ;
+						break ;
+					case	"BLOB" :
+						$format = "%s" ;
+						break ;
+					default :
+						if ( ( $pos = strrpos( $typename , "[]" ) ) !== false )
+						{
+							if ( $pos == ( strlen( $typename ) - 2 ) )
+								$format = "'{%s}'" ;
+						}
+					}
+					$arFields[] = array( "name" => $attname , "type" => $typename , "format" => $format ) ;
+				}
+				$this -> closeRecord( $record ) ;
+			}
+		}
+		
+		return $arFields ;
+	}
+
+	function	getFieldsnameOnTable( $arFields )
+	{
+		$arFieldsname = array() ;
+		$cnt = count( $arFields ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+			$arFieldsname[] = $arFields[ $i ][ "name" ] ;
+			
+		return $arFieldsname ;
+	}
+	
+	// Make Aliase Fields Name
+	function	makeAliaseFields( $arFields = array() , $tablename = "" , $alias = "" )
+	{
+		if ( $tablename == "" )
+			$tablename = $this -> tname ;
+
+		if ( $alias == "" )
+			$alias = $this -> alias ;
+
+		$fields = "" ;
+		if ( count( $arFields ) == 0 )
+			$arFields = $this -> fieldsData ;
+		foreach ( $arFields as $key => $arData )
+		{
+			if ( is_array( $arData ) == true )
+			{
+				if ( $arData[ "type" ] != "" )
+					$fieldsname = $arData[ "name" ] ;
+				else
+					continue ;
+			}
+			else
+			{
+				$fieldsname = $arData ;
+			}
+			
+			if ( $fields != "" )
+				$fields .= " , " ;
+			
+			$fields .= sprintf( "%s.%s AS %s_%s " , $alias , $fieldsname , $alias , $fieldsname ) ;
+		}
+		
+		return $fields ;
+	}
+
+	// 最終更新IDの取得
+	function getLastInsertedID()
+	{
+		$id = -1 ;
+
+		$tname		= $this -> tname ;
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		// 直前のシーケンスID取得
+		$sql = sprintf( "SELECT CURRVAL( '%s_%s_seq' ) " , $tname , $primarykey ) ;
+		$record = $this -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$id = $this -> getValue( $record , "currval" ) ;
+			$this -> closeRecord( $record ) ;
+		}
+		return $id ;
+	}
+
+	// Close and Free Memory
+	function	closeRecord( $record )
+	{
+		$result = false ;
+		if ( is_resource( $record ) )
+			$result = oci_free_statement( $record ) ;
+		
+		return $result ;
+	}
+
+	// Get Data Count
+	function	getDataCount( $sql )
+	{
+		$result = 0 ;
+		
+		$sql_query = 'SELECT COUNT(*) as COUNT FROM (' . $sql . ')' ;
+
+		$record = $this -> executeSQL( $sql_query ) ;
+		if ( $record )
+		{
+			$arResult = $this -> getValues( $record ) ;
+
+			if ( count( $arResult ) > 0 )
+				$result = $arResult[ "COUNT" ] ;
+		}
+		return $result ;
+	}
+
+	// データの取得
+	function	getData( $sql )
+	{
+		$this -> arData		= array() ;
+
+		$arData = array() ;
+		
+		if ( $this -> isOpen() == true )
+		{
+			$record = $this -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				$cnt = DB_Oci::getDataCount( $sql ) ;
+				for ( $i = 0 ; $i < $cnt ; $i ++ )
+				{
+					$arResult = $this -> getValues( $record , $i ) ;
+					
+					$arImages = $this -> images ;
+					foreach( $arImages as $images )
+					{
+						$id = $this -> alias . "_" . $images ;
+						if ( isset( $arResult[ $id ] ) )
+						{
+							$arResult[ $id . "_org" ] = $arResult[ $id ] ;
+		
+							// テンポラリ画像ファイルIDを初期化
+							$arResult[ $id . "_tmp" ] = -1 ;
+							$arResult[ $id . "_img" ] = "" ;
+						}
+					}
+					$arData[] = $arResult ;
+				}
+			
+				$this -> closeRecord( $record ) ;
+			}
+		}
+		
+		$this -> arData		= $arData ;
+		
+		return $arData ;
+	}
+
+	function	getCount( $arParam , $page = -1 , $per_page = -1 )
+	{
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+	
+		$this -> arData = array() ;
+		$cnt = 0 ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields = "count(*) as COUNT" ;
+			$arParam[ "order" ] = "" ;
+			$sql = $this -> makeSQL( $arParam , $fields , -1 , -1 ) ;
+
+			$arData = DB_Oci::getData( $sql ) ;
+
+			if ( isset( $arData[ 0 ][ "COUNT" ] ) == true )
+				$cnt = $arData[ 0 ][ "COUNT" ] ;
+		}
+
+		return $cnt ;
+	}
+
+	// クエリー結果の指定行の指定フィールド値を返す
+	function	getValue( $record , $name , $pos = 0 )
+	{
+		$result = "" ;
+		if ( $record )
+			$result = oci_fetch_row( $record , $name ) ;
+
+		return $result ;
+	}
+
+	// クエリー結果の指定行を配列として返す
+	function	getValues( $record , $pos = 0 )
+	{
+		$result = array() ;
+		if ( $record )
+			$result = oci_fetch_assoc( $record ) ;
+
+		return $result ;
+	}
+
+	// クエリーを実行し結果を配列として返す（１行目の結果のみ）
+	function	getValueAll( $sql )
+	{
+		$arResult = array() ;
+	
+		if ( $this -> isOpen() == true )
+		{
+			// クエリー実行
+			$record = $this -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				// クエリー結果を配列として取得（１行目のみ）
+				if ( DB_Oci::getDataCount( $sql ) > 0 )
+				{
+					$arResult = $this -> getValues( $record , 0 ) ;
+				}
+				else
+				{
+	//				printf( "SQL = [ %s ]<br>" , HTMLencode( $sql ) ) ;
+				}
+				$this -> closeRecord( $record ) ;
+			}
+		}
+	
+		return $arResult ;
+	}
+
+	// 暗号化キーペアの作成
+	function	createCryptKey()
+	{
+		if ( ( $res = openssl_pkey_new() ) != false )
+		{
+			if ( openssl_pkey_export( $res , $privkey ) == true )
+				echo $privkey ;
+		
+			$pubkey = openssl_pkey_get_details( $res ) ;
+			if ( empty( $pubkey[ "key" ] ) == false )
+				echo $pubkey[ "key" ] ;
+
+			openssl_free_key( $res ) ;
+		}
+	}
+	
+	// 文字列の暗号化
+	function	encrypt( $data )
+	{
+		$privkey = $this -> privkey ;
+		
+		if ( openssl_private_encrypt( $data , $dest , $privkey ) )
+			$data = bin2hex( $dest ) ;
+		return $data ;
+	}
+	
+	// 文字列の復号化
+	function	decrypt( $data )
+	{
+		$pubkey = $this -> pubkey ;
+		
+		$data = pack( "H*" , $data ) ;
+		if ( openssl_public_decrypt( $data , $src , $pubkey ) )
+			$data = $src ;
+		return $data ;
+	}
+
+	// 全角スペース から 半角スペース へ
+	// 全角英数文字 から 半角英数文字 へ
+	// 半角カタカナ から 全角カタカナ へ
+	// 濁点を含むカタカナを 1文字へ
+	function mb2sb_toupper( $data )
+	{
+		// SJIS から EUC へ
+		$data = mb_convert_encoding( $data , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+	
+		// 全角スペース から 半角スペース へ
+		// 全角英数文字 から 半角英数文字 へ
+		// 半角カタカナ から 全角カタカナ へ
+		// 濁点を含むカタカナを 1文字へ
+		$data = mb_convert_kana( $data , "saVK" , DEF_TEMPLATE_ENCODE ) ;
+	
+		// 削除：小文字から 大文字へ
+		$data = mb_strtoupper( $data , DEF_TEMPLATE_ENCODE ) ;
+	
+		// EUC から SJISへ
+		$data = mb_convert_encoding( $data , DEF_INTERNAL_ENCODE , DEF_TEMPLATE_ENCODE ) ;
+	
+		return $data ;
+	}
+
+	// 全角スペース から 半角スペース へ
+	// 全角英数文字 から 半角英数文字 へ
+	// 半角カタカナ から 全角カタカナ へ
+	// 濁点を含むカタカナを 1文字へ
+	function mb2sb( $data )
+	{
+		return $data ;
+		
+		// SJIS から EUC へ
+		$data = mb_convert_encoding( $data , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+	
+		// 全角スペース から 半角スペース へ
+		// 全角英数文字 から 半角英数文字 へ
+		// 半角カタカナ から 全角カタカナ へ
+		// 濁点を含むカタカナを 1文字へ
+		$data = mb_convert_kana( $data , "saVK" , DEF_TEMPLATE_ENCODE ) ;
+	
+		// EUC から SJISへ
+		$data = mb_convert_encoding( $data , DEF_INTERNAL_ENCODE , DEF_TEMPLATE_ENCODE ) ;
+	
+		return $data ;
+	}
+
+	function hira2kana( $data )
+	{
+		// SJIS から EUC へ
+		$data = mb_convert_encoding( $data , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+	
+		// 全角スペース から 半角スペース へ
+		// 全角英数文字 から 半角英数文字 へ
+		// 半角カタカナ から 全角カタカナ へ
+		// 濁点を含むカタカナを 1文字へ
+		$data = mb_convert_kana( $data , "KC" , DEF_TEMPLATE_ENCODE ) ;
+	
+		// EUC から SJISへ
+		$data = mb_convert_encoding( $data , DEF_INTERNAL_ENCODE , DEF_TEMPLATE_ENCODE ) ;
+	
+		return $data ;
+	}
+
+	// 特殊文字対応（マルチバイト対策）
+	function mb_addslashes( $src )
+	{
+		$data = $src ;
+		$data = $this -> mb2sb( $data ) ;
+
+		$enc	= mb_internal_encoding() ;
+		$encrg	= mb_regex_encoding() ;
+
+		$data = mb_convert_encoding( $data , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+
+		mb_internal_encoding( DEF_TEMPLATE_ENCODE ) ;
+		mb_regex_encoding( DEF_TEMPLATE_ENCODE ) ;
+
+		$data = mb_ereg_replace( "'"	, "''"		, $data ) ;
+//		$data = mb_ereg_replace( "\\\\"	, "\\\\"	, $data ) ;
+//		$data = mb_ereg_replace( "%"	, "%%"		, $data ) ;
+		$data = mb_ereg_replace( "_"	, "\_"		, $data ) ;
+//		$data = mb_ereg_replace( "\["	, "\\\["	, $data ) ;
+//		$data = mb_ereg_replace( "\]"	, "\\\]"	, $data ) ;
+
+		mb_internal_encoding( $enc ) ;
+		mb_regex_encoding( $encrg ) ;
+		
+		$data = mb_convert_encoding( $data , DEF_INTERNAL_ENCODE , DEF_TEMPLATE_ENCODE ) ;
+		
+		return $data ;
+	}
+
+	// マルチバイトの文字列置換
+	function	mb_str_replace( $search , $replace , $subject )
+	{
+		$search = mb_convert_encoding( $search , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+		$replace = mb_convert_encoding( $replace , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+		$subject = mb_convert_encoding( $subject , DEF_TEMPLATE_ENCODE , DEF_INTERNAL_ENCODE ) ;
+
+		$subject = str_replace( $search , $replace , $subject ) ;
+		
+		$subject = mb_convert_encoding( $subject , DEF_INTERNAL_ENCODE , DEF_TEMPLATE_ENCODE ) ;
+		
+		return $subject ;
+	}
+
+	//パスワード生成
+	function makePassword( $len = 8 )
+	{
+		$pw = '';
+
+		for ( $i = 0 ; $i < $len ; $i ++ )
+		{
+			$pw = $pw . $this -> makePasswordSub() ;
+		}
+
+		return $pw ;
+	}
+
+	// ランダムなパスワードの生成
+	function makePasswordSub()
+	{
+		$i = 0 ;
+
+		mt_srand( (double)microtime() * 1000000 ) ;
+		$i = mt_rand( 0 , 2 ) ;
+
+		$c = "" ;
+
+		switch ( $i )
+		{
+		case	0 :	// 大文字英文字
+			$c = chr( ord( "A" ) + mt_rand( 0 , 25 ) ) ;
+			break ;
+		case	1 :	// 小文字英文字
+			$c = chr( ord( "a" ) + mt_rand( 0 , 25 ) ) ;
+			break ;
+		case	2 :	// 数字
+			$c = chr( ord( "0" ) + mt_rand( 0 , 9 ) ) ;
+			break ;
+		}
+		return $c ;
+
+	}
+
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		$keys = $this -> searchkey ;
+		
+		if ( $this -> alias != "" )
+		{
+			foreach ( $this -> fields as $value )
+				$keys[] = sprintf( "%s_%s" , $this -> alias , $value ) ;
+		}
+		else
+		{
+			$keys = array_merge( $keys , $this -> fields ) ;
+		}
+
+		$keys = array_merge( $keys , $additional ) ;
+		
+		foreach ( $keys as $value )
+		{
+			global	${ $value } ;
+			if ( isset( $_POST[ $value ] ) )
+				${ $value } = $_POST[ $value ] ;
+			else if ( isset( $_GET[ $value ] ) )
+				${ $value } = $_GET[ $value ] ;
+			else if ( isset( $_COOKIE[ $value ] ) )
+				${ $value } = $_COOKIE[ $value ] ;
+			else
+				${ $value } = "" ;
+			if ( is_array( ${ $value } ) == false )
+				${ $value } = trim( $this -> mb2sb( ${ $value } ) ) ;
+		}
+		
+		// プライマリキーが空白の場合、-1を設定する
+		$primarykey = $this -> primarykey ;
+		if ( $this -> alias != "" )
+			$primarykey = sprintf( "%s_%s" , $this -> alias , $primarykey ) ;
+
+		if ( empty( ${ $primarykey } ) == true )
+			${ $primarykey } = -1 ;
+
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+
+	// パスワードのチェック
+	function	checkPasswordChar( &$passwd )
+	{
+		$result = true ;
+
+		// 使用許可文字列
+		$useOkChar  = "0123456789";
+		$useOkChar .= "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ;
+		$useOkChar .= "abcdefghijklmnopqrstuvwxyz" ;
+		$useOkChar .= "!#$%&'()=~-^@[;],.`{+}_" ;
+
+		$passLen = strlen( $passwd ) ;
+		$useOkLen = strlen( $useOkChar ) ;
+		for ( $i = 0 ; $i < $passLen ;  $i ++ )
+		{
+			// パスワードの一文字を取得
+			$passChar = $passwd[ $i ] ;
+			$result = false;
+			for ( $j = 0 ; $j < $useOkLen ; $j ++ )
+			{
+				// 比較文字列を取得
+				$compareChar = $useOkChar[ $j ] ;
+				
+				if ( $passChar == $compareChar )
+				{
+					$result = true ;
+					break ;
+				}
+				else
+				{
+					$result = false ;
+				}
+			}
+
+			// 文字列が使用許可文字列以外の場合、NG
+			if ( $result == false )
+			{
+				break ;
+			}
+		}
+
+		return $result ;
+	}
+	
+	function	checkPassword( &$passwd , &$crypt_passwd )
+	{
+		$error = "" ;
+		
+		// パスワード
+		if ( empty( $passwd ) == true )
+		{
+			// 暗号化パスワードも空白の場合、自動生成する
+			if ( empty( $crypt_passwd ) == true )
+			{
+				$passwd			= $this -> makePassword() ;
+				$passwd			= $this -> encrypt( $passwd ) ;
+				$crypt_passwd	= $passwd ;
+			}
+			else
+			{
+				$error .= "・パスワードが入力されていません\n" ;
+			}
+		}
+		else if ( $passwd == DEF_DUMMY_PASSWORD )
+		{
+			if ( empty( $crypt_passwd ) == false )
+			{
+				$passwd = $crypt_passwd ;
+			}
+			else
+			{
+				$passwd = "" ;
+				$error .= "・パスワードに使用できない文字が入力されています。\n" ;
+			}
+		}
+		else if ( preg_match( "/[^!-~]+/" , $passwd ) )
+		{
+			$passwd = "" ;
+			$error .= "・パスワードに使用できない文字が入力されています。\n" ;
+		}
+		else
+		{
+			$len = strlen( $passwd ) ;
+			if ( $len < 8 || $len > 16 )
+			{
+				$passwd = "" ;
+				$error .= "・パスワードは8文字以上16文字以下で入力してください。\n" ;
+			}
+			else
+			{
+				$passwd			= $this -> encrypt( $passwd ) ;
+				$crypt_passwd	= $passwd ;
+			}
+		}
+		
+		return $error ;
+	}
+
+	// 郵便番号の入力チェック
+	function	checkZip( &$zip , $zip1 , $zip2 )
+	{
+		$error = "" ;
+		
+		if ( is_numeric( $zip1 ) == true && is_numeric( $zip2 ) == true )
+			$zip = sprintf( "%s-%s" , $zip1 , $zip2 ) ;
+		else
+			$error = "・郵便番号が正しく入力されていません。\n" ; ;
+		return $error ;
+	}
+	
+	// 電話番号の入力チェック
+	function	checkTel( &$tel , $skip , $tel1 , $tel2 , $tel3 )
+	{
+		$error = "" ;
+		
+		if ( $tel1 != "" || $tel2 != "" || $tel3 != "" )
+		{
+			if ( is_numeric( $tel1 ) != true && is_numeric( $tel2 ) != true && is_numeric( $tel3 ) != true )
+				$error = "・電話番号が正しく入力されていません。\n" ;
+			else
+				$tel = sprintf( "%s-%s-%s" , $tel1 , $tel2 , $tel3 ) ;
+		}
+		else if ( $skip != true )
+		{
+			$error = "・電話番号が入力されていません。\n" ;
+		}
+		return $error ;
+	}
+	
+	// 日付の入力チェック
+	// his : dateに時刻がいらない場合はfalse ( date型に対応 )
+	function	checkDate( &$date , $skip , $year , $month = null , $day = null , $his = true , $word = "日付" )
+	{
+		$error = "" ;
+
+		$hour	= 0 ;
+		$min	= 0 ;
+		$sec	= 0 ;
+
+		// 省略が可能か？
+		if ( $skip == true )
+		{
+			// すべて空白なら $dateのデータを使用する
+			if (	$year == "" &&
+					( is_null( $month ) == true || $month == "" ) &&
+					( is_null( $day   ) == true || $day   == "" )
+				)
+			{
+				$obDate	= new DateTime( $date ) ;
+				$year	= intval( $obDate -> format( "Y" ) ) ;
+				$month	= intval( $obDate -> format( "m" ) ) ;
+				$day	= intval( $obDate -> format( "d" ) ) ;
+
+				$hour	= intval( $obDate -> format( "H" ) ) ;
+				$min	= intval( $obDate -> format( "i" ) ) ;
+				$sec	= intval( $obDate -> format( "s" ) ) ;
+			}
+		}
+
+		if ( is_null( $month ) == true )
+			$month = 1 ;
+			
+		if ( is_null( $day ) == true )
+			$day = 1 ;
+
+		if ( is_numeric( $year ) == true && is_numeric( $month ) == true && is_numeric( $day ) == true )
+		{
+			if ( checkdate( $month , $day , $year ) == true )
+			{
+				$obDate = new DateTime( sprintf( "%04d-%02d-%02d %02d:%02d:%02d" , $year , $month , $day , $hour , $min , $sec ) ) ;
+				if( $his == true )
+					$date = $obDate -> format( "'Y-m-d H:i:s'" ) ;
+				else
+					$date = $obDate -> format( "'Y-m-d'" ) ;
+				$result = true ;
+			}
+			else
+			{
+				$error = sprintf( "・指定された%sは正しくありません。\n" , $word ) ;
+			}
+		}
+		else
+		{
+			$error = sprintf( "・%sが正しく入力されていません。\n" , $word ) ;
+		}
+
+		return $error ;
+	}
+
+	// 日付の入力チェック
+	// ymd : dateに日付がいらない場合はfalse ( date型に対応 )
+	function	checkTime( &$date , $skip , $hour , $minutes = null , $second = null , $ymd = true , $word = "時刻" )
+	{
+		$error = "" ;
+
+		// 省略が可能か？
+		if ( $skip == true )
+		{
+			// すべて空白なら $dateのデータを使用する
+			if (	$hour == "" &&
+					( is_null( $minutes ) == true || $minutes == "" ) &&
+					( is_null( $second  ) == true || $second  == "" )
+				)
+			{
+				$obDate		= new DateTime( $date ) ;
+				$hour		= intval( $obDate -> format( "H" ) ) ;
+				$minutes	= intval( $obDate -> format( "i" ) ) ;
+				$second		= intval( $obDate -> format( "s" ) ) ;
+			}
+		}
+
+		if ( is_null( $minutes ) == true )
+			$minutes = 0 ;
+			
+		if ( is_null( $second ) == true )
+			$second = 0 ;
+
+		if ( is_numeric( $hour ) == true && is_numeric( $minutes ) == true && is_numeric( $second ) == true )
+		{
+			if (	( $hour >= 0 && $hour <= 23 ) &&
+					( $minutes >= 0 && $minutes <= 59 ) &&
+					( $second >= 0 && $second <= 59 )
+				)
+			{
+				$obDate = new DateTime() ;
+				$obDate -> setTime( $hour , $minutes , $second ) ;
+				if( $ymd == true )
+					$date = $obDate -> format( "'Y-m-d H:i:s'" ) ;
+				else
+					$date = $obDate -> format( "'H:i:s'" ) ;
+				$result = true ;
+			}
+			else
+			{
+				$error = sprintf( "・指定された%sは正しくありません。\n" , $word ) ;
+			}
+		}
+		else
+		{
+			$error = sprintf( "・%sが正しく入力されていません。\n" , $word ) ;
+		}
+
+		return $error ;
+	}
+
+	// 数値入力チェック
+	function IsNumber( $value , $intUpper , $intUnder )
+	{
+		$result = false ;
+		
+		// 数値チェック
+		if ( is_numeric( $value ) )
+		{
+			// 整数部チェックパターン
+			$pattern = "^[\d|-\d]{0," . $intUpper . "}$" ;
+			
+			//小数部チェックパターン
+			if ( $intUnder > 0 )
+			{
+				$pattern .= "|^[\d|-\d]{0," . $intUpper . "}\.\d{0," . $intUnder . "}$" ;
+			}
+
+			//正規化チェック
+			$result = preg_match( "/" . $pattern ."/" , $value ) ;
+		}
+		return $result ;
+	}
+	
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+		
+		$fields		= $this -> fieldsData ;
+		foreach( $fields as $values )
+		{
+			$name = $alias . "_" . $values[ "name" ] ;
+			$type = $values[ "type" ] ;
+			switch ( $type )
+			{
+			case	"NUMBER" :
+				$arParam[ $name ] = 0 ;
+				break ;
+			case	"NUMBER[]" :
+				$arParam[ $name ] = "'{0}'" ;
+				break ;
+			case	"real" :
+				$arParam[ $name ] = 0.0 ;
+				break ;
+			case	"real[]" :
+				$arParam[ $name ] = "'{0.0}'" ;
+				break ;
+			case	"CHAR" :
+			case	"VARCHAR2" :
+				$arParam[ $name ] = "" ;
+				break ;
+			case	"CHAR[]" :
+			case	"VARCHAR2[]" :
+				$arParam[ $name ] = "'{\"\"}'" ;
+				break ;
+			case	"DATE" :
+				$arParam[ $name ] = sprintf( "%s" , "0001-01-01" ) ;
+				break ;
+			case	"DATE[]" :
+				$arParam[ $name ] = sprintf( "'{\"%s\"}'" , "0001-01-01" ) ;
+				break ;
+			case	"BLOB" :
+				$arParam[ $name ] = "" ;
+				break ;
+			case	"timestamp without time zone" :
+			case	"timestamp with time zone" :
+				$arParam[ $name ] = sprintf( "%s" , DEF_DATE_MIN ) ;
+				break ;
+			case	"timestamp without time zone[]" :
+			case	"timestamp with time zone[]" :
+				$arParam[ $name ] = sprintf( "'{\"%s\"}'" , DEF_DATE_MIN ) ;
+				break ;
+			default :
+				$arParam[ $name ] = "" ;
+			}
+		}
+
+		// 写真データ用のパラメータを初期化する
+		$arImages	= $this -> images ;
+		foreach( $arImages as $name )
+		{
+			$key = $alias . "_" . $name ;
+			$arParam[ $key				] = "" ;
+			$arParam[ $key . "_name"	] = "" ;
+			$arParam[ $key . "_size"	] = "" ;
+			$arParam[ $key . "_type"	] = "" ;
+			$arParam[ $key . "_org"		] = -1 ;
+			$arParam[ $key . "_tmp"		] = -1 ;
+		}
+
+		$arParam[ $keyname					] = -1 ;
+		$arParam[ $alias . "_create_date"	] = "LOCALTIMESTAMP(0)" ;
+		$arParam[ $alias . "_update_date"	] = "LOCALTIMESTAMP(0)" ;
+	}
+
+	//
+	// 画像関連の変数名の初期化
+	function	initImageParam( $arKeys , &$arParam )
+	{
+		global	$_FILES ;
+		global	$_POST ;
+	
+		$alias	= $this -> alias ;
+	
+		$arResult = array() ;
+		foreach( $arKeys as $name )
+		{
+			$keys = $alias . "_" . $name ;
+			
+			// POSTデータに無い場合、ダミーでデータを作成する
+			if ( empty( $_FILES[ $keys . "_img" ] ) == true )
+			{
+				$_FILES[ $keys . "_img" ] = array() ;
+				$_FILES[ $keys . "_img" ][ "tmp_name" ] = "" ;
+				$_FILES[ $keys . "_img" ][ "name" ] = "" ;
+				$_FILES[ $keys . "_img" ][ "size" ] = "" ;
+				$_FILES[ $keys . "_img" ][ "type" ] = "" ;
+			}
+			
+			if ( empty( $_POST[ $keys ] ) == true )
+				$_POST[ $keys ] = -1 ;
+	
+			if ( empty( $_POST[ $keys . "_org" ] ) == true )
+				$_POST[ $keys . "_org" ] = -1 ;
+
+			if ( empty( $_POST[ $keys . "_org_name" ] ) == true )
+				$_POST[ $keys . "_org_name" ] = "" ;
+			
+			if ( empty( $_POST[ $keys . "_tmp" ] ) == true )
+				$_POST[ $keys . "_tmp" ] = -1 ;
+			
+			$arResult[ $keys	 				] = $_POST[ $keys					] ;
+			$arResult[ $keys . "_org"			] = $_POST[ $keys . "_org"			] ;
+			$arResult[ $keys . "_org_name"		] = $_POST[ $keys . "_org_name"		] ;
+			$arResult[ $keys . "_tmp"			] = $_POST[ $keys . "_tmp"			] ;
+	
+			$arResult[ $keys . "_img"			] = $_FILES[ $keys . "_img"			][ "tmp_name"	] ;
+			$arResult[ $keys . "_img_name"		] = $_FILES[ $keys . "_img"			][ "name"		] ;
+			$arResult[ $keys . "_img_size"		] = $_FILES[ $keys . "_img"			][ "size"		] ;
+			$arResult[ $keys . "_img_type"		] = $_FILES[ $keys . "_img"			][ "type"		] ;
+	                                                                      
+			$arParam[ $keys 					] = $arResult[ $keys				] ;
+			$arParam[ $keys . "_org"			] = $arResult[ $keys . "_org"		] ;
+			$arParam[ $keys . "_org_name"		] = $arResult[ $keys . "_org_name"	] ;
+			$arParam[ $keys . "_tmp"			] = $arResult[ $keys . "_tmp"		] ;
+	                                                
+			$arParam[ $keys . "_img"			] = $arResult[ $keys . "_img"		] ;
+			$arParam[ $keys . "_img_name"		] = $arResult[ $keys . "_img_name"	] ;
+			$arParam[ $keys . "_img_size"		] = $arResult[ $keys . "_img_size"	] ;
+			$arParam[ $keys . "_img_type"		] = $arResult[ $keys . "_img_type"	] ;
+		}
+	
+		if ( empty( $_POST[ "del_column" ] ) == true )
+			$_POST[ "del_column" ] = -1 ;
+	
+		if ( empty( $_POST[ "del_photoid" ] ) == true )
+			$_POST[ "del_photoid" ] = -1 ;
+	
+		$arResult[ "del_column"		] =	$_POST[ "del_column"		] ;
+		$arResult[ "del_photoid"	] = $_POST[ "del_photoid"		] ;
+		$arParam[ "del_column"		] =	$arResult[ "del_column"		] ;
+		$arParam[ "del_photoid"		] = $arResult[ "del_photoid"	] ;
+	
+		return $arResult ;
+	}
+
+	// 画像ファイルが登録されているかどうかをチェックする
+	function issetImage( $arParam )
+	{
+		$result = false ;
+		
+		$alias		= $this -> alias ;
+
+		$arImages = $this -> images ;
+		foreach( $arImages as $name )
+		{
+			$key = $alias . "_" . $name . "_org" ;
+			if ( $arParam[ $key ] != -1 )
+				$result = true ;
+		}
+		
+		return $result ;
+	}
+
+	// 内部パラメータの作成
+	function makeParam( &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		foreach( $fields as $name )
+		{
+			global	${ $alias . "_" . $name } ;
+			$arParam[ $alias . "_" . $name ] = ${ $alias . "_" . $name } ;
+		}
+		
+		$arImages	= $this -> images ;
+		$arResult	= $this -> initImageParam( $arImages , $arParam ) ;
+		$keys = array_keys( $arResult ) ;
+		foreach( $arResult as $keys => $values )
+		{
+			${ $keys } = $values ;
+			$arParam[ $keys ] = ${ $keys } ;
+		}
+	}
+
+	//
+	// 各クラスで実装する為、基本はエラーを返す
+	//
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$error  = "" ;
+		$error .= "・データベースに異常があります。\n" ;
+		
+		return $error ;
+	}
+	
+	//
+	// 新規データ登録
+	//
+	function insertData( &$arParam , $bPrimarykey = false )
+	{
+		$tname		= $this -> tname ;
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		// プライマリキーを書き込む場合はtrue
+		if ( $bPrimarykey == false )
+			$arParam[ $keyname ] = -1 ;
+
+		$result = false ;
+		if ( $this -> isOpen() )
+		{
+			$error = $this -> checkData( "append" , "database" , $arParam ) ;
+			if ( empty( $error ) == true )
+			{
+				$arParam[ $alias . "_CREATE_DATE"	] = "LOCALTIMESTAMP(0)" ;
+				$arParam[ $alias . "_UPDATE_DATE"	] = "LOCALTIMESTAMP(0)" ;
+				
+				$arImages = $this -> images ;
+				foreach( $arImages as $name )
+					$arParam[ $alias . "_" . $name ] = $arParam[ $alias . "_" . $name . "_tmp" ] ;
+				
+				// データ挿入
+				$fields = "" ;
+				$values = "" ;
+				foreach( $this -> fieldsData as $arFields )
+				{
+					if ( is_array( $arFields ) && ( $arFields[ "name" ] != $primarykey || $bPrimarykey ==true ) )
+					{
+						$name	= $arFields[ "name"		] ;
+						$type	= $arFields[ "type"		] ;
+						$format	= $arFields[ "format"	] ;
+						
+						if ( $type != "" && isset( $arParam[ $alias . "_" . $name ] ) )
+						{
+							if ( $fields != "" )
+								$fields .= " , " ;
+							$fields .= sprintf( "%s" , $name ) ;
+
+							if ( $values != "" )
+								$values .= " , " ;
+							if ( $type == "CHAR" || $type == "VARCHAR2" )
+								$values .= sprintf( $format , $this -> mb_addslashes( $arParam[ $alias . "_" . $name ] ) ) ;
+							else
+								$values .= sprintf( $format , $arParam[ $alias . "_" . $name ] ) ;
+						}
+					}
+				}
+				
+				$sql  = sprintf( "INSERT INTO %s ( %s ) VALUES ( %s ) " , $this -> tname , $fields , $values ) ;
+
+				$record = $this -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					$this -> closeRecord( $record ) ;
+					$result = true ;
+				}
+			}
+		}
+
+		return $result ;
+	}
+	
+	//
+	// 既存データ更新
+	//
+	function updateData( $arParam , $topics_kind = -1 , $topics_caption = "" , $arWhere = array() )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		foreach( $arWhere as $keys => $values )
+			${ $keys } = $values ;
+
+		$result = false ;
+		if ( $this -> isOpen() )
+		{
+			$error = $this -> checkData( "update" , "database" , $arParam ) ;
+
+			if ( empty( $error ) == true )
+			{
+				$arParam[ $alias . "_UPDATE_DATE"	] = "LOCALTIMESTAMP(0)" ;
+	
+				if ( empty( $arParam[ $alias . "_CREATE_DATE"	] ) == false )
+					$arParam[ $alias . "_CREATE_DATE"	] = sprintf( "'%s'" , $arParam[ $alias . "_CREATE_DATE"	] ) ;
+	
+				// データ更新
+				$sql  = sprintf( "UPDATE %s %s SET " , $this -> tname , $alias ) ;
+				
+				$values = "" ;
+				foreach( $this -> fieldsData as $arFields )
+				{
+					if ( is_array( $arFields ) && $arFields[ "name" ] != $primarykey && $arFields[ "name" ] != "CREATE_DATE" )
+					{
+						$name	= $arFields[ "name"		] ;
+						$type	= $arFields[ "type"		] ;
+						$format	= $arFields[ "format"	] ;
+						
+						if ( $type != "" && isset( $arParam[ $alias . "_" . $name ] ) )
+						{
+							$format = sprintf( "%s = %s" , $name , $format ) ;
+							if ( $values != "" )
+								$values .= " , " ;
+							if ( $type == "CHAR" || $type == "VARCHAR2" )
+								$values .= sprintf( $format , $this -> mb_addslashes( $arParam[ $alias . "_" . $name ] ) ) ;
+							else
+								$values .= sprintf( $format , $arParam[ $alias . "_" . $name ] ) ;
+						}
+					}
+				}
+				
+				$sql .= $values ;
+				$sql .= " " ;
+
+				$where = "" ;
+				if ( count( $arWhere ) > 0 )
+				{
+					foreach( $this -> fieldsData as $fields )
+					{
+						if ( empty( $fields[ "type" ] ) == false && empty( $arWhere[ $fields[ "name" ] ] ) == false )
+						{
+							$format = sprintf( "AND %s.%%s = %s " , $alias , $fields[ "format" ] ) ;
+							switch( $fields[ "type" ] )
+							{
+							case 'CHAR' :
+							case 'VARCHAR2' :
+								$where .= sprintf( $format ,	$fields[ "name" ] ,
+															$this -> mb_addslashes( $arWhere[ $fields[ "name" ] ] ) ) ;
+								break ;
+							default :
+								$where .= sprintf( $format ,	$fields[ "name" ] ,
+															$arWhere[ $fields[ "name" ] ] ) ;
+							}
+						}
+					}
+					
+					if ( empty( $arWhere[ "where" ] ) == false )
+					{
+						$where .= $arWhere[ "where" ] ;
+					}
+				}
+				else
+				{
+					$where .= sprintf( "AND %s.%s = %d " , $alias , $primarykey , $arParam[ $keyname ] ) ;
+				}
+				
+				$sql = $this -> setWhere( $sql , $where ) ;
+
+				$record = $this -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					$this -> closeRecord( $record ) ;
+					$result = true ;
+				}
+			}
+		}
+		
+		return $result ;
+	}
+	
+	//
+	// 既存データ削除
+	//
+	function deleteData( $arParam , $topics_kind = -1 , $topics_caption = "" , $arWhere = array() )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		$result = false ;
+		if ( $this -> isOpen() )
+		{
+			// データ更新
+			$sql  = sprintf( "UPDATE %s %s SET " , $this -> tname , $alias ) ;
+			$sql .= sprintf( "%s = %d , " , $primarykey , $arParam[ $keyname ] * -1 ) ;
+			$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+
+			$where = "" ;
+			if ( count( $arWhere ) > 0 )
+			{
+				foreach( $this -> fieldsData as $fields )
+				{
+					if ( empty( $fields[ "type" ] ) == false && empty( $arWhere[ $fields[ "name" ] ] ) == false )
+					{
+						$format = sprintf( "AND %s.%%s = %s " , $alias , $fields[ "format" ] ) ;
+						switch( $fields[ "type" ] )
+						{
+						case 'CHAR' :
+						case 'VARCHAR2' :
+							$where .= sprintf( $format ,	$fields[ "name" ] ,
+														$this -> mb_addslashes( $arWhere[ $fields[ "name" ] ] ) ) ;
+							break ;
+						default :
+							$where .= sprintf( $format ,	$fields[ "name" ] ,
+														$arWhere[ $fields[ "name" ] ] ) ;
+						}
+					}
+				}
+				
+				if ( empty( $arWhere[ "where" ] ) == false )
+				{
+					$where .= $arWhere[ "where" ] ;
+				}
+			}
+			else
+			{
+				$where .= sprintf( "AND %s.%s = %d " , $alias , $primarykey , $arParam[ $keyname ] ) ;
+			}
+
+			$sql = $this -> setWhere( $sql , $where ) ;
+
+			$record = $this -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				$this -> closeRecord( $record ) ;
+				$result = true ;
+			}
+		}
+		
+		return $result ;
+	}
+	
+	// DBからの完全消去をする
+	function	destroyData( $id , $arWhere = array() )
+	{
+		$result = false ;
+		
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		if ( $this -> isOpen() )
+		{
+			if ( $id != -1 || count( $arWhere ) > 0 )
+			{
+				$sql  = sprintf( "DELETE FROM %s %s " , $this -> tname , $alias ) ;
+				
+				$where = "" ;
+				if ( count( $arWhere ) > 0 )
+				{
+					foreach( $this -> fieldsData as $fields )
+					{
+						if ( empty( $fields[ "type" ] ) == false && empty( $arWhere[ $fields[ "name" ] ] ) == false )
+						{
+							$format = sprintf( "AND %s.%%s = %s " , $alias , $fields[ "format" ] ) ;
+							switch( $fields[ "type" ] )
+							{
+							case 'CHAR' :
+							case 'VARCHAR2' :
+								$where .= sprintf(	$format ,
+													$fields[ "name" ] ,
+													$this -> mb_addslashes( $arWhere[ $fields[ "name" ] ] ) ) ;
+								break ;
+							default :
+								$where .= sprintf(	$format ,
+													$fields[ "name" ] ,
+													$arWhere[ $fields[ "name" ] ] ) ;
+							}
+						}
+					}
+					
+					if ( empty( $arWhere[ "where" ] ) == false )
+					{
+						$where .= $arWhere[ "where" ] ;
+					}
+				}
+				else
+				{
+					$where .= sprintf( "AND %s.%s = %d " , $alias , $primarykey , $id ) ;
+				}
+
+				$sql = $this -> setWhere( $sql , $where ) ;
+
+				$record = $this -> executeSQL( $sql ) ;
+				if ( $record )
+				{
+					$this -> closeRecord( $record ) ;
+					$result = true ;
+				}
+			}
+		}
+		
+		return $result ;
+	}
+
+	function	setRownum( $sql , $fields , $order , $group = "" )
+	{
+		if ( empty( $fields ) == false )
+			$fields .= ", " ;
+			
+		$result = sprintf( "SELECT %s ROW_NUMBER() OVER (%s) ROWNUMBER %s %s" , $fields , $order , $sql , $group ) ;
+		return $result ;
+	}
+	
+	function	setWhere( $sql , $where )
+	{
+		$result = $sql ;
+		
+		if ( empty( $where ) != true )
+		{
+			$where = preg_replace( "/AND/" , "WHERE" , $where , 1 ) ;
+			$result = sprintf( "%s%s " , $sql , $where ) ;
+		}
+		return $result ;
+	}
+	
+	function	setLimit( $sql , $page , $per_page )
+	{
+		$result = $sql ;
+		
+		if ( $page != -1 )
+		{
+			$result  = sprintf( "SELECT * FROM ( %s ) " , $sql ) ;
+			$result .= sprintf( "WHERE ROWNUMBER BETWEEN %d AND %d " , ( $page * $per_page ) + 1 , $per_page + ( $page * $per_page ) ) ;
+		}
+		return $result ;
+	}
+}
+?>

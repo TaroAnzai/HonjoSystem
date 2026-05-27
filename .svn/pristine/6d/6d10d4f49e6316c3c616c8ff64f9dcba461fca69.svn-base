@@ -1,0 +1,115 @@
+/*
+-------------------------------------------------------------------------------
+	Category
+-------------------------------------------------------------------------------
+*/
+
+div.categoryTree
+{
+	text-align : left ;
+	margin : 8px 0px ;
+	padding-left : 16px ;
+}
+
+div.categoryTree ul
+{
+	list-style : none ;
+	margin : 0px ;
+	padding : 0px ;
+}
+
+div.categoryTree ul li
+{
+	clear : both ;
+	display : block ;
+}
+
+div.categoryTree ul li.categorySub
+{
+	display : none ;
+	padding-left : 32px ;
+}
+
+div.categoryTree ul:after ,
+div.categoryTree ul li:after
+{
+	content : "." ;
+	display : block ;
+	height : 0px ;
+	clear : both ;
+	visibility : hidden ;
+}
+* html div.categoryTree ul ,
+* html div.categoryTree ul li
+{
+	height : 1% ;
+}
+
+div.categoryOpen ,
+div.categoryClose ,
+div.categoryPoint ,
+div.categoryRiseup ,
+div.categoryRiseupDisabled ,
+div.categoryFalldown ,
+div.categoryFalldownDisabled ,
+div.categoryDeny ,
+div.categorySubject1 ,
+div.categorySubject2 ,
+div.categorySubject3 ,
+div.categorySubject4 ,
+div.categoryArrow
+{
+	display : block ;
+	float : left ;
+	width : 18px ;
+}
+
+div.categorySubject1	{	width :	768px ;		}
+div.categorySubject2	{	width :	736px ;		}
+div.categorySubject3	{	width :	704px ;		}
+div.categorySubject4	{	width :	672px ;		}
+
+div.categorySubject1	p ,
+div.categorySubject2	p ,
+div.categorySubject3	p ,
+div.categorySubject4	p
+{
+	line-height : 24px ;
+	vertical-align : middle ;
+	border-bottom : #ccc dotted 1px ;
+	padding : 0px 8px ;
+}
+
+div.categoryArrow
+{
+	display : none ;
+	visibility : hidden ;
+}
+
+div.categoryOpen 				a ,
+div.categoryClose 				a ,
+div.categoryPoint 				p ,
+div.categoryRiseup 				a ,
+div.categoryRiseupDisabled 		p ,
+div.categoryFalldown 			a ,
+div.categoryFalldownDisabled	p ,
+div.categoryDeny				p
+{
+	display : block ;
+	width : 18px ;
+	height : 22px ;
+	font-size : 1px ;
+	text-indent : -9999px ;
+}
+
+div.categoryOpen			 	a		{	background : #fff url("/admin/img/open.gif")             no-repeat center center ;	}
+div.categoryClose			 	a		{	background : #fff url("/admin/img/close.gif")            no-repeat center center ;	}
+div.categoryPoint 				p		{	background : #fff url("/admin/img/point.gif")            no-repeat center center ;	}
+
+div.categoryRiseup 				a		{	background : #fff url("/admin/img/riseup.gif")           no-repeat center center ;	}
+div.categoryRiseupDisabled 		p		{	background : #fff url("/admin/img/riseupDisabled.gif")   no-repeat center center ;	}
+div.categoryFalldown 			a		{	background : #fff url("/admin/img/falldown.gif")         no-repeat center center ;	}
+div.categoryFalldownDisabled 	p		{	background : #fff url("/admin/img/falldownDisabled.gif") no-repeat center center ;	}
+div.categoryDeny			 	p		{	background : #fff url("/admin/img/deny.gif")             no-repeat center center ;	}
+
+div.categoryClose						{	display : none ;	}

@@ -1,0 +1,41 @@
+<?php
+/**
+* BLAMS 基本関数郡 Twitter用クラス
+*
+* Twitter用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+define( "DEF_TWITTER_CUSTOMER_KEY"		, "yyAa8AtavbV8Kb6Cr6MDw" ) ;
+define( "DEF_TWITTER_CUSTOMER_SECRET"	, "YCaU3dFfZzTPrhGQmeD86rQxOVxBKlmLnWvN73lzgk" ) ;
+define( "DEF_TWITTER_CUSTOMER_CALLBACK"	, "http://blazinghills.com/blams2tweet/" ) ;
+
+require_once "Services/Twitter.php";
+require_once "HTTP/OAuth/Consumer.php" ;
+require_once "social.class.php" ;
+
+class PARTS_Social extends PARTS_Social
+{
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "top_data" ;
+		$alias		= "tp" ;
+		$primarykey	= "topid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_TOP ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$arParam[ "type" ] = DEF_SOCIALTYPE_TWITTER ;
+		return getData( $arParam , $page , $per_page ) ;
+	}
+}
+?>

@@ -1,0 +1,81 @@
+<?php
+	require_once( "../../../lib/system.php") ;
+
+	$blams		= new BLAMS() ;
+	$obMember	= new PARTS_Member() ;
+
+	$menu = FUNC_MEMBER ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+
+	$refresh = false ;
+	$msg = "" ;
+	clearstatcache() ;
+	if ( file_exists( $xls ) == TRUE )
+	{
+		// ファイルが存在をする場合、リンクを表示する
+		$msg = "finish" ;
+		unlink( $tmp ) ;
+	}
+	else
+	{
+		$func = 0 ;
+		clearstatcache() ;
+		if ( file_exists( $tmp ) == TRUE )
+		{
+			$fp = fopen( $tmp , "r" ) ;
+			if ( $fp )
+			{
+				$func = fgets( $fp ) ;
+				$process = fgets( $fp ) ;
+				fclose( $fp ) ;
+			}
+		}
+
+		switch ( $func )
+		{
+		case	0 ;
+			$proc = shell_exec( "ps -ef | grep csvout_background." ) ;
+			if ( strstr( $proc , "csvout_background.php" ) === FALSE )
+			{
+				$msg = sprintf( "集計ソフトの起動中に失敗しました。" ) ;
+				unlink( $tmp ) ;
+			}
+			else
+			{
+				$refresh = true ;
+				$msg = sprintf( "集計ソフトの起動中です。" ) ;
+			}
+
+			break ;
+
+		case	1 ;	// データの集計
+			$refresh = true ;
+			$msg = sprintf( "%sを読み出してます。: %s " , $funcname , $process ) ;
+			break ;
+
+		case	2 ;	// XLSの作成中
+			$refresh = true ;
+			$msg = sprintf( "%sデータの集計中です。: %s " , $funcname , $process ) ;
+			break ;
+
+		case	3 ;	// XLSの作成中
+			$refresh = true ;
+			$xlsfile = str_replace( "/tmp/" , "" , $xls ) ;
+			$msg = sprintf( "%s の作成を待っています" , $xlsfile ) ;
+			break ;
+
+		case	99 ;	// 集計エラー
+			$msg = sprintf( "該当するデータがありません" ) ;
+			break ;
+		}
+	}
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "refresh"		, $refresh		) ;
+	$tmpl -> assign( "msg"			, $msg			) ;
+	$data = $tmpl -> fetch( "common/csv_inline.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	printf( "%s" , $data ) ;
+	exit ;
+?>

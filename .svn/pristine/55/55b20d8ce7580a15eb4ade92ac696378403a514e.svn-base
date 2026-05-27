@@ -1,0 +1,231 @@
+<?php
+	require_once( "../../../lib/system.php") ;
+	require_once( "class/member_corp.class.php" ) ;
+	require_once( "class/mpdf.class.php") ;
+
+//	ini_set( "display_errors" , 0 ) ;
+	error_reporting( E_ALL ^ E_NOTICE ) ;
+
+	define( "MAX_COL"				,	2 ) ;
+//	define( "MAX_COL_WIDTH"			,	140.4 ) ;
+	define( "MAX_ROW_HEIGHT"		,	23.5 ) ;
+	define( "MAX_SPACE_WIDTH"		,	 8.7 ) ;
+	define( "MAX_SPACE_HEIGHT"		,	10.2 ) ;
+
+	// 基本パラメータ変換
+	if ( !isset( $mode ) )
+		$mode = "update" ;
+
+	if ( !isset( $page ) )
+		$page = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams		= new BLAMS() ;
+	$obMember	= new PARTS_Member() ;
+
+	$alias 		= $obMember -> alias ;
+	$primarykey	= $obMember -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	$additional = array() ;
+	$additional[] =  "S_MEMBERID" ;
+	$obMember -> assignGlobal( $additional ) ;
+
+	$menu = FUNC_MEMBER ;
+
+	if( $S_MEMBERID == "" )
+		$S_MEMBERID = ${ $keyname } ;
+
+	$arParamFind[ "S_MEMBERID" ] = $S_MEMBERID ;
+
+	$arData = array() ;
+	if ( $S_MEMBERID != -1 )
+	{
+		$arData	= $obMember -> getAt( $S_MEMBERID ) ;
+
+		if( count( $arData ) == 0 )
+		{
+			PrintNoData( $blams , $arParamFind ) ;
+		}
+		else
+		{
+			PrintPDF( $arData , $arParamFind ) ;
+		}
+	}
+	else
+	{
+		PrintNoData( $blams , $arParamFind ) ;
+	}
+
+	exit ;
+
+function	PrintNoData( $blams , &$arParamFind )
+{
+	global $menu ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	// リスト表示
+	$data = FetchNoList( $blams , $funcname , $arParamFind ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents ) ;
+}
+
+//
+// データの表示
+//
+function	FetchNoList( $blams , $funcname , &$arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$arHeader = array(
+		array( "caption" => "ログインID"		, "class" => "w128 left" ) ,
+		array( "caption" => "名前"				, "class" => "w160 left" ) ,
+		array( "caption" => "カナ"				, "class" => "w160 left" ) ,
+		array( "caption" => "e-mail"			, "class" => "w224 left" ) ,
+		array( "caption" => "現住所"			, "class" => "w080 left" ) ,
+		array( "caption" => "未収金"			, "class" => "w064 left" ) ,
+	) ;
+
+	if( empty( $search ) == true )
+		$search = "" ;
+
+	if( empty( $paging ) == true )
+		$paging = "" ;
+
+	if( empty( $pageJump ) == true )
+		$pageJump = "" ;
+
+	if( empty( $funcname ) == true )
+		$funcname = "" ;
+
+	$arList = array() ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, ""				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, false				) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+function	PrintPDF( $arParam , $arParamFind )
+{
+	global $obMember ;
+	global $blams ;
+	$alias 		= $obMember -> alias ;
+
+	$username = "メリテック" ;
+
+	$obCorp = new PARTS_Corp() ;
+	$arCorp = $obCorp -> getOwner() ;
+
+	$pdf = new PDF_Template( "P" , "A4" , DEF_DEFAULT_TEMPLATENAME , "member" ) ;
+
+	$pdf -> SetCreator( $username ) ;
+
+	$pdf -> arCorp = $arCorp[ 0 ] ;
+	$pdf -> layout[ "font_size" ]	= 10 ;
+
+	$pdf -> header[ "margin" ][ 0 ]	= 4 ;
+	$pdf -> header[ "size" ][ 1 ]	= 52 ;
+	$pdf -> header[ "font_size" ]	= 6 ;
+
+	$pdf -> footer[ "margin" ][ 0 ]	= 4 ;
+	$pdf -> footer[ "margin" ][ 2 ]	= 4 ;
+	$pdf -> footer[ "size" ][ 1 ]	= 8 ;
+	$pdf -> footer[ "font_size" ]	= 6 ;
+
+	$pdf -> init( true , true ) ;
+
+	$pdf -> setTitle( "会員登録のご案内" ) ;
+	$pdf -> setCreator( $username ) ;
+
+	$pdf -> AddPage();
+
+	$pdf -> setTitleLine( "会員登録のご案内" , 0 ,  0 , 6 , "pdf_title.tmpl" ) ;
+
+	$sub_line = 8 ;
+	$title = sprintf( "ご登録ありがとうございます。\nご登録いただきました内容を記載いたしますのでご確認ください。" ) ;
+	$pdf -> setTitleLine( $title , 0 , $sub_line , 3  , "pdf_subtitle.tmpl" ) ;
+
+	if( $arParam[ $alias . "_name" ] == "仮登録" )
+		$arParam[ $alias . "_name" ] = "" ;
+
+	// 住所
+	global	$arState ;
+	if( $arParam[ $alias . "_state" ] == -1 )
+	{
+		$szAddress = "" ;
+	}
+	else
+	{
+		$szAddress  = $arState[ $arParam[ $alias . "_state" ] ][ 2 ] ;
+		$szAddress .= $arParam[ $alias . "_city" ] ;
+		$szAddress .= $arParam[ $alias . "_addr1" ] ;
+		$szAddress .= "　" ;
+		$szAddress .= $arParam[ $alias . "_addr2" ] ;
+		$szAddress = sprintf( "〒%s-%s　%s" , $arParam[ $alias . "_zip1" ] , $arParam[ $alias . "_zip2" ] , $szAddress ) ;
+	}
+	$arParam[ "szAddress" ] = $szAddress ;
+
+	global	$_SERVER ;
+	$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+	$NRML = sprintf( "http://%s" , $SERVER_NAME ) ;
+
+	$register_url  = "" ;
+//	$register_url .= sprintf( "%s/member/true_register.php" , $NRML ) ;
+	$register_url .= sprintf( "%s/index.html" , $NRML ) ;
+
+	$arParam[ sprintf( "%s_passwd" , $alias ) ] = $obMember -> decrypt( $arParam[ sprintf( "%s_passwd" , $alias ) ] ) ;
+
+	$x = 0 ;
+	$y = 30 ;
+	$x = $x + $pdf -> layout[ "margin" ][ 1 ] ;
+	$y = $y + $pdf -> layout[ "margin" ][ 0 ] ;
+
+	$pdf -> setXY( $x , $y , false ) ;
+
+	$tmpl = new HTML_template( $pdf -> tmpl ) ;
+	$tmpl -> assign( "url"	, $register_url ) ;
+	$tmpl -> assign( "data"	, $arParam ) ;
+	$data = $tmpl -> fetch( "member/pdf_tempmember.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	$pdf -> setFont( $pdf -> inner[ "font_family" ] , "" , $pdf -> inner[ "font_size" ]  ) ;
+	$pdf -> writeHTMLEncoding( $data ) ;
+	unset( $tmpl ) ;
+
+	$pdf -> EndPage() ;
+
+	$filename = sprintf( "pdf_member_%s.pdf" , $arParam[ $alias . "_loginid" ] ) ;
+	$pdf -> Output( $filename , "I" ) ;
+}
+
+
+?>

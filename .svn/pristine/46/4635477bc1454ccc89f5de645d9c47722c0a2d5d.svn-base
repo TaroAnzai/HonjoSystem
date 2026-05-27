@@ -1,0 +1,1295 @@
+<?php
+/*
+* BLAMS
+*
+* 基本関数郡<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+	//ini_set( "display_errors" , 1 ) ;
+	require_once( "blams.ini.php" )  ;
+	require_once( "user.ini.php" )  ;
+
+	// サーバ名に関する設定
+	$SERVER_NAME = "" ;
+	if ( defined( "SERVER_NAME" ) == true )
+	{
+		$SERVER_NAME = SERVER_NAME ;
+	}
+	else
+	{
+		if ( empty( $_SERVER[ 'SERVER_NAME' ] ) == false )
+			$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+		else if ( empty( $ENV[ "HOSTNAME" ] ) == false )
+			$SERVER_NAME = $ENV[ "HOSTNAME" ] ;
+		
+		if (  empty( $SERVER_NAME ) !== false )
+			$SERVER_NAME = exec( "/bin/hostname -f" ) ;
+
+		define( "SERVER_NAME" ,	$SERVER_NAME ) ;
+	}
+
+	// 各クラスの読込み
+	require_once( "font.ini.php" )  ;
+
+//	require_once( "PHPExcel/PHPExcel.php" )  ;
+//	require_once( "PHPExcel/PHPExcel/IOFactory.php" )  ;
+
+	require_once( "class/blams.class.php" )  ;
+
+	require_once( 'class/template.class.php' ) ;
+	require_once( "class/db.class.php" )  ;
+
+	require_once( "class/admin.class.php" )  ;
+	require_once( "class/area.class.php" )  ;
+	require_once( "class/banner.class.php" )  ;
+	require_once( "class/campaign.class.php" )  ;
+	require_once( "class/cart.class.php" )  ;
+	require_once( 'class/cartitem.class.php' ) ;
+	require_once( 'class/category.class.php' ) ;
+	require_once( 'class/config.class.php' ) ;
+	require_once( 'class/corp.class.php' ) ;
+	require_once( 'class/event.class.php' ) ;
+	require_once( 'class/history.class.php' ) ;
+	require_once( 'class/link.class.php' ) ;
+	require_once( 'class/mail.class.php' ) ;
+	require_once( 'class/mailmag.class.php' ) ;
+	require_once( 'class/member.class.php' ) ;
+	require_once( 'class/menu.class.php' ) ;
+	require_once( 'class/merchandise.class.php' ) ;
+	require_once( 'class/merchandise_master.class.php' ) ;
+	require_once( 'class/mpdf.class.php' ) ;
+	require_once( 'class/occupation.class.php' ) ;
+	require_once( 'class/officer.class.php' ) ;
+	require_once( 'class/partner.class.php' ) ;
+	require_once( 'class/permission.class.php' ) ;
+	require_once( 'class/photo.class.php' ) ;
+	require_once( 'class/price.class.php' ) ;
+	require_once( 'class/product.class.php' ) ;
+	require_once( 'class/recruit.class.php' ) ;
+	require_once( 'class/report.class.php' ) ;
+	require_once( 'class/serialno.class.php' ) ;
+	require_once( 'class/session.class.php' ) ;
+	require_once( 'class/top.class.php' ) ;
+	require_once( 'class/topics.class.php' ) ;
+	require_once( 'class/weather.class.php' ) ;
+	require_once( 'class/webpage.class.php' ) ;
+	require_once( 'class/zipcode.class.php' ) ;
+
+	/** Error reporting */
+	if ( defined( "DEF_ERROR_LEVEL" ) == true )
+		error_reporting( DEF_ERROR_LEVEL ) ;
+
+	// エリア情報の初期化
+	GetStateData() ;
+
+	// サイト管理者情報の初期化
+	GetAdminCategory() ;
+
+	// 役職情報の初期化
+	GetOfficerCategory() ;
+
+	// リンクカテゴリーの初期化
+	GetLinkCategory() ;
+
+	// テンプレートスタイルの取得
+	GetStyleData() ;
+	
+	GetEmailSettings() ;
+
+	GetConfigSettings() ;
+
+function GetStandardMenu( $category1 = DEF_CATEGORY_STANDARD )
+{
+	$arNavi = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = sprintf( "SELECT * , " ) ;
+		$sql .= sprintf( "category_data.category1 AS c_c1     , " ) ;
+		$sql .= sprintf( "category_data.category2 AS c_c2     , " ) ;
+		$sql .= sprintf( "category_data.category3 AS c_c3     , " ) ;
+		$sql .= sprintf( "category_data.status    AS c_status , " ) ;
+		$sql .= sprintf( "menu_data.category1     AS m_c1     , " ) ;
+		$sql .= sprintf( "menu_data.category2     AS m_c2     , " ) ;
+		$sql .= sprintf( "menu_data.category3     AS m_c3     , " ) ;
+		$sql .= sprintf( "menu_data.status        AS m_status   " ) ;
+		$sql .= sprintf( "FROM category_data " ) ;
+		$sql .= sprintf( "LEFT JOIN menu_data ON category_data.categoryid = menu_data.menucategoryid " ) ;
+		$sql .= sprintf( "WHERE category_data.status = 1 " ) ;
+		$sql .= sprintf( "AND category_data.kind = %d " , DEF_CATEGORY_MENU ) ;
+		$sql .= sprintf( "AND category_data.category1 = %d " , $category1 ) ;
+		$sql .= sprintf( "AND menu_data.menuid IS NOT NULL " ) ;
+		$sql .= sprintf( "AND menu_data.status = 1 " ) ;
+		$sql .= sprintf( "AND menu_data.category1 > 0 " ) ;
+		$sql .= sprintf( "AND menu_data.category2 = 0 " ) ;
+		$sql .= sprintf( "AND menu_data.category3 = 0 " ) ;
+		$sql .= sprintf( "ORDER BY category_data.category1 , menu_data.category1 , menu_data.category2 , menu_data.category3 " ) ;
+	
+		$result = $obDB -> executeSQL( $sql ) ;
+		if ( $result )
+		{
+			$cnt = $obDB -> getDataCount( $result ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = $obDB -> getValues( $result , $i ) ;
+				$anchor			= $arData[ "anchor"		] ;
+				$url			= $arData[ "url"		] ;
+				$class			= $arData[ "class"		] ;
+				$subject		= $arData[ "subject"	] ;
+				$standard		= $arData[ "standard"	] ;
+
+				$arDetail[ "anchor"		] = $anchor		;
+				$arDetail[ "url"		] = $url		;
+				$arDetail[ "class"		] = $class		;
+				$arDetail[ "subject"	] = $subject	;
+				$arDetail[ "standard"	] = $standard	;
+				$arNavi[] = $arDetail ;
+			}
+			$obDB -> closeRecord( $result ) ;
+		}
+		
+	}
+	
+	return $arNavi ;
+}
+
+// 管理画面の機能番号の取得
+function GetSystemMode( &$mode , &$func , $arMode )
+{
+	$mode = "" ;
+	$func = "" ;
+
+	$arForm  = $_GET ;
+	$arForm += $_POST ;
+
+	if ( isset( $_SESSION ) )
+		$arForm += $_SESSION ;
+	
+	for ( $m = 0 ; $m < count( $arMode ) ; $m ++ )
+	{
+		if ( isset( $arForm[ $arMode[ $m ] ] ) == TRUE )
+		{
+			$mode = $arMode[ $m ] ;
+			$postMode = $arForm[ $mode ] ;
+			if ( is_array( $postMode ) == TRUE )
+			{
+				$keys = array_keys( $postMode ) ;
+				$func = $keys[ 0 ] ;
+			}
+			break ;
+		}
+	}
+}
+
+// サイト管理者情報の取得
+// 一般会員レベル
+// 企業会員レベル
+function GetAdminCategory()
+{
+	global	$arAdminLevel ;
+	global	$arMemberLevel ;
+	global	$arCorpLevel ;
+
+	$arAdminLevel	= array() ;
+	$arCorpLevel	= array() ;
+
+	if ( empty( $arMemberLevel ) != true )
+		if ( is_array( $arMemberLevel ) != true )
+			$arMemberLevel	= array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		if ( $obDB -> tableExists( "permission_data" ) == true )
+		{
+			$sql  = sprintf( "SELECT * FROM permission_data " ) ;
+			$sql .= sprintf( "WHERE status = 1 " ) ;
+			$sql .= sprintf( "AND kind = %d " , DEF_CATEGORY_SITEADMIN ) ;
+			$sql .= sprintf( "ORDER BY category1 , category2 , category3 " ) ;
+		
+			$result = $obDB -> executeSQL( $sql ) ;
+			if ( $result )
+			{
+				$cnt = $obDB -> getDataCount( $result ) ;
+				for ( $i = 0 ; $i < $cnt ; $i ++ )
+				{
+					$arData = $obDB -> getValues( $result , $i ) ;
+					$category1	= $arData[ "category1" ] ;
+					$name		= $arData[ "name" ] ;
+					
+					$arAdminLevel[ $category1 ] = $name ;
+				}
+				$obDB -> closeRecord( $result ) ;
+			}
+
+			$sql  = sprintf( "SELECT * FROM permission_data " ) ;
+			$sql .= sprintf( "WHERE status = 1 " ) ;
+			$sql .= sprintf( "AND kind = %d " , DEF_CATEGORY_MEMBER ) ;
+			$sql .= sprintf( "ORDER BY category1 , category2 , category3 " ) ;
+		
+			$arMemberLevel[ DEF_MEMBER_LEVEL_NON ] = DEF_MEMBER_LEVEL_NON_LABEL ;
+			$result = $obDB -> executeSQL( $sql ) ;
+			if ( $result )
+			{
+				$cnt = $obDB -> getDataCount( $result ) ;
+				for ( $i = 0 ; $i < $cnt ; $i ++ )
+				{
+					$arData = $obDB -> getValues( $result , $i ) ;
+					$category1	= $arData[ "category1" ] ;
+					$name		= $arData[ "name" ] ;
+					
+					$arMemberLevel[ $category1 ] = $name ;
+				}
+				$obDB -> closeRecord( $result ) ;
+			}
+
+			$sql  = sprintf( "SELECT * FROM permission_data " ) ;
+			$sql .= sprintf( "WHERE status = 1 " ) ;
+			$sql .= sprintf( "AND kind = %d " , DEF_CATEGORY_CORP ) ;
+			$sql .= sprintf( "ORDER BY category1 , category2 , category3 " ) ;
+		
+			$arCorpLevel[ DEF_MEMBER_LEVEL_NON ] = DEF_MEMBER_LEVEL_NON_LABEL ;
+			$result = $obDB -> executeSQL( $sql ) ;
+			if ( $result )
+			{
+				$cnt = $obDB -> getDataCount( $result ) ;
+				for ( $i = 0 ; $i < $cnt ; $i ++ )
+				{
+					$arData = $obDB -> getValues( $result , $i ) ;
+					$category1	= $arData[ "category1" ] ;
+					$name		= $arData[ "name" ] ;
+					
+					$arCorpLevel[ $category1 ] = $name ;
+				}
+				$obDB -> closeRecord( $result ) ;
+			}
+		}
+		
+	}
+}
+
+// 役職
+function GetOfficerCategory()
+{
+	global	$arPost ;
+
+	$arPost = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		if ( $obDB -> tableExists( "category_data" ) == TRUE )
+		{
+			$sql  = sprintf( "SELECT * FROM category_data " ) ;
+			$sql .= sprintf( "WHERE status = 1 " ) ;
+			$sql .= sprintf( "AND kind = %d " , DEF_CATEGORY_POST ) ;
+			$sql .= sprintf( "ORDER BY category1 , category2 , category3 " ) ;
+		
+			$result = $obDB -> executeSQL( $sql ) ;
+			if ( $result )
+			{
+				$cnt = $obDB -> getDataCount( $result ) ;
+				for ( $i = 0 ; $i < $cnt ; $i ++ )
+				{
+					$arData = $obDB -> getValues( $result , $i ) ;
+					$category1	= $arData[ "category1" ] ;
+					$name		= $arData[ "name" ] ;
+					
+					$arPost[ $category1 ] = $name ;
+				}
+				$obDB -> closeRecord( $result ) ;
+			}
+		}
+		
+	}
+}
+
+// リンクカテゴリー
+function GetLinkCategory()
+{
+	global	$arLinkCategory ;
+
+	$arLinkCategory = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		if ( $obDB -> tableExists( "category_data" ) == TRUE )
+		{
+			$sql  = sprintf( "SELECT * FROM category_data " ) ;
+			$sql .= sprintf( "WHERE status = 1 " ) ;
+			$sql .= sprintf( "AND kind = %d " , DEF_CATEGORY_LINK ) ;
+			$sql .= sprintf( "ORDER BY category1 , category2 , category3 " ) ;
+		
+			$result = $obDB -> executeSQL( $sql ) ;
+			if ( $result )
+			{
+				$cnt = $obDB -> getDataCount( $result ) ;
+				for ( $i = 0 ; $i < $cnt ; $i ++ )
+				{
+					$arData = $obDB -> getValues( $result , $i ) ;
+					$category1	= $arData[ "category1" ] ;
+					$name		= $arData[ "name" ] ;
+					
+					$arLinkCategory[ $category1 ] = $name ;
+				}
+				$obDB -> closeRecord( $result ) ;
+			}
+		}
+	}
+}
+
+// スタイル情報の取得
+function GetStyleData()
+{
+	global $arStyle ;
+
+	// テンプレートフォルダの数からスタイルを計算する。
+	$stylePath = WEBAPP_INCLUDE_DIR . "/../template/style" ;
+	
+	if ( ( $d = dir( $stylePath ) ) !== FALSE )
+	{
+		while ( FALSE !== ( $entry = $d -> read() ) )
+		{
+			if ( $entry != "." && $entry != ".." )
+			{
+				if ( strpos( $entry , "." ) !== FALSE )
+				{
+					list( $num , $styleName ) = explode( "." , $entry ) ;
+					$num = intval( $num ) ;
+					$arStyle[ $num ] = sprintf( "%s" , $styleName ) ;
+				}
+			}
+		}
+		$d -> close() ;
+	}
+
+	// テンプレートフォルダの数からスタイルを計算する。
+	$stylePath = SITE_INCLUDE_DIR . "/../template/users" ;
+	clearstatcache() ;
+	if ( file_exists( $stylePath ) === TRUE )
+	{
+		if ( ( $d = dir( $stylePath ) ) !== FALSE )
+		{
+			while ( FALSE !== ( $entry = $d -> read() ) )
+			{
+				if ( $entry != "." && $entry != ".." )
+				{
+					if ( strpos( $entry , "." ) !== FALSE )
+					{
+						list( $num , $styleName ) = explode( "." , $entry ) ;
+						$num = intval( $num ) + DEF_USER_TEMPLATE_NO ;
+						$arStyle[ $num ] = sprintf( "ユーザ定義:%s" , $styleName ) ;
+					}
+				}
+			}
+			$d -> close() ;
+		}
+	}
+	ksort( $arStyle ) ;
+
+	define( "DEF_MAX_STYLE"	,	count( $arStyle ) ) ;
+}
+
+// スタイル情報の取得
+function SetStyleDirectory()
+{
+	global	$arStyle ;
+	
+	$obCorp = new PARTS_Corp() ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+	
+	$style	= sprintf( "%s_style" , $obCorp -> alias ) ;
+	$no		= $arCorp[ $style ] ;
+	$name	= $arStyle[ $no ] ;
+	
+	// テンプレートのディレクトリ指定
+	if ( $no == -1 )
+	{
+		define( "SMARTY_TEMPLATE_EX" , realpath( WEBAPP_INCLUDE_DIR . "/../template" ) ) ; 
+		define( "DEF_DEFAULT_TEMPLATENAME" , "default" ) ; 
+	}
+	// ユーザ定義
+	else if ( $no > DEF_USER_TEMPLATE_NO )
+	{
+		define( "SMARTY_TEMPLATE_EX" , realpath( SITE_INCLUDE_DIR . "/../template" ) ) ;
+		
+		$no -= DEF_USER_TEMPLATE_NO ;
+
+		$name = $obCorp -> mb_str_replace( "ユーザ定義:" , "" , $name ) ;
+		
+		$stylePath = sprintf( "users/%03d.%s" , $no , $name ) ;
+		define( "DEF_DEFAULT_TEMPLATENAME" , $stylePath ) ;
+	}
+	else
+	{
+		define( "SMARTY_TEMPLATE_EX" , realpath( WEBAPP_INCLUDE_DIR . "/../template" ) ) ; 
+		$stylePath = sprintf( "style/%03d.%s" , $no , $name ) ;
+		define( "DEF_DEFAULT_TEMPLATENAME" , $stylePath ) ;
+	}
+}
+
+// メニュー権限の取得
+function	GetPermission()
+{
+	global	$arPermission ;
+
+	$blams			= new BLAMS() ;
+	$obPermission	= new PARTS_Permission() ;
+
+	// WHERE句の初期化
+	$arWhere = array() ;
+	$arWhere[ "kind"	] = DEF_CATEGORY_SITEADMIN ;
+
+	// 登録データがある場合
+	$arList = $obPermission -> makeList( $arWhere ) ;
+
+	if ( count( $arList ) > 0 )
+	{
+		foreach ( $arList as $arValue )
+		{
+			$func		= $arValue[ "key" ] ;
+			$arData		= $arValue[ "data" ] ;
+			$arLevel	= $arValue[ "level" ] ;
+			
+			foreach ( $arLevel as $key => $value )
+				$arPermission[ $func ][ $value ] = intval( $arData[ $key ] ) ;
+		}
+	}
+}
+
+// イベント情報の取得
+function GetEvent( $eventid )
+{
+	$sql = "SELECT * FROM event_data WHERE eventid = '" . $eventid . "'" ;
+
+	$arr = array() ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$result = $obDB -> executeSQL( $sql ) ;
+		if ( $result )
+		{
+			if ( $obDB -> getDataCount( $result ) )
+				$arr = pg_fetch_array( $result , 0 , PGSQL_ASSOC ) ;
+			$obDB -> closeRecord( $result ) ;
+		}
+		
+	}
+
+	return $arr;
+}
+
+// 主力商品の数取得
+function GetMainProductNum( $type = DEF_CATEGORY_ITEM )
+{
+	$sql = sprintf( "SELECT * FROM product_data WHERE status = 1 and main_flg = 1 and type = %d " , $type ) ;
+
+	$cnt = 0 ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$result = $obDB -> executeSQL( $sql ) ;
+		if ( $result )
+		{
+			$cnt = $obDB -> getDataCount( $result ) ;
+		}
+		
+	}
+
+	return $cnt ;
+}
+
+// WebPageの取得
+function GetWebpage( $type )
+{
+	$arData = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = sprintf( "SELECT * FROM webpage_data WHERE status = 1 " ) ;
+		$sql .= sprintf( "AND type = %d " , $type ) ;
+		$sql .= sprintf( "AND corpid = -1 " ) ;
+		$sql .= sprintf( "AND page = 0 " ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+			{
+				$arData = $obDB -> getValues( $record ) ;
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+	return $arData ;
+}
+
+// 引数が主力商品か調べる
+function ChkMainProduct( $productid )
+{
+	$sql = sprintf( "SELECT main_flg FROM product_data WHERE status = 1 and productid = %d " , $productid ) ;
+
+	$arr = array() ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$result = $obDB -> executeSQL( $sql ) ;
+		if ( $result )
+		{
+			if ( $obDB -> getDataCount( $result ) )
+				$arr = pg_fetch_array( $result , 0 , PGSQL_ASSOC ) ;
+			$obDB -> closeRecord( $result ) ;
+		}
+		
+	}
+	
+	if( empty( $arr[ "main_flg" ] ) == false && $arr[ "main_flg" ] == 1 )
+	{
+		return true ;
+	}
+	else
+	{
+		return false ;
+	}
+}
+
+// TOPコンテンツの取得
+function	GetTopData()
+{
+	$arData = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$now = date( "Ymd" ) ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT * FROM top_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 and edit_flg = %d " , DEF_EDITSTATUS_OPENED ) ;
+		$sql .= sprintf( "and to_char( start_date , 'YYYYMMDD' ) <= '%s' " , $now ) ;
+		$sql .= sprintf( "order by start_date DESC , update_date DESC " ) ;
+
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+				$arData = $obDB -> getValues( $record ) ;
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+	return $arData ;
+}
+
+// バナー情報取得
+function	GetBannerData()
+{
+	$arData = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$now = date( "Ymd" ) ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT * FROM banner_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 and edit_flg = %d " , DEF_EDITSTATUS_OPENED ) ;
+		$sql .= sprintf( "ORDER BY length(subject) , subject " ) ;
+		$sql .= sprintf( "LIMIT 3 OFFSET 0 " ) ;
+
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+				$arData[] = $obDB -> getValues( $record , $i ) ;
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+	return $arData ;
+}
+
+// 採用情報の取得
+function	GetRecruit( $recruitid = -1 , $bAll = FALSE )
+{
+	$arRecruit = array() ;
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT * FROM recruit_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 " ) ;
+
+		if ( $recruitid != -1 )
+			$sql .= sprintf( "AND recruitid = %d " , $recruitid ) ;
+
+		if ( $bAll == FALSE )
+		{
+			$now = date( "Y-m-d H:i:s" ) ;
+			$sql .= sprintf( "AND edit_flg = %d " , DEF_EDITSTATUS_OPENED ) ;
+			$sql .= sprintf( "AND start_date <= to_timestamp( '%s 235959' , 'YYYYMMDD HH24MISS' ) " , date2( "Ymd" , $now ) ) ;
+			$sql .= sprintf( "AND ( end_date >= to_timestamp( '%s 235959' , 'YYYYMMDD HH24MISS' ) " , date2( "Ymd" , $now ) ) ;
+			$sql .= sprintf( "OR end_date = to_timestamp( '19710101 000000' , 'YYYYMMDD HH24MISS' ) ) " ) ;
+		}
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = $obDB -> getValues( $record , $i ) ;
+				if ( $recruitid != -1 )
+					$arRecruit = $arData ;
+				else
+					$arRecruit[] = $arData ;
+			}
+			
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+	return $arRecruit ;
+}
+
+// メニュー情報の取得
+function	GetMenu( $menucategoryid , $category1 , $category2 , $conn = -1 )
+{
+	$arMenu = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		// メニューを取得する
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT * FROM menu_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 " ) ;
+		$sql .= sprintf( "AND menucategoryid = %d " , $menucategoryid ) ;
+		
+		if ( $category1 != 0 && $category2 == 0 )
+		{
+			$sql .= sprintf( "AND category1 = %d " , $category1 ) ;
+			$sql .= sprintf( "AND category2 != 0 " ) ;
+			$sql .= sprintf( "AND category3 = 0 " ) ;
+		}
+		else if ( $category1 != 0 && $category2 != 0 )
+		{
+			$sql .= sprintf( "AND category1 = %d " , $category1 ) ;
+			$sql .= sprintf( "AND category2 = %d " , $category2 ) ;
+			$sql .= sprintf( "AND category3 != 0 " ) ;
+		}
+		
+		$sql .= sprintf( "ORDER BY category1 , category2 , category3 " ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData = $obDB -> getValues( $record , $i ) ;
+				$arMenu[] = $arData ;
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+
+	return $arMenu ;
+}
+
+function	GetMenuCategory( $menucategory , $conn = -1 )
+{
+	$menucategoryid = -1 ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		// メニューカテゴリーを取得する
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT * FROM category_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 " ) ;
+		$sql .= sprintf( "AND kind = %d " , DEF_CATEGORY_MENU ) ;
+		$sql .= sprintf( "AND category1 = %d " , $menucategory ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$arData = $obDB -> getValues( $record ) ;
+			$menucategoryid = $arData[ "categoryid" ] ;
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+
+	return $menucategoryid ;
+}
+
+function GetStateData( $conn = -1 )
+{
+	global	$arState ;
+	global	$arStateName ;
+
+	if ( $conn == -1 )
+	{
+		$obArea = new PARTS_Area ;
+	}
+	else
+	{
+		$obArea = new PARTS_Area( $conn ) ;
+	}
+	$arStateName = $obArea -> makeStateName() ;
+	$arState = $obArea -> arState ;
+	
+	return $arState ;
+}
+
+function GetEmailSettings( $conn = -1 )
+{
+
+	$agent_email		= "" ;
+	$remainder_email	= "" ;
+	$inquire_email		= "" ;
+	$registered_email	= "" ;
+	$feedback_email		= "" ;
+
+	$obCorp = new PARTS_Corp ;
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+	{
+		$arCorp = $arCorp[ 0 ] ;
+
+		$agent_email		= $arCorp[ sprintf( "%s_agent_email"	, $obCorp -> alias ) ] ;
+		$remainder_email	= $arCorp[ sprintf( "%s_remainder_email"	, $obCorp -> alias ) ] ;
+		$inquire_email		= $arCorp[ sprintf( "%s_inquire_email"		, $obCorp -> alias ) ] ;
+		$registered_email	= $arCorp[ sprintf( "%s_registered_email"	, $obCorp -> alias ) ] ;
+		$feedback_email		= $arCorp[ sprintf( "%s_feedback_email"		, $obCorp -> alias ) ] ;
+	}
+	
+	// リマインダのfrom
+	if ( $remainder_email != "" )
+		define( "EMAILADDR_REMAINDER"	,	$remainder_email	) ;
+	elseif ( $agent_email != "" )
+		define( "EMAILADDR_REMAINDER"	,	$agent_email	) ;
+	elseif ( defined( "EMAILADDR_TEMPORARY" ) == true )
+		define( "EMAILADDR_REMAINDER"	,	EMAILADDR_TEMPORARY	) ;
+	else
+		define( "EMAILADDR_REMAINDER"	,	"info@blazinghills.com"	) ;
+
+	// 問い合わせのfrom
+	if ( $inquire_email != "" )
+		define( "EMAILADDR_INQUIRE"		,	$inquire_email	) ;
+	elseif ( $agent_email != "" )
+		define( "EMAILADDR_INQUIRE"		,	$agent_email	) ;
+	elseif ( defined( "EMAILADDR_TEMPORARY" ) == true )
+		define( "EMAILADDR_INQUIRE"	,	EMAILADDR_TEMPORARY	) ;
+	else
+		define( "EMAILADDR_INQUIRE"		,	"service@blazinghills.com"	) ;
+	
+	// 会員登録完了通知のfrom
+	if ( $registered_email != "" )
+		define( "EMAILADDR_REGISTERED"	,	$registered_email	) ;
+	elseif ( $agent_email != "" )
+		define( "EMAILADDR_REGISTERED"	,	$agent_email	) ;
+	elseif ( defined( "EMAILADDR_TEMPORARY" ) == true )
+		define( "EMAILADDR_REGISTERED"	,	EMAILADDR_TEMPORARY	) ;
+	else
+		define( "EMAILADDR_REGISTERED"	,	"info@blazinghills.com"		) ;
+
+	// 商品注文時の運営者へのto
+	if ( $feedback_email != "" )
+		define( "EMAILADDR_ORDERED_FOR_SYSTEM"	,	$feedback_email	) ;
+	elseif ( $agent_email != "" )
+		define( "EMAILADDR_ORDERED_FOR_SYSTEM"	,	$agent_email	) ;
+	elseif ( defined( "EMAILADDR_TEMPORARY" ) == true )
+		define( "EMAILADDR_ORDERED_FOR_SYSTEM"	,	EMAILADDR_TEMPORARY	) ;
+	else
+		define( "EMAILADDR_ORDERED_FOR_SYSTEM"	,	"info@blazinghills.com"	) ;
+}
+
+function GetConfigSettings( $conn = -1 )
+{
+	$obConfig = new PARTS_Config() ;
+	$arData = $obConfig -> getConfig() ;
+
+	// ポイント還元率
+	if ( empty( $arData[ "yen_per_point" ] ) == false )
+		define( "YEN_PER_POINT"	,	$arData[ "yen_per_point" ]		) ;
+	else
+		define( "YEN_PER_POINT"	,		1 ) ;
+
+	// ポイント加算率
+	if ( empty( $arData[ "point_per_yen" ] ) == false )
+		define( "POINT_PER_YEN"	,	$arData[ "point_per_yen" ]		) ;
+	else
+		define( "POINT_PER_YEN"	,		1 ) ;
+
+	// ポイント使用単位
+	if ( empty( $arData[ "point_unit" ] ) == false )
+		define( "POINT_UNIT"	,	$arData[ "point_unit" ]			) ;
+	else
+		define( "POINT_UNIT"	,		1 ) ;
+
+	// 最低ポイント使用数
+	if ( empty( $arData[ "under_limit" ] ) == false )
+		define( "UNDER_LIMIT"	,	$arData[ "under_limit" ]		) ;
+	else
+		define( "UNDER_LIMIT"	,		1 ) ;
+
+	// 梱包単位（1箱に何個入れるか）
+	if ( empty( $arData[ "unit_per_box" ] ) == false )
+		define( "UNIT_PER_BOX"	,	$arData[ "unit_per_box" ]		) ;
+	else
+		define( "UNIT_PER_BOX"	,		1 ) ;
+
+	// クール便料金
+	if ( empty( $arData[ "price_coolpack" ] ) == false )
+		define( "PRICE_COOLPACK"	,	$arData[ "price_coolpack" ]	) ;
+	else
+		define( "PRICE_COOLPACK"	,	0 ) ;
+}
+
+// 一般会員姓名取得
+function	GetMemberNameFromID( $conn , $memberid )
+{
+	$name = "" ;
+
+	$obDB = new DBPostgrSQL() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql = sprintf( "SELECT * FROM member_data WHERE status = 1 AND memberid = '%d' " , $memberid ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+			{
+				$last_name	= $obDB -> getValue( $record , "last_name" ) ;
+				$first_name	= $obDB -> getValue( $record , "first_name" ) ;
+				$name = sprintf( "%s %s" , $last_name , $first_name ) ;
+			}
+			$obDB -> closeRecord( $record ) ;
+	
+		}
+	}
+	if ( $name == "" )
+		$name = "不明" ;
+
+	return $name ;
+}
+
+// 指定のカートIDから、該当カート内の商品主要情報を配列化する
+//  結果配列内容
+//   $arResult[ n ][ "cartitemid"		] .. カート商品情報ID	( cartitem_data	: cartitemid		)
+//   $arResult[ n ][ "itemid"			] .. 商品ID				( item_data		: itemid			)
+//   $arResult[ n ][ "productid"		] .. 商品マスター情報ID	( product_data	: productid			)
+//   $arResult[ n ][ "jancode"			] .. 品番（JANコード）	( product_data	: jancode			)
+//   $arResult[ n ][ "merchandisecode"	] .. 商品コード			( product_data	: merchandisecode	)
+//   $arResult[ n ][ "name"				] .. 商品名				( product_data	: name				)
+//   $arResult[ n ][ "number"			] .. 注文個数			( cartitem_data	: number			)
+//   $arResult[ n ][ "price"			] .. 税抜き税込価格		( item_data		: price				)
+//   $arResult[ n ][ "tax"				] .. 税込み税込価格		( item_data		: tax				)
+//   $arResult[ n ][ "coolpack"			] .. クール便指定		( cartitem_data	: coolpack			)
+//   $arResult[ n ][ "fixed_price"		] .. 定価				( product_data	: fixed_price		)
+//   $arResult[ n ][ "standard"			] .. 規格（サイズ）		( product_data	: standard			)
+//   $arResult[ n ][ "unit"				] .. 内容数				( product_data	: unit				)
+//   $arResult[ n ][ "net"				] .. 容量				( product_data	: net				)
+//   $arResult[ n ][ "tag"				] .. 単位				( product_data	: tag				)
+//   $arResult[ n ][ "alcoholic"		] .. アルコール度数		( product_data	: alcoholic			)
+//   $arResult[ n ][ "alcoholic_upper"	] .. アルコール度数		( product_data	: alcoholic_upper	)
+//   $arResult[ n ][ "wrapping"			] .. 包装有無			( cartitem_data	: wrapping			)
+//   $arResult[ n ][ "decoration"		] .. のし有無			( cartitem_data	: decoration		)
+//   $arResult[ n ][ "package"			] .. 専用BOX有無		( cartitem_data	: package			)
+//   $arResult[ n ][ "categoryid"		] .. 商品カテゴリ		( category_data	: categoryid		)
+//   $arResult[ n ][ "corpid"			] .. 製造元・蔵元ID		( corp_data		: corpid			)
+//
+// enable_end_item .. TRUE:掲載終了商品も対象に入れる、FALSE:対象に入れない
+//
+function	CreateCartOrderArrayEx( $conn , $cartid , $enable_end_item , $state , $used_point )
+{
+	$arResult = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		// 該当カーとの決算方法を取得する
+		// 注文日
+		$sql  = sprintf( "SELECT * " ) ;
+		$sql .= sprintf( "FROM cart_data WHERE status = 1 " ) ;
+		$sql .= sprintf( "AND cartid = %d " , $cartid ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+			{
+				$settlement = $obDB -> getValue( $record , "settlement" ) ;
+				$order_date = $obDB -> getValue( $record , "order_date" ) ;
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+
+		// 該当カート商品情報を取得
+		$sql  = sprintf( "SELECT " ) ;
+		$sql .= sprintf( "cartitem_data.cartitemid AS cart_cartitemid , " ) ;
+		$sql .= sprintf( "cartitem_data.merchandiseid AS cart_itemid , " ) ;
+		$sql .= sprintf( "cartitem_data.number AS cart_number , " ) ;
+		$sql .= sprintf( "cartitem_data.wrapping AS cart_wrapping , " ) ;
+		$sql .= sprintf( "cartitem_data.decoration AS cart_decoration , " ) ;
+		$sql .= sprintf( "cartitem_data.package AS cart_package , " ) ;
+		$sql .= sprintf( "cartitem_data.deco_used AS cart_deco_used , " ) ;
+		$sql .= sprintf( "merchandise_data.coolpack AS cart_coolpack " ) ;
+		$sql .= sprintf( "FROM cartitem_data , merchandise_data WHERE cartitem_data.status = 1 " ) ;
+		$sql .= sprintf( "AND cartitem_data.merchandiseid = merchandise_data.merchandiseid " ) ;
+		if ( $enable_end_item == FALSE )
+		{
+			$sql .= sprintf( "AND merchandise_data.start_date <= to_timestamp( '%s 235959' , 'YYYYMMDD HH24MISS' ) " , date2( "Ymd" , $now ) ) ;
+			$sql .= sprintf( "AND merchandise_data.end_date >= to_timestamp( '%s 000000' , 'YYYYMMDD HH24MISS' ) " , date2( "Ymd" , $now ) ) ;
+		}
+		$sql .= sprintf( "AND cartitem_data.cartid = %d " , $cartid ) ;
+		$sql .= sprintf( "ORDER BY cartitemid DESC " ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$arResultSub[ "total_price" ] = 0 ;
+			$arResultSub[ "package_count" ] = 0 ;
+			$total_price = 0 ;
+			$large = 0 ;
+			$small = 0 ;
+			$large_cool = 0 ;
+			$small_cool = 0 ;
+			$total_number = 0 ;
+			$wrapping_flg = 0 ;
+			$decoration_flg = 0 ;
+			$deco_used = "" ;
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				// カート商品情報を取得
+				$cartitemid	= $obDB -> getValue( $record , "cart_cartitemid"	, $i ) ;
+				$itemid		= $obDB -> getValue( $record , "cart_itemid"		, $i ) ;
+				$number		= $obDB -> getValue( $record , "cart_number"		, $i ) ;
+				$wrapping	= $obDB -> getValue( $record , "cart_wrapping"	, $i ) ;
+				$decoration	= $obDB -> getValue( $record , "cart_decoration"	, $i ) ;
+				$package	= $obDB -> getValue( $record , "cart_package"	, $i ) ;
+				$coolpack	= $obDB -> getValue( $record , "cart_coolpack"	, $i ) ;
+				$deco_used	= $obDB -> getValue( $record , "cart_deco_used"	, $i ) ;
+				$wrapping_flg	= $wrapping ;
+				$decoration_flg	= $decoration ;
+
+				$total_number = $total_number + $number ;
+
+				// その他の商品主要情報を取得＆格納
+				$arResultSub = CreateItemArrayEx( $conn , $itemid ) ;
+
+				// カート商品情報を格納
+				$arResultSub[ "cartitemid"	] = $cartitemid ;
+				$arResultSub[ "itemid"		] = $itemid ;
+				$arResultSub[ "number"		] = $number ;
+				$arResultSub[ "wrapping"	] = $wrapping ;
+				$arResultSub[ "decoration"	] = $decoration ;
+				$arResultSub[ "package"		] = $package ;
+				$arResultSub[ "coolpack"	] = $coolpack ;
+				if ( $package == 0 )
+					$arResultSub[ "package_price" ] = 0 ;
+
+				$price			=	$arResultSub[ "cart_price"		] ;
+				$tax			=	$arResultSub[ "tax"				] ;
+				$packageprice	=	$arResultSub[ "package_price"	] ;
+				$item_coolpack	=	$arResultSub[ "item_coolpack"	] ;
+				$net			=	$arResultSub[ "net" ] ;
+
+				// 全結果格納
+				$arResult[ $i ] = $arResultSub ;
+
+				// 合計金額更新
+				$arTotal	= SumPriceTotal( $number , $price , $tax , $packageprice , $package , $arTotal ) ;
+				$arPackage	= SumPackageCount( $number , $net , $coolpack , $arPackage ) ;
+			}
+			$total_tax			= $arTotal[ "total" ] ;
+			$total_item			= $arTotal[ "total_item" ] ;
+			$total_package		= $arTotal[ "total_package" ] ;
+			$large				= $arPackage[ "large" ] ;
+			$small				= $arPackage[ "small" ] ;
+			$large_cool			= $arPackage[ "large_cool" ] ;
+			$small_cool			= $arPackage[ "small_cool" ] ;
+			$package_count		= CalcPackageCount( $large , $small ) ;
+			$package_count_cool	= CalcPackageCount( $large_cool , $small_cool ) ;
+
+			$arResult[ "total_price"		] = $total_tax ;
+			$arResult[ "total_item"			] = $total_item ;
+			$arResult[ "total_package"		] = $total_package ;
+			$arResult[ "coolpack"			] = $package_count_cool ;
+			$arResult[ "package_count"		] = $package_count + $package_count_cool ;
+			$arResult[ "price_transport"	] = CalcPriceTransport( $conn , $state , $order_date ) ;
+			$arResult[ "data_count"			] = $cnt ;
+			$arResult[ "package"			] = $arTotal[ "package" ] ;
+			$arResult[ "total_number"		] = $total_number ;
+			$arResult[ "wrapping_flg"		] = $wrapping_flg ;
+			$arResult[ "decoration_flg"		] = $decoration_flg ;
+			$arResult[ "deco_used"			] = $deco_used ;
+
+			// 決算方法が代金引換の場合、手数料を計算する。
+			$arResult[ "price_charge" ] = 0 ;
+			if ( $settlement == DF_SETTLEMENT_COD )
+			{
+				global	$arPriceCharge ;
+				for ( $pc = 0 ; $pc < count( $arPriceCharge ) ; $pc ++ )
+				{
+					if ( $total_tax < $arPriceCharge[ $pc ][ 0 ] )
+					{
+						$arResult[ "price_charge" ] = $arPriceCharge[ $pc ][ 1 ] ;
+						break ;
+					}
+				}
+			}
+
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+
+	return $arResult ;
+}
+
+// 指定の商品IDから、商品主要情報を配列化する
+//  結果配列内容
+//   $arResult[ "productid"			] .. 商品マスター情報ID	( product_data	: productid			)
+//   $arResult[ "jancode"			] .. 品番（JANコード）	( product_data	: jancode			)
+//   $arResult[ "merchandisecode"	] .. 商品コード			( product_data	: merchandisecode	)
+//   $arResult[ "name"				] .. 商品名				( product_data	: name				)
+//   $arResult[ "price"				] .. 税抜き税込価格		( item_data		: price				)
+//   $arResult[ "tax"				] .. 税込み税込価格		( item_data		: tax				)
+//   $arResult[ "fixed_price"		] .. 定価				( product_data	: fixed_price		)
+//   $arResult[ "standard"			] .. 規格（サイズ）		( product_data	: standard			)
+//   $arResult[ "unit"				] .. 内容数				( product_data	: unit				)
+//   $arResult[ "net"				] .. 容量				( product_data	: net				)
+//   $arResult[ "tag"				] .. 単位				( product_data	: tag				)
+//   $arResult[ "alcoholic"			] .. アルコール度数		( product_data	: alcoholic			)
+//   $arResult[ "categoryid"		] .. 商品カテゴリ		( category_data	: categoryid		)
+//   $arResult[ "corpid"			] .. 製造元・蔵元ID		( corp_data		: corpid			)
+//
+function	CreateItemArrayEx( $conn , $itemid )
+{
+	$arResult = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		// 掲載商品情報を格納
+		$merchandise_masterid = -1 ;
+		$sql  = sprintf( "SELECT * FROM merchandise_data WHERE status = 1 " ) ;
+		$sql .= sprintf( "AND merchandiseid = %d " , $itemid ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+			{
+				$merchandise_masterid	= $obDB -> getValue( $record , "merchandise_masterid" ) ;
+				$price		= $obDB -> getValue( $record , "price" ) ;
+				$tax		= $obDB -> getValue( $record , "tax" ) ;
+				$coolpack	= $obDB -> getValue( $record , "coolpack" ) ;
+				$arResult[ "merchandise_masterid"	] = $merchandise_masterid ;
+				$arResult[ "price"		] = $price ;
+				$arResult[ "tax"		] = $tax ;
+				$arResult[ "coolpack"	] = $coolpack ;
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+
+		// 商品マスター情報を格納
+		if ( $merchandise_masterid != -1 )
+		{
+			$sql  = sprintf( "SELECT * FROM merchandise_master_data WHERE status = 1 " ) ;
+			$sql .= sprintf( "AND merchandise_masterid = %d " , $merchandise_masterid ) ;
+			$record = $obDB -> executeSQL( $sql ) ;
+			if ( $record )
+			{
+				if ( $obDB -> getDataCount( $record ) > 0 )
+				{
+					$corpid				= $obDB -> getValue( $record , "corpid" ) ;
+					$jancode			= $obDB -> getValue( $record , "jancode" ) ;
+					$merchandisecode	= $obDB -> getValue( $record , "merchandisecode" ) ;
+					$name				= $obDB -> getValue( $record , "name" ) ;
+					$categoryid			= $obDB -> getValue( $record , "categoryid" ) ;
+					$fixed_price		= $obDB -> getValue( $record , "fixed_price" ) ;
+					$standard			= $obDB -> getValue( $record , "standard" ) ;
+					$unit				= $obDB -> getValue( $record , "unit" ) ;
+					$net				= $obDB -> getValue( $record , "net" ) ;
+					$tag				= $obDB -> getValue( $record , "tag" ) ;
+//					$alcoholic			= $obDB -> getValue( $record , "alcoholic" ) ;
+					$arResult[ "jancode"		] = $jancode ;
+					$arResult[ "merchandisecode"] = $merchandisecode ;
+					$arResult[ "name"			] = $name ;
+					$arResult[ "fixed_price"	] = $fixed_price ;
+					$arResult[ "standard"		] = $standard ;
+					$arResult[ "unit"			] = $unit ;
+					$arResult[ "net"			] = $net ;
+					$arResult[ "tag"			] = $tag ;
+					$arResult[ "alcoholic"		] = $alcoholic ;
+					$arResult[ "categoryid"		] = $categoryid ;
+					$arResult[ "corpid"			] = $corpid ;
+
+					$package_price = CalcPackagePrice( $conn , $categoryid ) ;
+					$arResult[ "package_price"			] = $package_price ;
+				}
+				$obDB -> closeRecord( $record ) ;
+			}
+		}
+	}
+
+	return $arResult ;
+}
+
+// 合計金額の集計
+function	SumPriceTotal( $number , $price , $tax , $packageprice , $package , $arTotal )
+{
+	$arTotal[ "total" ]			+=	$tax * $number ;
+	$arTotal[ "total" ]			+=	$packageprice * $number * $package ;
+	$arTotal[ "total_item" ]	+=	$tax * $number ;
+	$arTotal[ "total_package" ]	+=	$packageprice * $number * $package ;
+	
+	if( $packageprice != 0 && $number * $package != 0 )
+		$arTotal[ "package" ][ $packageprice ] += $number * $package ;
+	
+	return $arTotal ;
+}
+
+// 梱包数の累計の計算
+function	SumPackageCount( $number , $net , $coolpack , $arPackage )
+{
+	if ( $coolpack != TRUE )
+	{
+		if ( $net > PRICE_PACKAGE_EDGE )
+			$arPackage[ "large" ]	+= $number ;
+		else
+			$arPackage[ "small" ]	+= $number ;
+	}
+	else
+	{
+		if ( $net > PRICE_PACKAGE_EDGE )
+			$arPackage[ "large_cool" ]	+= $number ;
+		else
+			$arPackage[ "small_cool" ] += $number ;
+	}
+
+	return $arPackage ;
+}
+
+// 荷物数の計算
+function	CalcPackageCount( $large , $small )
+{
+	$count = 0 ;
+
+	$packing_count		= ceil( ( $large + $small ) / UNIT_PER_BOX ) ;
+
+/*
+	// 大のケースの数を計算
+	if ( $large > 0 )
+	{
+		$count = ceil( $large / PRICE_PACKAGE_MAX_L ) ;
+		
+		// 大のケースの空きスペースを使用する
+		$small = $small - ( $count * PRICE_PACKAGE_MAX_L - $large ) ;
+	}
+	
+	// 小のケースの数を計算
+	if ( $small > 0 )
+	{
+		$count += ceil( $small / PRICE_PACKAGE_MAX_S ) ;
+	}
+*/
+	return $packing_count ;
+}
+
+// 送料の計算
+function	CalcPriceTransport( $conn , $state , $order_date = "" , $city = "" )
+{
+	$price = 0 ;
+	$campaign_flg = false ;
+
+	// 注文日が取得できたら送料キャンペーン中か調べ、キャンペーン中ならその送料を取得する
+	if( $order_date != "" )
+	{
+		$sql  = sprintf( "SELECT * FROM campaign_data WHERE status = 1 " ) ;
+		$sql .= sprintf( "AND edit_flg = %d " , DEF_EDITSTATUS_OPENED ) ;
+		$sql .= sprintf( "AND kind = %d " , DEF_CAMPAIGN_TRANSPORT ) ;
+		$sql .= sprintf( "AND start_date <= '%s' " , $order_date ) ;
+		$sql .= sprintf( "AND end_date >= '%s' " , $order_date ) ;
+		$sql .= sprintf( "order by update_date desc " ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+			{
+				$arData			= $obDB -> getValues( $record , 0 ) ;
+				$price			= $arData[ "carriage" ] ;
+				$campaign_flg	= true ;
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+
+	// キャンペーン送料が0円（無料）もありえるから、price では分岐させない
+	if( $campaign_flg == false )
+	{
+		$sql = sprintf( "SELECT * FROM price_data WHERE status = 1 AND state = %d AND city = '%s' AND type = 1" , $state , $city ) ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			if ( $obDB -> getDataCount( $record ) > 0 )
+				$price = $obDB -> getValue( $record , "price" ) ;
+			$obDB -> closeRecord( $record ) ;
+		}
+	}
+	return $price ;
+}
+
+// 1つあたりの専用BOXの値段を計算する
+function	CalcPackagePrice( $conn , $categoryid )
+{
+	$price = 0 ;
+
+	// 大項目を取り出す
+	$categoryname = GetCategoryNameFromID( $conn , $categoryid , 1 , DEF_CATEGORY_ITEM ) ;
+	
+	// 大項目に対応した金額を計算する
+	switch( $categoryname )
+	{
+	}
+	return $price ;
+}
+
+// カテゴリーチェック項目を配列に戻す
+function	MakeCategoryArray( $category )
+{
+	$checkcategory = array() ;
+	
+	$category = trim( $category , "[" ) ;
+	$category = trim( $category , "]") ;
+	
+	$checkcategory = explode( "][" , $category ) ;
+
+	return $checkcategory ;
+}
+
+function	debug( $data , $color = 0 )
+{
+	if ( $color != 0 )
+		printf( "<font color=white>\n" ) ;
+	printf( "<pre><code>\n" ) ;
+	
+	if ( is_array( $data ) == TRUE )
+		print_r( $data ) ;
+	else
+		printf( "data : %s\n" , $data ) ;
+	
+	printf( "</code></pre>\n" ) ;
+
+	if ( $color != 0 )
+		printf( "</font>\n" ) ;
+}
+
+?>

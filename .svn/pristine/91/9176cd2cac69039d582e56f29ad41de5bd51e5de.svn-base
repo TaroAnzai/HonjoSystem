@@ -1,0 +1,149 @@
+<?php
+	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+
+	// 登録ボタン名によって処理を分ける
+	$mode = "" ;
+	$func = "" ;
+
+	$arMode = array( "update" ) ;
+
+	GetSystemMode( $mode , $func , $arMode ) ;
+
+	if ( $mode == "" )
+		$mode = "update" ;
+	
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams			= new BLAMS() ;
+	$obPermission	= new PARTS_Permission() ;
+
+	// 編集データ保存
+	$arParam = array() ;
+
+	$additional = array() ;
+	$additional[] = "permission" ;
+	$obPermission -> assignGlobal( $additional , $arParam ) ;
+
+	$alias = $obPermission -> alias ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+
+	// WHERE句の初期化
+	$arWhere = array() ;
+	$arWhere[ "kind"	] = DEF_CATEGORY_SITEADMIN ;
+	
+	if ( $login_level != DEF_ADMIN )
+	{
+		$arWhere[ "where"	]  = sprintf( "AND %s.category1 >= %s " , $alias , $login_level ) ;
+		$arWhere[ "where"	] .= sprintf( "AND %s.category1 != %s " , $alias , DEF_CATEGORY_STANDARD ) ;
+	}
+	
+	if ( $mode == "update" && $func == "done" )
+		$obPermission -> setPermission( $permission , $arWhere ) ;
+
+	$menu = FUNC_PERMISSION ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+	
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , $arWhere , $mode , $func , $obPermission ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $arWhere , $mode , $func , $obPermission )
+{
+	$alias 		= $obPermission -> alias ;
+	$primarykey	= $obPermission -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	$arHeader = array(
+		array( "caption" => "分類"			, "class" => "w128 left" ) ,
+		array( "caption" => "機能名"		, "class" => "w192 left" ) ,
+	) ;
+
+	$cnt = 0 ;
+	
+	// 登録データがある場合
+	$arList = $obPermission -> makeList( $arWhere , $arHeader ) ;
+
+	global	$arMenuTitle ;
+
+	$button = FetchButton( $blams , $mode , $func ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "menu_data"		, $arMenuTitle		) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "edit_url"			, "list.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$data = $tmpl -> fetch( "permission/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// ボタンの表示
+function	FetchButton( $blams , $mode , $func )
+{
+	$arProcess = array(
+		"update_done"		=>	array( "value" => "更新します"		, "name" => "update[done]"		, "action" => ""			) ,
+	) ;
+
+	$arOperation = array() ;
+	switch( $mode )
+	{
+	case "update" :
+		switch( $func )
+		{
+		default :
+			$arOperation = array( "update_done" ) ;
+			break ;
+		}
+		break ;
+	}
+
+	$arButton = array() ;
+	for ( $i = 0 ; $i < count( $arOperation ) ; $i ++ )
+		$arButton[] = $arProcess[ $arOperation[ $i ] ] ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "id"				, "edit_form"		) ;
+	$tmpl -> assign( "button_data"		, $arButton			) ;
+	$data = $tmpl -> fetch( "common/button.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+
+}
+
+?>

@@ -1,0 +1,1015 @@
+<?php
+/**
+* BLAMS 基本関数郡 メンバー用クラス
+*
+* メンバー用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+//
+// 一般会員レベル
+//
+$_FUNC = 0 ;
+define( "DEF_MEMBER_LEVEL_NON"			,	$_FUNC ++	) ;		// 非会員
+
+define( "DEF_MEMBER_LEVEL_NON_LABEL"	,	"非会員"	) ;		// 非会員
+
+global	$arMemberLevel ;
+
+//
+// メルマガフラグ
+//
+define( DEF_MAILTOHOME			,	1	) ;		// 自宅メールアドレスへ
+define( DEF_MAILTOPORT			,	2	) ;		// 携帯メールアドレスへ
+
+global	$arMailTo ;
+$arMailTo = array(
+	DEF_MAILTOHOME => "自宅メールアドレスへ" ,
+	DEF_MAILTOPORT => "携帯メールアドレスへ" ,
+) ;
+
+require_once( 'class/db.class.php' ) ;
+require_once( 'class/cart.class.php' ) ;
+
+class PARTS_Member extends DB_Common
+{
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "member_data" ;
+		$alias		= "mb" ;
+		$primarykey	= "memberid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+
+		$this -> per_page		= NUMBER_PER_PAGE ;
+
+		$this -> searchkey = array(
+				"S_LOGINID"			,
+				"S_FIRSTNAME"		,
+				"S_LASTNAME"		,
+				"S_STATE"			,
+				"S_TEL1"			,
+				"S_TEL2"			,
+				"S_TEL3"			,
+				"S_EMAIL"			,
+				"S_CREATE_DATE_S_y"	,
+				"S_CREATE_DATE_S_m"	,
+				"S_CREATE_DATE_S_d"	,
+				"S_CREATE_DATE_E_y"	,
+				"S_CREATE_DATE_E_m"	,
+				"S_CREATE_DATE_E_d"	,
+				"S_BILLING_COUNT"	,
+			) ;
+
+		// 追加項目
+		$this -> fieldsData[] = array( "name" => "crypt_passwd"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "zip1"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "zip2"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel_home1"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel_home2"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel_home3"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel_port1"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel_port2"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "tel_port3"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "fax1"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "fax2"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "fax3"					, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "birthday_y"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "birthday_m"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "birthday_d"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "s_create_date"		, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "e_create_date"		, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "billing_count"		, "type" => "" , "format" => "%d" ) ;
+		$this -> fieldsData[] = array( "name" => "billing_status"		, "type" => "" , "format" => "%s" ) ;
+
+		$this -> fieldsData[] = array( "name" => "loginid_new"			, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "passwd_confirm"		, "type" => "" , "format" => "%s" ) ;
+		$this -> fieldsData[] = array( "name" => "passwd_new"			, "type" => "" , "format" => "%s" ) ;
+
+		if ( $this -> isOpen() == true )
+			$this -> fields		= $this -> getFieldsnameOnTable( $this -> fieldsData ) ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+
+		$arParam[ $alias . "_level"			] = DEF_MEMBER_LEVEL_NON ;
+		$arParam[ $alias . "_gender"		] = -1 ;
+		$arParam[ $alias . "_state"			] = -1 ;
+		$arParam[ $alias . "_point"			] = 0 ;
+		$arParam[ $alias . "_total_point"	] = 0 ;
+		$arParam[ $alias . "_magazine"		] = array() ;
+	}
+
+	// データの取得
+	// 整形も含む
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$alias = $this -> alias ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			for ( $i = 0 ; $i < count( $arData ) ; $i ++ )
+			{
+				$passwd			= $arData[ $i ][ $alias . "_passwd"			] ;
+				$tel_home		= $arData[ $i ][ $alias . "_tel_home"		] ;
+				$tel_port		= $arData[ $i ][ $alias . "_tel_port"		] ;
+				$fax			= $arData[ $i ][ $alias . "_fax"			] ;
+
+				// パスワードを暗号化する
+				if ( $passwd != "" )
+				{
+					$passwd = $this -> encrypt( $passwd ) ;
+					$arData[ $i ][ $alias . "_passwd"		] = $passwd ;
+					$arData[ $i ][ $alias . "_crypt_passwd"	] = $passwd ;
+				}
+
+				if( $tel_home == "--" )
+					$tel_home = "" ;
+
+				if( $tel_port == "--" )
+					$tel_port = "" ;
+
+				if( $fax == "--" )
+					$fax = "" ;
+
+				$arData[ $i ][ $alias . "_tel_home"		] = $tel_home ;
+				$arData[ $i ][ $alias . "_tel_port"		] = $tel_port ;
+				$arData[ $i ][ $alias . "_fax"			] = $fax ;
+
+				// 郵便番号、電話、ＦＡＸ分解
+				$arZip	= explode( '-' , $arData[ $i ][ $alias . "_zip"			] ) ;
+				$arTelH	= explode( '-' , $arData[ $i ][ $alias . "_tel_home"	] ) ;
+				$arTelP	= explode( '-' , $arData[ $i ][ $alias . "_tel_port"	] ) ;
+				$arFax	= explode( '-' , $arData[ $i ][ $alias . "_fax"			] ) ;
+
+				$arData[ $i ][ $alias . "_zip1"	] = "" ;
+				$arData[ $i ][ $alias . "_zip2"	] = "" ;
+				if ( count( $arZip ) == 2 )
+				{
+					$arData[ $i ][ $alias . "_zip1"	] = $arZip[ 0 ] ;
+					$arData[ $i ][ $alias . "_zip2"	] = $arZip[ 1 ] ;
+				}
+
+				$arData[ $i ][ $alias . "_tel_home1"	] = "" ;
+				$arData[ $i ][ $alias . "_tel_home2"	] = "" ;
+				$arData[ $i ][ $alias . "_tel_home3"	] = "" ;
+				if ( count( $arTelH ) == 3 )
+				{
+					$arData[ $i ][ $alias . "_tel_home1"	] = $arTelH[ 0 ] ;
+					$arData[ $i ][ $alias . "_tel_home2"	] = $arTelH[ 1 ] ;
+					$arData[ $i ][ $alias . "_tel_home3"	] = $arTelH[ 2 ] ;
+				}
+
+				$arData[ $i ][ $alias . "_tel_port1"	] = "" ;
+				$arData[ $i ][ $alias . "_tel_port2"	] = "" ;
+				$arData[ $i ][ $alias . "_tel_port3"	] = "" ;
+				if ( count( $arTelP ) == 3 )
+				{
+					$arData[ $i ][ $alias . "_tel_port1"	] = $arTelP[ 0 ] ;
+					$arData[ $i ][ $alias . "_tel_port2"	] = $arTelP[ 1 ] ;
+					$arData[ $i ][ $alias . "_tel_port3"	] = $arTelP[ 2 ] ;
+				}
+
+				$arData[ $i ][ $alias . "_fax1"	] = "" ;
+				$arData[ $i ][ $alias . "_fax2"	] = "" ;
+				$arData[ $i ][ $alias . "_fax3"	] = "" ;
+				if ( count( $arFax ) == 3 )
+				{
+					$arData[ $i ][ $alias . "_fax1"	] = $arFax[ 0 ] ;
+					$arData[ $i ][ $alias . "_fax2"	] = $arFax[ 1 ] ;
+					$arData[ $i ][ $alias . "_fax3"	] = $arFax[ 2 ] ;
+				}
+
+				if( $arData[ $i ][ $alias . "_birthday" ] == "" || $arData[ $i ][ $alias . "_birthday" ] == DEF_DATE_MIN )
+				{
+					$arData[ $i ][ $alias . "_birthday_y"	] = "" ;
+					$arData[ $i ][ $alias . "_birthday_m"	] = "" ;
+					$arData[ $i ][ $alias . "_birthday_d"	] = "" ;
+				}
+				else
+				{
+					$obBirthday = new DateTime( $arData[ $i ][ $alias . "_birthday" ] );
+					$arData[ $i ][ $alias . "_birthday_y"	] = $obBirthday -> format( "Y" ) ;
+					$arData[ $i ][ $alias . "_birthday_m"	] = $obBirthday -> format( "n" ) ;
+					$arData[ $i ][ $alias . "_birthday_d"	] = $obBirthday -> format( "j" ) ;
+				}
+
+				$arData[ $i ][ $alias . "_favorite" ] = trim( $arData[ $i ][ $alias . "_favorite" ] , "[" ) ;
+				$arData[ $i ][ $alias . "_favorite" ] = trim( $arData[ $i ][ $alias . "_favorite" ] , "]" ) ;
+				$arData[ $i ][ $alias . "_favorite" ] = explode( "][" , $arData[ $i ][ $alias . "_favorite" ] ) ;
+
+				$arMailMag = array() ;
+				if( $arData[ $i ][ $alias . "_magazine" ] == ( DEF_MAILTOHOME + DEF_MAILTOPORT ) )
+				{
+					$arMailMag[] = DEF_MAILTOHOME ;
+					$arMailMag[] = DEF_MAILTOPORT ;
+				}
+				else if( $arData[ $i ][ $alias . "_magazine" ] == DEF_MAILTOHOME )
+				{
+					$arMailMag[] = DEF_MAILTOHOME ;
+				}
+				else if( $arData[ $i ][ $alias . "_magazine" ] == DEF_MAILTOPORT )
+				{
+					$arMailMag[] = DEF_MAILTOPORT ;
+				}
+				$arData[ $i ][ $alias . "_magazine" ] = $arMailMag ;
+				
+				// 平文のパスワードを削除
+				unset( $arData[ $i ][ $alias . "_clear_passwd" ] ) ;
+			}
+			$this -> arData = $arData ;
+		}
+
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "tel" ;
+		$arParamList[] = "tel1" ;
+		$arParamList[] = "tel2" ;
+		$arParamList[] = "tel3" ;
+		$arParamList[] = "email" ;
+		$arParamList[] = "s_create_date" ;
+		$arParamList[] = "e_create_date" ;
+		$arParamList[] = "billing_count" ;
+		$arParamList[] = "billing_status" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+
+		$obCart = new PARTS_Cart( $this -> conn ) ;
+		$sql .= sprintf( "LEFT JOIN ( SELECT %s.memberid , count(*) AS billing_count " , $obCart -> alias ) ;
+		$sql .= sprintf( "FROM %s %s                   " , $obCart -> tname , $obCart -> alias ) ;
+		$sql .= sprintf( "WHERE %s.status         = 1  " , $obCart -> alias ) ;
+		$sql .= sprintf( "AND   %s.billing_status = %d " , $obCart -> alias , $billing_status ) ;
+		$sql .= sprintf( "GROUP BY %s.memberid         " , $obCart -> alias ) ;
+		$sql .= sprintf( ") ref_cart " ) ;
+		$sql .= sprintf( "ON %s.memberid = ref_cart.memberid " , $this -> alias ) ;
+
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( $memberid != -1 )
+			$sql .= sprintf( "AND %s.memberid = %d " , $this -> alias , $memberid ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		if ( $loginid != -1 )
+			$sql .= sprintf( "AND %s.loginid like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $loginid ) ) ;
+			
+		if ( $level != -1 )
+			$sql .= sprintf( "AND %s.level = %d " , $this -> alias , $level ) ;
+
+		if ( $first_name != -1 )
+		{
+			$sql .= sprintf( "AND ( " ) ;
+			$sql .= sprintf( "( %s.first_name like '%%%s%%' ) " , $this -> alias , $this -> mb_addslashes( $first_name ) ) ;
+			$sql .= sprintf( "OR " ) ;
+			$sql .= sprintf( "( %s.first_kana like '%%%s%%' ) " , $this -> alias , $this -> mb_addslashes( $first_name ) ) ;
+			$sql .= sprintf( ") " ) ;
+		}
+		
+		if ( $last_name != -1 )
+		{
+			$sql .= sprintf( "AND ( " ) ;
+			$sql .= sprintf( "( %s.last_name like '%%%s%%' ) " , $this -> alias , $this -> mb_addslashes( $last_name ) ) ;
+			$sql .= sprintf( "OR " ) ;
+			$sql .= sprintf( "( %s.last_kana like '%%%s%%' ) " , $this -> alias , $this -> mb_addslashes( $last_name ) ) ;
+			$sql .= sprintf( ") " ) ;
+		}
+		
+		if ( $state != -1 )
+			$sql .= sprintf( "AND %s.state = %d " , $this -> alias , $state ) ;
+
+		if ( $tel_home != -1 )
+			$sql .= sprintf( "AND %s.tel_home = '%s' " , $this -> alias , $this -> mb_addslashes( $tel_home ) ) ;
+
+		if ( $tel_port != -1 )
+			$sql .= sprintf( "AND %s.tel_port = '%s' " , $this -> alias , $this -> mb_addslashes( $tel_port ) ) ;
+
+		if ( $fax != -1 )
+			$sql .= sprintf( "AND %s.fax = '%s' " , $this -> alias , $this -> mb_addslashes( $fax ) ) ;
+
+		if ( $email != -1 )
+		{
+			$sql .= sprintf( "AND ( " ) ;
+			$sql .= sprintf( "( %s.email_home like '%%%s%%' ) " , $this -> alias , $email ) ;
+			$sql .= sprintf( "OR " ) ;
+			$sql .= sprintf( "( %s.email_port like '%%%s%%' ) " , $this -> alias , $email ) ;
+			$sql .= sprintf( ") " ) ;
+		}
+
+		// 電話番号で検索
+		if ( $tel1 != -1 && $tel2 == -1 && $tel3 == -1 )
+		{
+			$sql .= sprintf( "AND ( " ) ;
+			$sql .= sprintf( "( %s.tel_home like '%s-%%' ) OR " ,		$this -> alias ,
+																		$this -> mb_addslashes( $tel1 ) ) ;
+			$sql .= sprintf( "( %s.tel_port like '%s-%%' ) OR " ,		$this -> alias ,
+																		$this -> mb_addslashes( $tel1 ) ) ;
+			$sql .= sprintf( "( %s.fax      like '%s-%%' )    " ,		$this -> alias ,
+																		$this -> mb_addslashes( $tel1 ) ) ;
+			$sql .= sprintf( ") " ) ;
+		}
+		else if ( $tel1 != -1 && $tel2 != -1 && $tel3 == -1 )
+		{
+			$sql .= sprintf( "AND ( " ) ;
+			$sql .= sprintf( "( %s.tel_home like '%s-%s-%%' ) OR " ,	$this -> alias ,	
+																		$this -> mb_addslashes( $tel1 ) ,
+																		$this -> mb_addslashes( $tel2 ) ) ;
+			$sql .= sprintf( "( %s.tel_port like '%s-%s-%%' ) OR " ,	$this -> alias ,
+																		$this -> mb_addslashes( $tel1 ) ,
+																		$this -> mb_addslashes( $tel2 ) ) ;
+			$sql .= sprintf( "( %s.fax      like '%s-%s-%%' )    " ,	$this -> alias ,
+																		$this -> mb_addslashes( $tel1 ) ,
+																		$this -> mb_addslashes( $tel2 ) ) ;
+			$sql .= sprintf( ") " ) ;
+		}
+		else if ( $tel1 != -1 && $tel2 != -1 && $tel3 != -1 )
+		{
+			$sql .= sprintf( "AND ( " ) ;
+			$sql .= sprintf( "( %s.tel_home like '%s-%s-%s' ) OR " ,	$this -> alias ,
+																		$this -> mb_addslashes( $tel1 ) ,
+																		$this -> mb_addslashes( $tel2 ) ,
+																		$this -> mb_addslashes( $tel3 ) ) ;
+			$sql .= sprintf( "( %s.tel_port like '%s-%s-%s' ) OR " ,	$this -> alias ,
+																		$this -> mb_addslashes( $tel1 ) ,
+																		$this -> mb_addslashes( $tel2 ) ,
+																		$this -> mb_addslashes( $tel3 ) ) ;
+			$sql .= sprintf( "( %s.fax      like '%s-%s-%s' )    " ,	$this -> alias ,
+																		$this -> mb_addslashes( $tel1 ) ,
+																		$this -> mb_addslashes( $tel2 ) ,
+																		$this -> mb_addslashes( $tel3 ) ) ;
+			$sql .= sprintf( ") " ) ;
+		}
+		
+		// 登録年月日で検索
+		if ( $s_create_date != -1 && $e_create_date != -1 )
+			$sql .= sprintf( "AND ( %s.create_date >= '%s' AND %s.create_date <= '%s' ) " , $this -> alias , $s_create_date , $this -> alias , $e_create_date ) ;
+		else if ( $s_create_date != -1 )
+			$sql .= sprintf( "AND %s.create_date >= '%s' " , $this -> alias , $s_create_date ) ;
+		else if ( $e_create_date != -1 )
+			$sql .= sprintf( "AND %s.create_date <= '%s' " , $this -> alias , $e_create_date ) ;
+
+		// 未収金の有無で検索
+		if ( $billing_count == 0 )
+			$sql .= sprintf( "AND ref_cart.billing_count = 0 " ) ;
+		else if ( $billing_count == 1 )
+			$sql .= sprintf( "AND ref_cart.billing_count > 0 " ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.loginid , " , $this -> alias ) ;
+				$sql .= sprintf( "%s.create_date " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// ログインIDの入力検査
+			if ( ${ $alias . "_loginid" } == "" )
+			{
+				$error .= "・ログインIDが入力されていません。\n" ;
+			}
+			else
+			{
+				$arWhere = array() ;
+				$arWhere[ "where" ]  = "" ;
+				$arWhere[ "where" ] .= sprintf( "AND %s.level <> %d " , $alias , DEF_MEMBER_LEVEL_NON ) ;
+				$arWhere[ "where" ] .= sprintf( "AND %s.loginid = '%s' " , $alias , $this -> mb_addslashes( ${ $alias . "_loginid" } ) ) ;
+
+				// 修正の場合、異なるIDで指定のログインIDが存在する際は、重複エラーとする。
+				if ( $mode == "update" )
+					$arWhere[ "where" ] .= sprintf( " AND %s.%s <> %d " , $alias , $primarykey , ${ $keyname } ) ;
+	
+				// 重複ID検査
+				$arCheck = $this -> getData( $arWhere ) ;
+				if ( count( $arCheck ) > 0 )
+					$error .= "・同じログインIDが存在しています。\n" ;
+			}
+
+			// パスワードチェック
+			$error .= $this -> checkPassword(	$arParam[ $alias . "_passwd"		] ,
+												$arParam[ $alias . "_crypt_passwd"	]
+											) ;
+	
+			// 会員レベル
+			if ( ${ $alias . "_level" } == -1 )
+				$error .= "・会員レベルが選択されていません。\n" ;
+	
+			// 名前（姓 名）
+			if ( ${ $alias . "_last_name" } == "" )
+				$error .= "・名前(姓)が入力されていません。\n" ;
+	
+			if ( ${ $alias . "_first_name" } == "" )
+				$error .= "・名前(名)が入力されていません。\n" ;
+	
+			// カナ（姓 名）
+			if ( ${ $alias . "_last_kana" } == "" )
+				$error .= "・カナ(姓)が入力されていません。\n" ;
+	
+			if ( ${ $alias . "_first_kana" } == "" )
+				$error .= "・カナ(名)が入力されていません。\n" ;
+
+			// ニックネーム
+			if ( ${ $alias . "_nickname" } == "" )
+				$arParam[ $alias . "_nickname" ] = sprintf( "%s %s" , ${ $alias . "_last_name" } , ${ $alias . "_first_name" } ) ;
+
+			// 生年月日
+			$arParam[ $alias . "_birthday" ] = "" ;
+			$error .= $this -> checkDate(	$arParam[ $alias . "_birthday" ] ,
+											false ,
+											${ $alias . "_birthday_y" } ,
+											${ $alias . "_birthday_m" } ,
+											${ $alias . "_birthday_d" } ,
+											false ,
+											"誕生日" 
+										) ;
+			if( $arParam[ $alias . "_birthday" ] == "" )
+				$arParam[ $alias . "_birthday" ] = NULL ;
+
+			// 性別
+			if ( ${ $alias . "_gender" } == -1 )
+				$error .= "・性別が選択されていません。\n" ;
+
+			// メールアドレス
+			if( ${ $alias . "_email_home" } != "" && 
+				${ $alias . "_email_port" } != "" && 
+				${ $alias . "_email_home" } == ${ $alias . "_email_port" } )
+			{
+				$error .= "・メールアドレス（携帯）には、同じアドレスは入力できません。\n" ;
+			}
+			else
+			{
+				// メールアドレス（自宅）
+				if ( ${ $alias . "_email_home" } == "" )
+				{
+					$error .= "・メールアドレス（自宅）が入力されていません。\n" ;
+				}
+				else
+				{
+					$obMail = new PARTS_Mail() ;
+					if ( $obMail -> checkData( ${ $alias . "_email_home" } ) != TRUE )
+					{
+						$error .= "・メールアドレス（自宅）が正しくありません。\n" ;
+					}
+					else
+					{
+						// 重複検定
+						$arWhere = array() ;
+						$arWhere[ "where" ]  = "" ;
+						$arWhere[ "where" ] .= sprintf( "AND %s.level <> %d " , $alias , DEF_MEMBER_LEVEL_NON ) ;
+						$arWhere[ "where" ] .= sprintf( "AND ( %s.email_home = '%s' OR %s.email_port = '%s' ) " , 
+															$alias ,
+															$this -> mb_addslashes( ${ $alias . "_email_home" } ) , 
+															$alias ,
+															$this -> mb_addslashes( ${ $alias . "_email_home" } ) ) ;
+	
+						// 修正の場合、異なるIDで指定のログインIDが存在する際は、重複エラーとする。
+						if ( $mode == "update" )
+							$arWhere[ "where" ] .= sprintf( " AND %s.%s <> %d " , $alias , $primarykey , ${ $keyname } ) ;
+	
+						// 重複検査
+						$arCheck = $this -> getData( $arWhere ) ;
+						if ( count( $arCheck ) > 0 )
+							$error .= "・同じメールアドレス（自宅）が存在しています。\n" ;
+					}
+				}
+	
+				// メールアドレス（携帯）
+				if ( ${ $alias . "_email_port" } != "" )
+				{
+					$obMail = new PARTS_Mail() ;
+					if ( $obMail -> checkData( ${ $alias . "_email_port" } ) != TRUE )
+					{
+						$error .= "・メールアドレス（携帯）が正しくありません。\n" ;
+					}
+					else
+					{
+						// 重複検定
+						$arWhere = array() ;
+						$arWhere[ "where" ]  = "" ;
+						$arWhere[ "where" ] .= sprintf( "AND %s.level <> %d " , $alias , DEF_MEMBER_LEVEL_NON ) ;
+						$arWhere[ "where" ] .= sprintf( "AND ( %s.email_home = '%s' OR %s.email_port = '%s' ) " , 
+															$alias ,
+															$this -> mb_addslashes( ${ $alias . "_email_port" } ) , 
+															$alias ,
+															$this -> mb_addslashes( ${ $alias . "_email_port" } ) ) ;
+	
+						// 修正の場合、異なるIDで指定のログインIDが存在する際は、重複エラーとする。
+						if ( $mode == "update" )
+							$arWhere[ "where" ] .= sprintf( " AND %s.%s <> %d " , $alias , $primarykey , ${ $keyname } ) ;
+	
+						// 重複検査
+						$arCheck = $this -> getData( $arWhere ) ;
+						if ( count( $arCheck ) > 0 )
+							$error .= "・同じメールアドレス（携帯）が存在しています。\n" ;
+					}
+				}
+			}
+
+			// 都道府県
+			if ( ${ $alias . "_state" } == -1 )
+				$error .= "・都道府県が選択されていません。\n" ;
+	
+			// 市町村
+			if ( ${ $alias . "_city" } == "" )
+				$error .= "・市町村が入力されていません。\n" ;
+	
+			// 住所１
+			if ( ${ $alias . "_addr1" } == "" )
+				$error .= "・住所が入力されていません。\n" ;
+	
+			// 郵便番号
+			$error .= $this -> checkZip( $arParam[ $alias . "_zip" ] , ${ $alias . "_zip1" } , ${ $alias . "_zip2" } ) ;
+
+
+			// 電話番号
+			$error_h = "" ;
+			$error_h = $this -> checkTel( $arParam[ $alias . "_tel_home" ] , 
+											false , 
+											${ $alias . "_tel_home1" } , 
+											${ $alias . "_tel_home2" } , 
+											${ $alias . "_tel_home3" } ) ;
+
+			$error_p = "" ;
+			$error_p = $this -> checkTel( $arParam[ $alias . "_tel_port" ] , 
+											false , 
+											${ $alias . "_tel_port1" } , 
+											${ $alias . "_tel_port2" } , 
+											${ $alias . "_tel_port3" } ) ;
+			if( $error_h != "" && $error_p != "" )
+				$error .= "・自宅／携帯の、最低どちらかの電話番号を正しく入力してください。\n" ;
+
+			// お気入り
+			if ( !is_array( ${ $alias . "_favorite" } ) )
+			{
+				${ $alias . "_favorite" } = trim( ${ $alias . "_favorite" } , "[" ) ;
+				${ $alias . "_favorite" } = trim( ${ $alias . "_favorite" } , "]" ) ;
+				${ $alias . "_favorite" } = explode( "][" , ${ $alias . "_favorite" } ) ;
+			}
+			if ( !is_array( ${ $alias . "_favorite" } ) && count( ${ $alias . "_favorite" } ) == 0 )
+					$error .= "・お気入りについては、最低１つ選んでください。\n" ;
+
+			// 現在ポイント
+			if ( is_numeric( ${ $alias . "_point" } ) == FALSE )
+				$error .= "・現在ポイントが正しく入力されていません。\n" ;
+	
+			// 合計ポイント
+			if ( is_numeric( ${ $alias . "_total_point" } ) == FALSE )
+				$error .= "・合計ポイントが正しく入力されていません。\n" ;
+
+			// メールマガジン
+			if( is_array( ${ $alias . "_magazine" } ) )
+			{
+				if ( in_array( DEF_MAILTOHOME , ${ $alias . "_magazine" } ) && ${ $alias . "_email_home" } == "" )
+					$error .= "・自宅にメールマガジンを受け取る際には、メールアドレス（自宅）の入力が必要です。\n" ;
+		
+				if ( in_array( DEF_MAILTOPORT , ${ $alias . "_magazine" } ) && ${ $alias . "_email_port" } == "" )
+					$error .= "・携帯にメールマガジンを受け取る際には、メールアドレス（携帯）の入力が必要です。\n" ;
+			}
+
+			if( $this -> skip_check == true )
+				$error = "" ;
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+	function	insertData( &$arParam )
+	{
+		$result = false ;
+	
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+	
+		// お気入りを文字列に展開する
+		$szFavo = "" ;
+		$arFavo = array() ;
+		$arFavo = $arParam[ $alias . "_favorite" ] ;
+		if( is_array( $arFavo ) )
+		{
+			for( $i = 0 ; $i < count( $arFavo ) ; $i ++ )
+				$szFavo .= sprintf( "[%d]" , $arFavo[ $i ] ) ;
+		}
+		$arParam[ $alias . "_favorite" ] = $szFavo ;
+
+		// メールマガジン
+		$szMag = 0 ;
+		$arMag = array() ;
+		$arMag = $arParam[ $alias . "_magazine" ] ;
+		if( is_array( $arMag ) )
+		{
+			for( $i = 0 ; $i < count( $arMag ) ; $i ++ )
+				$szMag += $arMag[ $i ] ;
+		}
+		$arParam[ $alias . "_magazine" ] = $szMag ;
+
+		$caption = "" ;
+		$result = parent::insertData( $arParam ) ;
+
+		$arParam[ $alias . "_favorite" ] = $arFavo ;
+		$arParam[ $alias . "_magazine" ] = $arMag ;
+
+		return $result ;
+	}
+
+	function	updateData( $arParam )
+	{
+		$result = false ;
+	
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= sprintf( "%s_%s" , $alias , $primarykey ) ;
+
+		// 嗜好を文字列に展開する
+		$szFavo = "" ;
+		$arFavo = array() ;
+		$arFavo = $arParam[ $alias . "_favorite" ] ;
+		if( is_array( $arFavo ) )
+		{
+			for( $i = 0 ; $i < count( $arFavo ) ; $i ++ )
+				$szFavo .= sprintf( "[%d]" , $arFavo[ $i ] ) ;
+		}
+		$arParam[ $alias . "_favorite" ] = $szFavo ;
+
+		// メールマガジン
+		$szMag = 0 ;
+		$arMag = array() ;
+		$arMag = $arParam[ $alias . "_magazine" ] ;
+		if( is_array( $arMag ) )
+		{
+			for( $i = 0 ; $i < count( $arMag ) ; $i ++ )
+				$szMag += $arMag[ $i ] ;
+		}
+		$arParam[ $alias . "_magazine" ] = $szMag ;
+
+		$caption = "" ;
+		$result = parent::updateData( $arParam ) ;
+
+		return $result ;
+	}
+
+	// リストボックスなどに用いる
+	// $arParam[ id ] = name
+	// の形に整形する
+	function	getList( $arWhere , $page = -1 )
+	{
+		$arList		= $this -> getData( $arWhere , $page ) ;
+		$arResult	= array() ;
+
+		for( $i = 0 ; $i < count( $arList ) ; $i ++ )
+		{
+			$id			= $arList[ $i ][ sprintf( "%s_memberid"		, $this -> alias ) ] ;
+			$last_name	= $arList[ $i ][ sprintf( "%s_last_name"	, $this -> alias ) ] ;
+			$first_name	= $arList[ $i ][ sprintf( "%s_first_name"	, $this -> alias ) ] ;
+			$value		= sprintf( "%s %s" , $last_name , $first_name ) ;
+
+			$arResult[ $id ] = $value ;
+		}
+		return $arResult ;
+	}
+	
+	// 正会員(無料・有料共に)として登録されているか調べる
+	function	inTrueMember( $memberid = -1 , $loginid = "" , $level = DEF_MEMBER_LEVEL_NON )
+	{
+		$result = false ;
+		$arMember = array() ;
+		$arWhere = array() ;
+		if( $memberid != -1 )
+			$arWhere[ "memberid" ] = $memberid ;
+		if( $loginid != "" )
+			$arWhere[ "loginid" ] = $loginid ;
+
+		if( count( $arWhere ) )
+		{
+			$arWhere[ "where" ] = sprintf( "AND %s.level not in ( -1 , %d ) " , $this -> alias , $level ) ;
+			$arMember = $this -> getData( $arWhere ) ;
+			if( count( $arMember ) )
+				$result = true ;
+		}
+		return $result ;
+	}
+	
+	// 指定会員のポイントが使用ポイントを超過していないか調べる
+	// 超過していたら true
+	function	isOverPoint( $memberid , $used_point )
+	{
+		$result = false ;
+		$arMember = array() ;
+		$arWhere = array() ;
+
+		$arWhere[ "memberid" ] = $memberid ;
+		$arMember = $this -> getData( $arWhere ) ;
+		
+		if( $used_point > $arMember[ 0 ][ sprintf( "%s_point" , $this -> alias ) ] )
+			$result = true ;
+
+		return $result ;
+
+	}
+	
+	// 誕生日から年齢を算出
+	function	birthdayToAge( $birthday )
+	{
+		$obNow = new DateTime() ;
+		$obBirth = new DateTime( $birthday ) ;
+		
+		// 年齢を算出
+		$ty = $obNow -> format( "Y" ) ;
+		$tm = $obNow -> format( "n" ) ;
+		$td = $obNow -> format( "j" ) ;
+	
+		$by = $obBirth -> format( "Y" ) ;
+		$bm = $obBirth -> format( "n" ) ;
+		$bd = $obBirth -> format( "j" ) ;
+		$age = $ty - $by;
+		if ( $tm * 100 + $td < $bm * 100 + $bd )
+			$age--;
+	
+		return $age ;
+	}
+
+	// パラメータのグローバル変数への登録
+	// パラメータのグローバル変数への登録
+	function assignGlobal( $additional = array() , &$arParam = array() )
+	{
+		parent::assignGlobal( $additional ) ;
+
+		$alias		= $this -> alias ;
+		$fields		= $this -> fields ;
+		
+		foreach( $fields as $name )
+			global	${ $alias . "_" . $name } ;
+
+		${ $alias . "_last_kana"	} = $this -> hira2kana( ${ $alias . "_last_kana"	} ) ;
+		${ $alias . "_first_kana"	} = $this -> hira2kana( ${ $alias . "_first_kana"	} ) ;
+
+		// 配列に読み込んだデータを保存する。
+		$this -> makeParam( $arParam ) ;
+	}
+
+	// 前後のメンバーIDを取得し、page を更新する
+	function	getNextPrevMemberID( $getdatakey , &$arParamFind )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParamFind ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+	
+		// WHERE句の初期化
+		if ( $S_LOGINID == "" )
+			$S_LOGINID = -1 ;
+	
+		if ( $S_FIRSTNAME == "" )
+			$S_FIRSTNAME = -1 ;
+	
+		if ( $S_LASTNAME == "" )
+			$S_LASTNAME = -1 ;
+	
+		if ( $S_STATE == "" )
+			$S_STATE = -1 ;
+	
+		if ( $S_TEL1 == "" )
+			$S_TEL1 = -1 ;
+	
+		if ( $S_TEL2 == "" )
+			$S_TEL2 = -1 ;
+	
+		if ( $S_TEL3 == "" )
+			$S_TEL3 = -1 ;
+	
+		if ( $S_EMAIL == "" )
+			$S_EMAIL = -1 ;
+	
+		$arWhere = array() ;
+		$arWhere[ "loginid"		]	= $S_LOGINID ;
+		$arWhere[ "first_name"	]	= $S_FIRSTNAME ;
+		$arWhere[ "last_name"	]	= $S_LASTNAME ;
+		$arWhere[ "state"		]	= $S_STATE ;
+		$arWhere[ "tel1"		]	= $S_TEL1 ;
+		$arWhere[ "tel2"		]	= $S_TEL2 ;
+		$arWhere[ "tel3"		]	= $S_TEL3 ;
+		$arWhere[ "email"		]	= $S_EMAIL ;
+		$arWhere[ "where"		]	= sprintf( "AND %s.level != %d " , $alias , DEF_MEMBER_LEVEL_NON ) ;
+		
+		$arWhere[ "order" ] = $order ;
+
+		$now_id = $getdatakey ;
+		$target_index = -1 ;
+		$prev_index = -1 ;
+		$next_index = -1 ;
+		$arMember = array() ;
+		$arResult = array() ;
+		$arMemberID = array() ;
+
+		if ( $this -> isOpen() )
+		{
+			$cnt = $this -> getCount( $arWhere ) ;
+			$arMember = $this -> getData( $arWhere ) ;
+			for ( $index = 0 ; $index < $cnt ; $index ++ )
+			{
+				// データの取得
+				$arData		= $arMember[ $index ] ;
+				$memberid	= $arData[ $alias . "_memberid" ] ;
+				$arMemberID[ $index ] = $memberid ;
+				
+				if( $memberid == $now_id )
+				{
+					$target_index = $index ;
+					if( $index != 0 )
+						$prev_index = $index - 1 ;
+
+					if( $index != ( $cnt -1 ) )
+						$next_index = $index + 1 ;
+				}
+			}
+		}
+
+		if ( $target_index != -1 )
+		{
+			$page = floor( $target_index / ( NUMBER_PER_PAGE ) ) ;
+			$arParamFind[ "page" ] = $page ;
+		}
+
+		if( $prev_index != -1 )
+			$arResult[ "prev" ] = $arMemberID[ $prev_index ] ;
+		else
+			$arResult[ "prev" ] = -1 ;
+	
+		if( $next_index != -1 )
+			$arResult[ "next" ] = $arMemberID[ $next_index ] ;
+		else
+			$arResult[ "next" ] = -1 ;
+
+		return $arResult ;
+	}
+/*
+	// メンバー情報のみ取得
+	function	getMemberData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$alias = $this -> alias ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeMemberSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeMemberSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "over_level" ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+		
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+		
+		// levelによる検索
+		if ( $over_level != -1 && $over_level != "" )
+			$sql .= sprintf( "AND %s.level > %d " , $this -> alias , $this -> mb_addslashes( $over_level ) ) ;
+
+		// loginid
+		if ( $loginid != -1 && $loginid != "" )
+			$sql .= sprintf( "AND %s.loginid = '%s' " , $this -> alias , $this -> mb_addslashes( $loginid ) ) ;
+		
+		// passwd
+		if ( $clear_passwd != -1 && $clear_passwd != "" )
+			$sql .= sprintf( "AND %s.clear_passwd = '%s' " , $this -> alias , $this -> mb_addslashes( $clear_passwd ) ) ;
+		
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.memberid " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+*/
+}
+?>

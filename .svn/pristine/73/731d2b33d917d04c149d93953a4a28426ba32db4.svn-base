@@ -1,0 +1,142 @@
+<?php
+//	require_once( "../../../lib/system.php") ;
+
+require_once( "class/tcpdf/tcpdf.php" ) ;
+require_once( 'class/db.class.php' ) ;
+require_once( 'class/corp.class.php' ) ;
+
+// 納品用PDFを出力するクラス
+
+//----------------------------------------------------------------------------
+// Ａ４縦／Ａ４横共通（フォント以外のサイズはmm）
+//----------------------------------------------------------------------------
+
+define( "PDF_A4_WIDTH"				, "210"				) ; // A4横
+define( "PDF_A4_HEIGHT"				, "297"				) ; // A4縦
+
+define( "PDF_USE_FONT"				, "kozgopromedium"	) ; // 使用フォント
+define( "PDF_USE_FONTSIZE"			, 9					) ; // 基本フォントサイズ
+define( "PDF_TOP_MARGIN"				, 15				) ; // TOP部分のマージン(ヘッダーは表示部分は無視され、純粋に上限からの値)
+define( "PDF_LEFT_MARGIN"				, 10				) ; // 左側マージン
+define( "PDF_RIGHT_MARGIN"			, 10				) ; // 右側マージン
+
+define( "PDF_INNER_WIDTH"				, PDF_A4_WIDTH - PDF_LEFT_MARGIN - PDF_RIGHT_MARGIN	) ; // A4の実質描画幅
+
+
+define( "PDF_HEADER_MARGIN"			, 10				) ; // ヘッダーマージン
+define( "PDF_FONTSIZE_HEADER_TITLE"	, 20				) ; // ヘッダータイトル部のフォントサイズ
+
+define( "PDF_FOOTER_MARGIN"			, 15				) ; // フッターマージン
+define( "PDF_FONTSIZE_FOOTER"			, 9					) ; // フッターのフォントサイズ
+
+// 印刷形式の設定
+if ( defined( "DEF_DELIVERY_SHEET" ) != true )
+	define( "DEF_DELIVERY_SHEET"	, 	DEF_DELIVERY_SHEET_ORDER | DEF_DELIVERY_SHEET_BILL | DEF_DELIVERY_SHEET_CHECK ) ; // 有効な種類の設定
+
+// 派生クラス定義
+class PDFDelivery extends TCPDF
+{
+	var	$arCorp	= array() ;
+
+	function __construct( $cartid )
+	{
+		$obCorp		= new PARTS_Corp( $this -> conn ) ;
+
+		$arCorp = $obCorp -> getOwner() ;
+		if ( count( $arCorp ) > 0 )
+			$this -> arCorp = $arCorp[ 0 ] ;
+
+		parent::__construct(PDF_PAGE_ORIENTATION, PDF_UNIT, PDF_PAGE_FORMAT, true, 'UTF-8', false);
+	}
+
+	// ヘッダー(元からあるHeader関数は中身が空なので上書きして使用する仕組み)
+	public function	Header()
+	{
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "vsize"		, PDF_INNER_WIDTH ) ;
+		$header = $tmpl -> fetch( "order/pdf_header.tmpl" ) ;
+		unset( $tmpl ) ;
+
+		$header = mb_convert_encoding( $header , "UTF-8" , "SJIS" ) ;
+		$this -> SetFont( PDF_USE_FONT , "B" , PDF_FONTSIZE_HEADER_TITLE ) ;
+		$this -> writeHTML( $header , true , false , true , false ) ;
+	}
+
+	public function	Footer()
+	{
+		$page = $this -> getAliasNumPage() ;
+		$all_page = $this -> getAliasNbPages() ;
+
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "vsize"		, PDF_INNER_WIDTH ) ;
+		$tmpl -> assign( "page"			, $page ) ;
+		$tmpl -> assign( "all_page"		, $all_page ) ;
+		$tmpl -> assign( "corp_data"	, $this -> arCorp ) ;
+		$footer = $tmpl -> fetch( "order/pdf_footer.tmpl" ) ;
+		unset( $tmpl ) ;
+
+		$footer = mb_convert_encoding( $footer , "UTF-8" , "SJIS" ) ;
+		$this -> SetFont( PDF_USE_FONT , "" , PDF_FONTSIZE_FOOTER ) ;
+		$this -> writeHTML( $footer , true , false , true , false ) ;
+	}
+	
+	function PDFLineTitle( $title )
+	{
+		$vsize = ceil( PDF_INNER_WIDTH / 3 ) ;
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "vsize"		, $vsize ) ;
+		$tmpl -> assign( "title"		, $title ) ;
+		$data = $tmpl -> fetch( "order/pdf_linetitle.tmpl" ) ;
+		unset( $tmpl ) ;
+
+		$data = mb_convert_encoding( $data , "UTF-8" , "SJIS" ) ;
+		$this -> SetFont( PDF_USE_FONT , "B" , PDF_FONTSIZE_HEADER_TITLE ) ;
+		$this -> writeHTML( $data , true , false , true , false ) ;
+	}
+
+	function PDFOrder( $arParam )
+	{
+		$tsize = 80 ;
+		$spacer = 20 ;
+		$start_right = $tsize + $spacer ;
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "tsize"		, $tsize ) ;
+		$tmpl -> assign( "spacer"		, $spacer ) ;
+		$tmpl -> assign( "start_right"	, $start_right ) ;
+		$tmpl -> assign( "data"			, $arParam ) ;
+		$tmpl -> assign( "data_corp"	, $this -> arCorp ) ;
+		$data = $tmpl -> fetch( "order/pdf_order.tmpl" ) ;
+		unset( $tmpl ) ;
+
+		$data = mb_convert_encoding( $data , "UTF-8" , "SJIS" ) ;
+		$this -> SetFont( PDF_USE_FONT , "" , PDF_USE_FONTSIZE ) ;
+		$this -> writeHTML( $data , true , false , true , false ) ;
+	}
+
+	function PDFOrderList( $arCartOrder )
+	{
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "data"			, $arCartOrder ) ;
+		$data = $tmpl -> fetch( "order/pdf_order_list.tmpl" ) ;
+		unset( $tmpl ) ;
+
+		$data = mb_convert_encoding( $data , "UTF-8" , "SJIS" ) ;
+		$this -> SetFont( PDF_USE_FONT , "" , PDF_USE_FONTSIZE ) ;
+		$this -> writeHTML( $data , true , false , true , false ) ;
+	}
+
+	function PDFCheckSheet( $arCartOrder , $arWrapDeco )
+	{
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "wrapdeco"			, $arWrapDeco ) ;
+		$tmpl -> assign( "data"				, $arCartOrder ) ;
+		$data = $tmpl -> fetch( "order/pdf_order_checksheet.tmpl" ) ;
+		unset( $tmpl ) ;
+
+		$data = mb_convert_encoding( $data , "UTF-8" , "SJIS" ) ;
+		$this -> SetFont( PDF_USE_FONT , "" , PDF_USE_FONTSIZE ) ;
+		$this -> writeHTML( $data , true , false , true , false ) ;
+	}
+}
+
+?>

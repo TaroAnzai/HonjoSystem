@@ -1,0 +1,33 @@
+<?php
+// TOP »•iî•ñ•\Ž¦
+function	fetchFeatureProduct( $func )
+{
+	$obProduct = new PARTS_Product ;
+	$arProduct	= array() ;
+	if ( $obProduct -> isOpen() )
+	{
+		$arWhere = array() ;
+		$arWhere[ "edit_flg"	] = DEF_EDITSTATUS_OPENED ;
+		$arWhere[ "main_flg"	] = 1 ;
+		$arProduct = $obProduct -> getData( $arWhere , 0 , 4 ) ;
+	}
+
+	$obCorp = new PARTS_Corp ;
+	$arCorp		= array() ;
+	if ( $obCorp -> isOpen() )
+	{
+		$arCorp = $obCorp -> getOwner() ;
+		if ( count( $arCorp ) > 0 )
+			$arCorp = $arCorp[ 0 ] ;
+	}
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "product_data"	, $arProduct ) ;
+	$tmpl -> assign( "corp_data"	, $arCorp ) ;
+	$data = $tmpl -> fetch( "product/product_index.tmpl" ) ;
+	
+	unset( $tmpl ) ;
+
+	return $data ;
+}
+
+?>

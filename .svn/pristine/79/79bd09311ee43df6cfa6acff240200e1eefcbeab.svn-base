@@ -1,0 +1,244 @@
+<?php
+//ini_set( "display_errors" ,1 ) ;
+
+// キャンペーン情報の表示
+function	fetchCampaign( $func )
+{
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	$pos = -1 ;
+	global	$_COOKIE ;
+	if ( isset( $_COOKIE[ "ci" ] ) == TRUE )
+		$pos = $_COOKIE[ "ci" ] - 1 ;
+
+	$data = "" ;
+
+	$obCampaign = new PARTS_Campaign() ;
+	if ( $obCampaign -> isOpen() == true )
+	{
+		$now = date( "Y-m-d" ) ;
+		$arWhere = array() ;
+		$arWhere[ "edit_flg"	]	 = DEF_EDITSTATUS_OPENED ;
+		$arWhere[ "where"		]	 = sprintf( "AND %s.open_date <= '%s 00:00:00' " , $obCampaign -> alias , $now ) ;
+		$arWhere[ "where"		]	.= sprintf( "AND %s.end_date >= '%s 23:59:59' " , $obCampaign -> alias , $now ) ;
+
+		$arData = $obCampaign -> getData( $arWhere ) ;
+
+		$arCampaign = array() ;
+		$cnt = count( $arData ) ;
+		for ( $c = 0 ; $c < $cnt ; $c ++ )
+		{
+			if ( $func != DEF_PERSONAL_FUNC_TOP )
+				$pos = $c ;
+			else if ( $pos == -1 )
+				$pos = ( intval( time() / 3 ) ) % $cnt ;
+			else
+				$pos = $pos % $cnt ;
+
+			$obCart = new PARTS_Cart() ;
+			if ( $obCart -> isOpen() == true )
+			{
+				$cartid = $obCart -> getID( $sessionid , $memberid ) ;
+		
+				$arCart = array() ;
+				if ( $cartid != -1 )
+				{
+					$arCart	= $obCart -> arData ;
+				
+					if ( count( $arCart ) > 0 )
+						$arCart = $arCart[ 0 ] ;
+				
+					$obCart -> inCart( $arData[ $pos ] ) ;
+				}
+			}
+			$arCampaign[] = $arData[ $pos ] ;
+			
+			if ( $func == DEF_PERSONAL_FUNC_TOP )
+				break ;
+		}
+
+		$tmplFils = "topics/topics_feature.tmpl" ;
+		if ( $func == DEF_PERSONAL_FUNC_TOP )
+			$tmplFils = "top/top_feature.tmpl" ;
+	
+		$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+		$tmpl -> assign( "func"				, $func ) ;
+		$tmpl -> assign( "campaign_data"	, $arCampaign ) ;
+		$data = $tmpl -> fetch( $tmplFils ) ;
+		
+		unset( $tmpl ) ;
+	}
+	return $data ;
+}
+
+// スポンサーリンクの表示
+function	fetchBanner( $mode = "top" , $type = DEF_BANNER_IMAGE )
+{
+	$pos = -1 ;
+	global	$_COOKIE ;
+	if ( isset( $_COOKIE[ "bi" ] ) == TRUE )
+		$pos = $_COOKIE[ "bi" ] - 1 ;
+
+	global	$arLinkKind ;
+	$arBanner = array() ;
+	$arLink = array() ;
+
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		$sql  = sprintf( "" ) ;
+		$sql .= sprintf( "SELECT * FROM banner_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 " ) ;
+		$sql .= sprintf( "AND edit_flg = %d " , DEF_EDITSTATUS_OPENED ) ;
+		$sql .= sprintf( "AND type = %d " , $type ) ;
+
+		$arData = array() ;
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arData[] = $obDB -> getValues( $record , $i ) ;
+			}
+			$obDB -> closeRecord( $record ) ;
+			if ( $cnt != 0 )
+			{
+				if ( $type == DEF_BANNER_IMAGE )
+				{
+					if ( $pos == -1 )
+						$pos = ( intval( time() / 3 ) ) % $cnt ;
+					else
+						$pos = $pos % $cnt ;
+					$arBanner[] = $arData[ $pos ] ;
+				}
+				else
+				{
+					$arBanner = $arData ;
+				}
+			}
+		}
+
+		$sql  = sprintf( "" ) ;
+		$sql .= sprintf( "SELECT * FROM link_data " ) ;
+		$sql .= sprintf( "WHERE status = 1 " ) ;
+		$sql .= sprintf( "AND edit_flg = %d " , DEF_EDITSTATUS_OPENED ) ;
+
+		$record = $obDB -> executeSQL( $sql ) ;
+		if ( $record )
+		{
+			$cnt = $obDB -> getDataCount( $record ) ;
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$arLink[] = $obDB -> getValues( $record , $i ) ;
+			}
+			$obDB -> closeRecord( $record ) ;
+		}
+		
+	}
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	$tmpl -> assign( "banner_data"	, $arBanner ) ;
+	$tmpl -> assign( "link_data"	, $arLink ) ;
+	$link = $tmpl -> fetch( "banner.tmpl" ) ;
+	
+	unset( $tmpl ) ;
+
+	return $link ;
+}
+
+// TOPページの上部のコンテンツ
+function	fetchInfo()
+{
+	global	$_SERVER ;
+	$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+	$NRML = sprintf( "http://%s" , $SERVER_NAME ) ;
+	$SSL = sprintf( "https://%s" , $SERVER_NAME ) ;
+
+	// ログイン情報の取得
+	$userid = -1 ;
+
+	$obSession = new PARTS_Session() ;
+	$sessionid	= $obSession -> getID() ;
+	$memberid = $obSession -> getUserID( $sessionid , SESSION_MEMBER ) ;
+
+	// ユーザ情報の取得
+	if ( $memberid != -1 )
+	{
+		$arMember = GetPersonalMember( $userid ) ;
+		if ( count( $arMember ) == 0 )
+			$userid = -1 ;
+	}
+
+	$data = "" ;
+	if ( $memberid == -1 )
+	{
+		$data = fetchWebpage( DEF_PERSONAL_FUNC_EYECATCH ) ;
+	}
+	else
+	{
+		// ログイン状態の場合、会員用タブを表示する
+		// 現在未使用
+//		fetchMemberMenu( $node , $memberid ) ;
+	}
+	return $data ;
+}
+
+// 通信表示
+function	fetchNews()
+{
+	$mode		= "" ;
+	$arTop		= array() ;
+	$arReport	= array() ;
+
+	$top = "" ;
+	$obTop = new PARTS_Top() ;
+	if ( $obTop -> isOpen() )
+	{
+		// 掲載可能なTOPコンテンツがあるか？
+		$arWhere = array() ;
+		$arWhere[ "edit_flg"	] = DEF_EDITSTATUS_OPENED ;
+		$arWhere[ "start_date"	] = sprintf( "<= '%s 23:59:59' " , date( "Y-m-d" ) ) ;
+		$arWhere[ "end_date"	] = sprintf( ">= '%s 00:00:00' " , date( "Y-m-d" ) ) ;
+		$arTop = $obTop -> getData( $arWhere ) ;
+		
+		$cnt = count( $arTop ) ;
+		if ( $cnt != 0 )
+		{
+			$arTop = $arTop[ 0 ] ;
+			$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+			$tmpl -> assign( "mode"			, $mode ) ;
+			$tmpl -> assign( "top_data"		, $arTop ) ;
+			$tmpl -> assign( "report_data"	, $arReport ) ;
+			$top = $tmpl -> fetch( "top/top.tmpl" ) ;
+			unset( $tmpl ) ;
+		}
+		else
+		{
+			
+			// 掲載可能な通信があるか？
+			// SQL文作成
+			$obReport = new PARTS_Report() ;
+			if ( $obReport -> isOpen() == true )
+			{
+				$arWhere = array() ;
+				$arReport = $obReport -> getData( $arWhere ) ;
+				$mode = "report" ;
+
+				$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+				$tmpl -> assign( "mode"			, $mode ) ;
+				$tmpl -> assign( "top_data"		, $arTop ) ;
+				$tmpl -> assign( "report_data"	, $arReport ) ;
+				$top = $tmpl -> fetch( "top/top.tmpl" ) ;
+				unset( $tmpl ) ;
+			}
+		}
+	}
+	
+	return $top ;
+	
+}
+
+?>

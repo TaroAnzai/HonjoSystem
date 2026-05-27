@@ -1,0 +1,796 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php" ) ;
+
+	$mode = "" ;
+	$func = "" ;
+
+	// 登録ボタン名によって処理を分ける
+	$arMode = array( "append" , "update" , "delete" ) ;
+	GetSystemMode( $mode , $func , $arMode ) ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	// DB
+	$obMailmag	= new PARTS_Mailmag() ;
+
+	$alias		= $obMailmag -> alias ;
+	$primarykey	= $obMailmag -> primarykey ;
+	$keyname	= $alias . "_" . $primarykey ;
+
+	// 編集データ保存
+	$arParam = array() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obMailmag -> assignGlobal( $additional , $arParam ) ;
+
+	// 編集データ変換
+	$subject		= $obMailmag -> mb2sb( ${ $alias . "_subject" } ) ;
+	$sentence_text	= $obMailmag -> mb2sb( ${ $alias . "_sentence_text" } ) ;
+	$sentence_html	= $obMailmag -> mb2sb( ${ $alias . "_sentence_html" } ) ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obMailmag -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page ;
+
+	// データ取得時のキー初期化
+	$getdatakey = ${ $keyname } ;
+
+	// タイトル取得時のキー初期化
+	$menu = FUNC_MAILMAGAZINE ;
+
+	$blams		= new BLAMS() ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	$error = "" ;
+	switch ( $mode )
+	{
+	// 新規登録モード
+	case "append" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "input" :
+		case "back" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データを初期化
+			if ( $func != "back" )
+			{
+				$obMailmag -> initData( $arParam ) ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level , $obMailmag ) ;
+			break ;
+
+		// 新規確認画面
+		case "confrm" :
+
+			// 入力データ検査
+			$error = CheckData( $mode , $func , $arParam , $obMailmag ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obMailmag) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 新規入力" , $funcname ) ;
+
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+
+				// 機能を「入力」に戻す
+				$func = "input" ;
+
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level , $obMailmag ) ;
+			}
+			break ;
+
+		// 新規完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 登録処理" , $funcname ) ;
+
+			// 新規登録実施
+			if ( InsertData( $arParam , $obMailmag ) == TRUE )
+			{
+				$error = "正常に登録されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・登録に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $obMailmag ) ;
+			break ;
+		}
+		break ;
+
+	// 更新モード
+	case "update" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "input" :
+		case "back" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 更新入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データをDBから再取得（初期化）
+			if ( $func != "back" )
+			{
+				// データをDBから再取得（初期化）
+				$arParam = GetData( $getdatakey , $obMailmag ) ;
+				$now_date = new DateTime();
+				$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+				$arParam[ "update_date" ] = $now ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level , $obMailmag ) ;
+			break ;
+
+		// 更新確認画面
+		case "confrm" :
+
+			// 入力データ検査
+			$error = CheckData( $mode , $func , $arParam , $obMailmag ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obMailmag ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 更新入力" , $funcname ) ;
+
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+
+				// 機能を「入力」に戻す
+				$func = "input" ;
+
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInput( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level , $obMailmag ) ;
+			}
+			break ;
+
+		// 更新完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 更新処理" , $funcname ) ;
+
+			// 更新登録実施
+			if ( UpdateData( $arParam , $obMailmag ) == TRUE )
+			{
+				$error = "正常に更新されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・更新に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $obMailmag ) ;
+			break ;
+
+		// データ送信設定画面
+		case "send" :
+		case "cancel" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			// データをDBから再取得（初期化）
+			$arParam = GetData( $getdatakey , $obMailmag ) ;
+
+			$send_flg = $arParam[ $alias . "_send_flg" ] ;
+			if ( $func == "send" )
+				$send_flg = DEF_MAILMAG_SENDFLG_OPENED ;
+			else if ( $func == "cancel" )
+				$send_flg = DEF_MAILMAG_SENDFLG_PEND ;
+
+			// 入力データ検査
+			$error = CheckData( $mode , $func , $arParam , $obMailmag ) ;
+			if ( $error == "" )
+			{
+				// 更新登録実施
+				$arParam[ $alias . "_send_flg" ] = $send_flg ;
+				$arParam[ "updt" ] = TRUE ;
+				if ( UpdateData( $arParam , $obMailmag ) == TRUE )
+				{
+					global	$arMailMagSendFlg ;
+					$error = sprintf( "・%sに設定しました。\n" , $arMailMagSendFlg[ $send_flg ] ) ;
+				}
+				else
+				{
+					$error  = "【エラーがあります】\n" ;
+					$error .= "・更新に失敗しました。\n" ;
+				}
+			}
+			else
+			{
+				// エラー表示
+				$error = "【エラーがあります】\n" . $error ;
+			}
+			
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obMailmag ) ;
+
+			break ;
+
+		// 初期画面、もしくはFunctionの指定がない場合
+		default :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			// データをDBから再取得（初期化）
+			$arParam = GetData( $getdatakey , $obMailmag ) ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obMailmag ) ;
+			break ;
+		}
+		break ;
+
+	// 削除モード
+	case "delete" :
+
+		// 機能分岐
+		switch( $func )
+		{
+
+		// 削除確認画面
+		case "confrm" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 削除確認" , $funcname ) ;
+
+			// 削除確認メッセージ表示
+			$error  = "【重要】\n" ;
+			$error .= "・" . $funcname ;
+			$error .= "を削除すると、該当会員はその後ログインできなくなります。\n" ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obMailmag ) ;
+			break ;
+
+		// 削除完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 削除処理" , $funcname ) ;
+
+			// 削除処理実施
+			$arParam[ "updt" ] = TRUE ;
+			if ( $obMailmag -> deleteData( $arParam ) == TRUE )
+			{
+				$error = "正常に削除されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・削除に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $obMailmag ) ;
+			break ;
+		}
+		break ;
+	}
+
+	// 「一覧に戻る」の表示
+	// 次の会員、前の会員でpageを修正するので下へ
+	$pageback = "" ;
+	if ( $mode != "append" )
+		$pageback = $blams -> FetchPageback( "list.php" , $arParamFind ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> FetchContents( $pageback . $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+	exit ;
+
+// ボタンの表示
+function	FetchButton( $blams , $mode , $func , $arParam , $obMailmag )
+{
+	$alias = $obMailmag -> alias ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $key => $value )
+		${ $key } = $value ;
+		
+	$arProcess = array(
+		//		ボタン名		MODE		FUNC		処理	ボタンサイズ
+		"list"				=>	array( "value" => "一覧に戻る"		, "name" => "list"				, "action" => "list.php"	, "target" => "" , "org_action" => "" ) ,
+		"detail"			=>	array( "value" => "詳細に戻る"		, "name" => "update[default]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"append_confrm"		=>	array( "value" => "新規確認"		, "name" => "append[confrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_done"		=>	array( "value" => "登録します"		, "name" => "append[done]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_cancel"		=>	array( "value" => "キャンセル"		, "name" => "append[cancel]"	, "action" => "list.php"	, "target" => "" , "org_action" => "" ) ,
+		"append_back"		=>	array( "value" => "戻る"			, "name" => "append[back]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"update_input"		=>	array( "value" => "更新"			, "name" => "update[input]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_confrm"		=>	array( "value" => "更新確認"		, "name" => "update[confrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_done"		=>	array( "value" => "更新します"		, "name" => "update[done]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_cancel"		=>	array( "value" => "キャンセル"		, "name" => "update[default]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_back"		=>	array( "value" => "戻る"			, "name" => "update[back]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"delete_confrm"		=>	array( "value" => "削除"			, "name" => "delete[confrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"delete_done"		=>	array( "value" => "削除します"		, "name" => "delete[done]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"delete_cancel"		=>	array( "value" => "キャンセル"		, "name" => "update[default]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"send_start"		=>	array( "value" => "配信開始"		, "name" => "update[send]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"send_cancel"		=>	array( "value" => "配信中止"		, "name" => "update[cancel]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+	) ;
+
+	$arOperation = array() ;
+	switch( $mode )
+	{
+	case "append" :
+		switch( $func )
+		{
+		case "input" :
+		case "back" :
+			$arOperation = array( "append_confrm" , "append_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "append_done" , "append_back" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "list" ) ;
+			break ;
+		}
+		break ;
+
+	case "update" :
+		switch( $func )
+		{
+		case "input" :
+		case "back" :
+			$arOperation = array( "update_confrm" , "update_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "update_done" , "update_back" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "detail" ) ;
+			break ;
+		default :
+			$arOperation = array( "update_input" , "delete_confrm" ) ;
+			if ( ${ $alias . "_edit_flg" } == DEF_EDITSTATUS_OPENED && ${ $alias . "_send_flg" } != DEF_MAILMAG_SENDFLG_COMP )
+			{
+				if ( ${ $alias . "_send_flg" } == DEF_MAILMAG_SENDFLG_PEND )
+					$arOperation[] = "send_start" ;
+				else if ( ${ $alias . "_send_flg" } == DEF_MAILMAG_SENDFLG_OPENED )
+					$arOperation[] = "send_cancel" ;
+			}
+			else if ( ${ $alias . "_send_flg" } == DEF_MAILMAG_SENDFLG_COMP )
+			{
+				$arOperation = array( "delete_confrm" ) ;
+			}
+			break ;
+		}
+		break ;
+
+	case "delete" :
+		switch( $func )
+		{
+		case "confrm" :
+			$arOperation = array( "delete_done" , "delete_cancel" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "list" ) ;
+			break ;
+		}
+		break ;
+	}
+
+	$arButton = array() ;
+	for ( $i = 0 ; $i < count( $arOperation ) ; $i ++ )
+		$arButton[] = $arProcess[ $arOperation[ $i ] ] ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "id"				, "edit_form"		) ;
+	$tmpl -> assign( "button_data"		, $arButton			) ;
+	$data = $tmpl -> fetch( "common/button.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+	
+}
+
+// データ取得
+function	GetData( $getdatakey , $obMailmag )
+{
+	$alias = $obMailmag -> alias ;
+	
+	$arResult = array() ;
+	$arResult = $obMailmag -> getAt( $getdatakey ) ;
+
+	// 送信日時分解
+	if( $arResult[ $alias . "_send_date" ] == "" )
+	{
+		$arResult[ $alias . "_send_date_y"	] = "" ;
+		$arResult[ $alias . "_send_date_m"	] = "" ;
+		$arResult[ $alias . "_send_date_d"	] = "" ;
+		$arResult[ $alias . "_send_date_h"	] = "" ;
+		$arResult[ $alias . "_send_date_i"	] = "" ;
+	}
+	else
+	{
+		$obSendDate = new DateTime( $arResult[ $alias . "_send_date" ] );
+		$arResult[ $alias . "_send_date_y"	] = $obSendDate -> format( "Y" ) ;
+		$arResult[ $alias . "_send_date_m"	] = $obSendDate -> format( "n" ) ;
+		$arResult[ $alias . "_send_date_d"	] = $obSendDate -> format( "j" ) ;
+		$arResult[ $alias . "_send_date_h"	] = $obSendDate -> format( "H" ) ;
+		$arResult[ $alias . "_send_date_i"	] = $obSendDate -> format( "i" ) ;
+	}
+	return $arResult ;
+}
+
+// データ検査
+function	CheckData( $mode , $func , &$arParam , $obMailmag )
+{
+	$error = "" ;
+	$error = $obMailmag -> checkData( $mode , $func , $arParam ) ;
+
+	return $error ;
+}
+
+// 詳細表示
+function	FetchDetail(  $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_adminid , $login_level , $obMailmag )
+{
+	$alias = $obMailmag -> alias ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $key => $value )
+		${ $key } = $value ;
+
+	// 送信状態
+	global	$arMailMagSendFlg ;
+	$szMailMagSendFlg = $arMailMagSendFlg[ ${ $alias . "_send_flg" } ] ;
+	if ( $szMailMagSendFlg == "" )
+		$szMailMagSendFlg = "不明" ;
+
+	// 種類
+	global	$arMailMagType ;
+	$szMailMagType = $arMailMagType[ ${ $alias . "_type" } ] ;
+	if ( $szMailMagType == "" )
+		$szMailMagType = "不明" ;
+
+	// 送信方法
+	global	$arMailMagSendType ;
+	$szMailMagSendType = $arMailMagSendType[ ${ $alias . "_send_type" } ] ;
+	if ( $szMailMagSendType == "" )
+		$szMailMagSendType = "不明" ;
+
+	// 送信日時
+	if ( ${ $alias . "_send_date" } != "0001-01-01 00:00:00" )
+		$szSend_date  = ${ $alias . "_send_date" } ;
+	else
+		$szSend_date = "" ;
+
+	// 編集状態
+	global	$arEditStatus ;
+	$szEditStatus = $arEditStatus[ ${ $alias . "_edit_flg" } ] ;
+	if ( $szEditStatus == "" )
+		$szEditStatus = "不明" ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+
+	$arForm = array() ;
+
+	$value = "" ;
+	$value .= $blams -> FetchTHTD( "送信状態" , $szMailMagSendFlg , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> FetchTHTD( "種類" , $szMailMagType , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> FetchTHTD( "表題" , ${ $alias . "_subject" } , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> FetchTHTD( "本文(TEXT)" , ${ $alias . "_sentence_text" } , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> FetchTHTD( "本文(HTML)" , ${ $alias . "_sentence_html" } , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> FetchTHTD( "送信方法" , $szMailMagSendType , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> FetchTHTD( "送信日時" , $szSend_date , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> FetchTHTD( "編集状態" , $szEditStatus , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> FetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> FetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$value .= $blams -> FetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParam , $obMailmag ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "input_data"		, $arParam			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/confrm.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+// 入力フォームの表示
+function	FetchInput( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_level , $obMailmag )
+{
+	$alias = $obMailmag -> alias ;
+
+	// ローカル変数へ展開する
+	foreach ( $arParam as $key => $value )
+		${ $key } = $value ;
+
+	// 送信状態
+	global	$arMailMagSendFlg ;
+	$szMailMagSendFlg = $arMailMagSendFlg[ ${ $alias . "_send_flg" } ] ;
+	if ( $szMailMagSendFlg == "" )
+		$szMailMagSendFlg = "不明" ;
+
+	// 種類
+	global	$arMailMagType ;
+	$szMailMagType = $arMailMagType[ ${ $alias . "_type" } ] ;
+	if ( $szMailMagType == "" )
+		$szMailMagType = "不明" ;
+
+	// 送信方法
+	global	$arMailMagSendType ;
+	$szMailMagSendType = $arMailMagSendType[ ${ $alias . "_send_type" } ] ;
+	if ( $szMailMagSendType == "" )
+		$szMailMagSendType = "不明" ;
+
+	// 送信日時
+	if ( ${ $alias . "_send_date" } == "0001-01-01 00:00:00" )
+	{
+		${ $alias . "_send_date" } = new DateTime() ;
+		${ $alias . "_send_date" } -> modify( "+1 minutes" ) ;
+		$min = 5 - intval( ${ $alias . "_send_date" } -> format( "i" ) ) % 5 ;
+		$fmt = sprintf( "+%d minutes" , 15 + $min ) ;
+		${ $alias . "_send_date" } -> modify( $fmt ) ;
+
+		${ $alias . "_send_date_y" } = ${ $alias . "_send_date" } -> format( "Y" ) ;
+		${ $alias . "_send_date_m" } = ${ $alias . "_send_date" } -> format( "n" ) ;
+		${ $alias . "_send_date_d" } = ${ $alias . "_send_date" } -> format( "j" ) ;
+		${ $alias . "_send_date_h" } = ${ $alias . "_send_date" } -> format( "H" ) ;
+		${ $alias . "_send_date_i" } = ${ $alias . "_send_date" } -> format( "i" ) ;
+
+		$szSend_date = "" ;
+	}
+	else
+	{
+		$szSend_date = ${ $alias . "_send_date" } ;
+	}
+
+	// 編集状態（「削除」状態は選択不可）
+	global	$arEditStatus ;
+	$arEditStatus_local = $arEditStatus ;
+	unset( $arEditStatus_local[ DEF_EDITSTATUS_DELETED ] ) ;
+
+	$szEditStatus = $arEditStatus_local[ ${ $alias . "_edit_flg" } ] ;
+	if ( $szEditStatus == "" )
+		$szEditStatus = "不明" ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$isize	= $vsize - 16 ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+	$isize3	= $vsize3 - 16 ;
+
+	$arForm = array() ;
+
+	$value = "" ;
+	$value .= $blams -> FetchTHTD( "送信状態" , $szMailMagSendFlg , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$form   = $blams -> FetchRadio( $alias . "_type" , ${ $alias . "_type" } , $arMailMagType , $isize ) ;
+	$value .= $blams -> FetchTHTD( "種類 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> FetchInputbox( $alias . "_subject" , ${ $alias . "_subject" } , $isize3  , MAX_MAIL_SUBJECT , IME_ON ) ;
+	$value .= $blams -> FetchTHTD( "表題 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> FetchTextarea( $alias . "_sentence_text" , ${ $alias . "_sentence_text" } , $isize3  ) ;
+	$value .= $blams -> FetchTHTD( "内容(TEXT) ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_BORDER | BLAMS_FORMAT_NOTAB , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> FetchCKEditor( $alias . "_sentence_html" , ${ $alias . "_sentence_html" } , $isize3  ) ;
+	$value .= $blams -> FetchTHTD( "内容(HTML) ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_BORDER | BLAMS_FORMAT_NOTAB , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	// 配信開始になっていない場合のみ、状態を変更できる
+	if ( ${ $alias . "_send_flg" } == DEF_MAILMAG_SENDFLG_PEND )
+	{
+		$value = "" ;
+		$form	= $blams -> FetchSelectbox( $alias . "_send_type" , ${ $alias . "_send_type" } , $arMailMagSendType , $isize , "" , FALSE ) ;
+		$value .= $blams -> FetchTHTD( "送信方法 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	
+		$form	= $blams -> FetchInputDateTime(	$alias . "_send_date" ,
+											${ $alias . "_send_date_y" } , ${ $alias . "_send_date_m" } , ${ $alias . "_send_date_d" } ,
+											${ $alias . "_send_date_h" } , ${ $alias . "_send_date_i" } , 0 ,
+											true , true , true ,
+											true , true , false
+										) ;
+
+		$value .= $blams -> FetchTHTD( "送信日時 ※" , $form . "<br />現在時刻より15分以内は設定できません", $tsize , $vsize , "col1" , "left" , "middle" ) ;
+		$arForm[] = $value ;
+
+		$value = "" ;
+		$form	= $blams -> FetchSelectbox( $alias . "_edit_flg" , ${ $alias . "_edit_flg" } , $arEditStatus_local , $isize , "" , FALSE ) ;
+		$value .= $blams -> FetchTHTD( "編集状態 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+		$arForm[] = $value ;
+	}
+	else
+	{
+		$value = "" ;
+		$value .= $blams -> FetchTHTD( "送信方法" , $szMailMagSendType , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+		$value .= $blams -> FetchTHTD( "送信日時" , $szSend_date , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+		$arForm[] = $value ;
+
+		$value = "" ;
+		$value .= $blams -> FetchTHTD( "編集状態" , $szEditStatus , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+		$arForm[] = $value ;
+
+		// 配信開始時は、送信日時と送信方法と編集状態が表示されるだけなので追加
+		$arParamFind[ $alias . "_send_date"		] = $szSend_date ;
+		$arParamFind[ $alias . "_send_type"		] = ${ $alias . "_send_type" } ;
+		$arParamFind[ $alias . "_edit_flg"		] = ${ $alias . "_edit_flg" } ;
+	}
+
+	$value = "" ;
+	$value .= $blams -> FetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> FetchTHTD( "更新日" , ${ $alias . "_update_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$value .= $blams -> FetchTHTD( "登録日" , ${ $alias . "_create_date" } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATETIME ) ;
+	$arForm[] = $value ;
+
+	$arParamFind[ $alias . "_create_date"	] = ${ $alias . "_create_date" } ;
+	$arParamFind[ $alias . "_update_date"	] = ${ $alias . "_update_date" } ;
+	$arParamFind[ $alias . "_send_flg"		] = ${ $alias . "_send_flg" } ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParam , $obMailmag ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, ""				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, $alias . "_mailmagid"			) ;
+	$tmpl -> assign( "idvalue"			, ${ $alias . "_mailmagid" }	) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	
+	return $data ;
+}
+
+// 詳細表示
+function	FetchDone( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $obMailmag )
+{
+	$alias = $obMailmag -> alias ;
+	
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParam , $obMailmag ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, $alias . "_mailmagid"			) ;
+	$tmpl -> assign( "idvalue"			, ${ $alias . "_mailmagid" }	) ;
+	$data = $tmpl -> fetch( "common/done.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	return $data ;
+}
+
+// データの追加
+function	InsertData( $arParam , $obMailmag )
+{
+	$result = FALSE ;
+
+	foreach ( $arParam as $key => $value )
+		${ $key } = $value ;
+
+	$result = $obMailmag -> insertData( $arParam ) ;
+
+	return $result ;
+}
+
+// データの更新
+function	UpdateData( $arParam , $obMailmag )
+{
+	$result = FALSE ;
+
+	foreach ( $arParam as $key => $value )
+		${ $key } = $value ;
+
+	$result = $obMailmag -> updateData( $arParam ) ;
+
+	return $result ;
+}
+
+?>

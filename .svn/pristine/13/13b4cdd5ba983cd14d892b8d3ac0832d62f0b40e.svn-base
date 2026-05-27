@@ -1,0 +1,267 @@
+<?php
+	ini_set( "display_errors" , 1 ) ;
+	require_once( "server.ini.php" ) ;
+	require_once( "conf/user.ini.php" ) ;
+	require_once( "class/blams.class.php" ) ;
+	require_once( "class/terminal.class.php" ) ;
+	
+	ob_implicit_flush() ;
+	
+	//print_r( $argv ) ;
+
+	$blams = new BLAMS() ;
+	$blams -> WriteSyslog( "NAC SERVER START" ) ;
+
+	if ( empty( $argv[ 1 ] ) == false )
+	{
+		// コマンド解析
+		$cmd = $argv[ 1 ] ;
+		$func = "" ;
+		if ( empty( $argv[ 2 ] ) == false )
+			$func = $argv[ 2 ] ;
+	
+		if ( $cmd == "CL" )
+		{
+			$blams -> WriteSyslog( "client mode:" . $func ) ;
+		
+			NacRecvFile( $func ) ;
+		}
+		else if ( $cmd == "SV" )
+		{
+			$blams -> WriteSyslog( "server mode" ) ;
+			SeqRecvData( $blams ) ;
+		}
+	}
+exit ;
+
+function	NacRecvFile( $cmd )
+{
+	$obTerminal = new PARTS_Terminal() ;
+	$obTerminal -> skip_check = true ;
+	$alias = $obTerminal -> alias ;
+
+	$dir = sprintf( "%s/%s*.txt" , NAC_DATA_FOLDER_RECV , $cmd ) ;
+	
+	foreach ( glob( $dir ) as $orgpath )
+	{
+		clearstatcache() ;
+		$stat = stat( $orgpath ) ;
+		$orgfile = basename( $orgpath ) ;
+		$tmpfile = basename( $orgpath , ".txt" ) ;
+		$tmpfile = $tmpfile . ".~~~" ;
+		$tmppath = sprintf( "%s/%s" , NAC_DATA_FOLDER_SEND , $tmpfile ) ;
+		
+		// テンポラリファイルへ名前を変更する
+		@rename( $orgpath , $tmppath ) ;
+		
+		// ファイルの中身を取り出し、DBに保存する
+		$fp = fopen( $tmppath , "r" ) ;
+		if ( $fp )
+		{
+			while ( feof( $fp ) == false )
+			{
+				$data = trim( fgets( $fp ) ) ;
+				
+				if ( empty( $data ) == false )
+				{
+					$arParam = array() ;
+					$arParam[ $alias . "_command"	] = $cmd ;
+					$arParam[ $alias . "_filename"	] = $orgfile ;
+					$arParam[ $alias . "_data"		] = $data ;
+					
+					$obTerminal -> insertData( $arParam ) ;
+				}
+			}
+		}	
+		// ファイルを削除する
+		@unlink( $tmppath ) ;
+	}
+}
+
+// 電文解析
+function	SeqRecvData( $blams )
+{
+	// 標準入力からシーケンサーからの電文受信
+	$stdin = fopen( 'php://stdin','r' );
+	if ( $stdin )
+	{
+		$recv = trim( fgets( $stdin , 8192 ) ) ;
+		
+		// 先頭の10バイトのデータを取り出す
+		$cmd = trim( substr( $recv , 0 , 10 ) ) ;
+		$data = substr( $recv , 10 ) ;
+		
+		switch ( $cmd )
+		{
+		case	NAC_STORAGE_WASH :		// 洗浄ライン入庫
+			SeqStorageWash( $cmd , $data ) ;
+			break ;
+		
+		case	NAC_STORAGE_PRODUCT :	// 製品ライン入庫
+			SeqStorageProduct( $cmd , $data ) ;
+			break ;
+		
+		case	NAC_SHIPPING_REQ :		// ボトルコンテナ取り出し要求
+			SeqShippingReq	( $cmd , $data ) ;
+			break ;
+		
+		case	NAC_BCRDATA :			// ボトルコンテナID読み込み
+			SeqBCData( $cmd , $data ) ;
+			break ;
+		}
+		
+		// 標準出力へ電文送信
+		$blams -> WriteSyslog( $data ) ;
+	}
+}
+
+// 入庫要求（製品ライン）
+function	SeqStorageProduct( $cmd , $data )
+{
+}
+
+// 入庫要求（洗浄ライン）
+function	SeqStorageWash( $cmd , $data )
+{
+	$result = 20 ;
+
+	$obTerminal = new PARTS_Terminal() ;
+	$obTerminal -> skip_check = true ;
+	$alias = $obTerminal -> alias ;
+
+	$date = new DateTime() ;
+	$usec = microtime() * 1000 % 1000 ;
+	$tmpfile = sprintf( "%s%s%04d.~~~" , NAC_STORAGE_WASH , $date -> format( "ymdHis" ) , $usec ) ;
+	$orgfile = sprintf( "%s%s%04d.txt" , NAC_STORAGE_WASH , $date -> format( "ymdHis" ) , $usec ) ;
+	$tmppath = sprintf( "%s/%s" , NAC_DATA_FOLDER_SEND , $tmpfile ) ;
+	$orgpath = sprintf( "%s/%s" , NAC_DATA_FOLDER_SEND , $orgfile ) ;
+	
+	$fp = fopen( $tmppath , "w+" ) ;
+	if ( $fp )
+	{
+		$fmt = sprintf( "%%%dd%%%ds%%%ds%%%ds%%%ds" , SEQ_MAX_LINE , SEQ_MAX_PRODUCTID , SEQ_MAX_BCUID , SEQ_MAX_BCUID , SEQ_MAX_BCUID ) ;
+		sscanf( $data , $fmt , $line , $pid , $bcuid1 , $bcuid2 , $bcuid3 ) ;
+		
+		$data  = sprintf( "%d%s%-10s%33s\r\n" , $line , $pid , $bcuid1 , "" ) ;
+		$data .= sprintf( "%d%s%-10s%33s\r\n" , $line , $pid , $bcuid2 , "" ) ;
+		$data .= sprintf( "%d%s%-10s%33s\r\n" , $line , $pid , $bcuid3 , "" ) ;
+		$result = 40 ;
+		if ( fwrite( $fp , $data ) )
+		{
+			// DBに保存
+			$arParam = array() ;
+			$arParam[ $alias . "_command"	] = $cmd ;
+			$arParam[ $alias . "_filename"	] = $orgfile ;
+			$arParam[ $alias . "_data"		] = $data ;
+				
+			$obTerminal -> insertData( $arParam ) ;
+			
+			@rename( $tmppath , $orgpath ) ;
+			
+			$result = 0 ;
+		
+		}
+		fclose( $fp ) ;
+	}
+	
+	$res = sprintf( "RES %04d\r\n" , $result ) ;
+	echo $res ;
+}
+
+// BCU取り出し
+function	SeqShippingReq	( $cmd , $data )
+{
+	$result = 20 ;
+
+	$obTerminal = new PARTS_Terminal() ;
+	$obTerminal -> skip_check = true ;
+	$alias = $obTerminal -> alias ;
+
+	$fmt = sprintf( "%%%dd%%%ds" , SEQ_MAX_LINE , SEQ_MAX_PRODUCTID ) ;
+	sscanf( $data , $fmt , $kind , $pid ) ;
+
+	$loop = 1 ;
+	if ( $kind == NAC_KIND_START )
+		$loop = 4 ;
+
+	for ( $i = 0 ; $i < $loop ; $i ++ ) 
+	{
+		$date = new DateTime() ;
+		$usec = microtime() * 1000 % 1000 ;
+		$tmpfile = sprintf( "%s%s%04d.~~~" , NAC_BCRDATA , $date -> format( "ymdHis" ) , $usec ) ;
+		$orgfile = sprintf( "%s%s%04d.txt" , NAC_BCRDATA , $date -> format( "ymdHis" ) , $usec ) ;
+		$tmppath = sprintf( "%s/%s" , NAC_DATA_FOLDER_SEND , $tmpfile ) ;
+		$orgpath = sprintf( "%s/%s" , NAC_DATA_FOLDER_SEND , $orgfile ) ;
+		
+		$fp = fopen( $tmppath , "w+" ) ;
+		if ( $fp )
+		{
+			$data = sprintf( "%d%s\r\n" , $kind , $pid ) ;
+			$result = 40 ;
+			if ( fwrite( $fp , $data ) )
+			{
+				// DBに保存
+				$arParam = array() ;
+				$arParam[ $alias . "_command"	] = $cmd ;
+				$arParam[ $alias . "_filename"	] = $orgfile ;
+				$arParam[ $alias . "_data"		] = $data ;
+					
+				$obTerminal -> insertData( $arParam ) ;
+				
+				@rename( $tmppath , $orgpath ) ;
+				
+				$result = 0 ;
+			
+			}
+			fclose( $fp ) ;
+		}
+	}
+	
+	$res = sprintf( "RES %04d\r\n" , $result ) ;
+	echo $res ;
+}
+
+// BCR読み取り
+function	SeqBCData( $cmd , $data )
+{
+	$result = 20 ;
+
+	$obTerminal = new PARTS_Terminal() ;
+	$obTerminal -> skip_check = true ;
+	$alias = $obTerminal -> alias ;
+
+	$date = new DateTime() ;
+	$usec = microtime() * 1000 % 1000 ;
+	$tmpfile = sprintf( "%s%s%04d.~~~" , NAC_BCRDATA , $date -> format( "ymdHis" ) , $usec ) ;
+	$orgfile = sprintf( "%s%s%04d.txt" , NAC_BCRDATA , $date -> format( "ymdHis" ) , $usec ) ;
+	$tmppath = sprintf( "%s/%s" , NAC_DATA_FOLDER_SEND , $tmpfile ) ;
+	$orgpath = sprintf( "%s/%s" , NAC_DATA_FOLDER_SEND , $orgfile ) ;
+	
+	$fp = fopen( $tmppath , "w+" ) ;
+	if ( $fp )
+	{
+		$data = sprintf( "%-10s\r\n" , $data ) ;
+		$result = 40 ;
+		if ( fwrite( $fp , $data ) )
+		{
+			// DBに保存
+			$arParam = array() ;
+			$arParam[ $alias . "_command"	] = $cmd ;
+			$arParam[ $alias . "_filename"	] = $orgfile ;
+			$arParam[ $alias . "_data"		] = $data ;
+				
+			$obTerminal -> insertData( $arParam ) ;
+			
+			@rename( $tmppath , $orgpath ) ;
+			
+			$result = 0 ;
+		
+		}
+		fclose( $fp ) ;
+	}
+	
+	$res = sprintf( "RES %04d\r\n" , $result ) ;
+	echo $res ;
+}
+
+?>

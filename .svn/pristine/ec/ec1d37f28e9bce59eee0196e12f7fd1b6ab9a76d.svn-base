@@ -1,0 +1,82 @@
+function CalcPoint( value , unit )
+{
+	if( value.search( /\D/i ) != -1 )
+	{
+		value = value.replace( /\D/i , "" ) ; 
+		document.getElementById( 'orderform' ).used_unit.value = value ;
+	}
+	else
+	{
+		calced = value * unit ;
+		document.getElementById( 'orderform' ).temp.value = calced ;
+		if( document.getElementById( 'orderform' ).used_point )
+			document.getElementById( 'orderform' ).used_point.value = calced ;
+		if( document.getElementById( 'orderform' ).ct_used_point )
+			document.getElementById( 'orderform' ).ct_used_point.value = calced ;
+		if( document.getElementById( 'back' ).used_point )
+			document.getElementById( 'back' ).used_point.value = calced ;
+	}
+}
+
+function change_wrapping()
+{
+	if( document.getElementById( 'orderform' ).wrapping[0].checked == true )
+	{
+		document.getElementById( 'orderform' ).decoration[0].checked = true ;
+	}
+}
+
+function change_decoration()
+{
+	if( document.getElementById( 'orderform' ).decoration[1].checked == true )
+	{
+		document.getElementById( 'orderform' ).wrapping[1].checked = true ;
+	}
+}
+
+function dispdst( value )
+{
+	if( value == -1 || value == 0 )
+	{
+		document.getElementById( 'orderform' ).delivery[0].checked = true ;
+		document.getElementById( 'dst' ).style.display = 'none' ;
+	}
+	else
+	{
+		document.getElementById( 'dst' ).style.display = 'block' ;
+	}
+}
+
+function setdst( value )
+{
+	if( value == -1 )
+	{
+		document.getElementById( 'dst_name' ).value = "" ;
+		document.getElementById( 'dst_state' ).value = -1 ;
+		document.getElementById( 'dst_city' ).value = "" ;
+		document.getElementById( 'dst_addr1' ).value = "" ;
+		document.getElementById( 'dst_addr2' ).value = "" ;
+		document.getElementById( 'dst_zip1' ).value = "" ;
+		document.getElementById( 'dst_zip2' ).value = "" ;
+		document.getElementById( 'dst_tel1' ).value = "" ;
+		document.getElementById( 'dst_tel2' ).value = "" ;
+		document.getElementById( 'dst_tel3' ).value = "" ;
+	}
+}
+
+function change_delivery_flg()
+{
+	if( document.getElementById( 'orderform' ).delivery_flg[0].checked == true )
+	{
+		document.getElementById( 'orderform' ).delivery_date_y.disabled = true ;
+		document.getElementById( 'orderform' ).delivery_date_m.disabled = true ;
+		document.getElementById( 'orderform' ).delivery_date_d.disabled = true ;
+	}
+
+	if( document.getElementById( 'orderform' ).delivery_flg[1].checked == true )
+	{
+		document.getElementById( 'orderform' ).delivery_date_y.disabled = false ;
+		document.getElementById( 'orderform' ).delivery_date_m.disabled = false ;
+		document.getElementById( 'orderform' ).delivery_date_d.disabled = false ;
+	}
+}

@@ -1,0 +1,50 @@
+<?php
+/*
+* BLAMS
+*
+* FONT定義ファイル<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+
+////////////////////////////////////////////////////////////////////
+//
+// FONTに関わる定義
+//
+////////////////////////////////////////////////////////////////////
+
+//
+// FONTファイル
+//
+define( "DEF_FONT_PATH"  , WEBAPP_INCLUDE_DIR . "/font" ) ;
+
+define( "DEF_FONT_NAME_JP_GOTH"		,	"MS Gothic"			) ;
+define( "DEF_FONT_NAME_JP_MIN"		,	"MS Mincho"			) ;
+define( "DEF_FONT_NAME_JP_HGSG"		,	"HG Gothic"			) ;
+define( "DEF_FONT_NAME_JP_HGMSG"	,	"HG Maru Gothic"	) ;
+define( "DEF_FONT_NAME_JP_KAILUNA"	,	"KAI Luna Gothic"	) ;
+define( "DEF_FONT_NAME_ENG"			,	"Trebuchet MS"		) ;
+define( "DEF_FONT_NAME_CODE39"		,	"Code39 T25W10"		) ;
+
+define( "DEF_FONT_FILE_JP_GOTH"		,	DEF_FONT_PATH . "/msgothic.ttc"			) ;
+define( "DEF_FONT_FILE_JP_MIN"		,	DEF_FONT_PATH . "/msmincho.ttc"			) ;
+define( "DEF_FONT_FILE_JP_HGSG"		,	DEF_FONT_PATH . "/HGRSGU.TTC"			) ;
+define( "DEF_FONT_FILE_JP_HGMSG"	,	DEF_FONT_PATH . "/HGRSMP.TTF"			) ;
+define( "DEF_FONT_FILE_JP_KAILUNA"	,	DEF_FONT_PATH . "/KaiLuna_E_W48.TTF"	) ;
+define( "DEF_FONT_FILE_ENG"			,	DEF_FONT_PATH . "/calibri.ttf"			) ;
+define( "DEF_FONT_FILE_CODE39"		,	DEF_FONT_PATH . "/C39T25W1.TTF"			) ;
+
+global	$arFontName ;
+$arFontName = array(
+	DEF_FONT_NAME_JP_GOTH		=> DEF_FONT_FILE_JP_GOTH	,
+	DEF_FONT_NAME_JP_MIN		=> DEF_FONT_FILE_JP_MIN		,
+	DEF_FONT_NAME_JP_HGSG		=> DEF_FONT_FILE_JP_HGSG	,
+	DEF_FONT_NAME_JP_HGMSG		=> DEF_FONT_FILE_JP_HGMSG	,
+	DEF_FONT_NAME_JP_KAILUNA	=> DEF_FONT_FILE_JP_KAILUNA	,
+	DEF_FONT_NAME_ENG			=> DEF_FONT_FILE_ENG		,
+	DEF_FONT_NAME_CODE39		=> DEF_FONT_FILE_CODE39		,
+) ;
+?>

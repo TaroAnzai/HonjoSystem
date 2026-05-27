@@ -1,0 +1,1671 @@
+<?php
+/**
+* BLAMS 基本関数郡 HTMLクラス
+*
+* 基本関数郡<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+ini_set( "display_errors" ,1 ) ;
+
+define( "BLAMS_FORMAT_NONE"				,	0x00000000	) ;
+define( "BLAMS_FORMAT_BORDER"			,	0x00010000	) ;
+define( "BLAMS_FORMAT_NOBORDER"			,	0x00020000	) ;
+define( "BLAMS_FORMAT_DATE"				,	0x00040000	) ;
+define( "BLAMS_FORMAT_DATETIME"			,	0x00080000	) ;
+define( "BLAMS_FORMAT_NUMBER"			,	0x00100000	) ;
+define( "BLAMS_FORMAT_NOTAB"			,	0x00200000	) ;
+define( "BLAMS_FORMAT_NL2BR"			,	0x00400000	) ;
+define( "BLAMS_FORMAT_WORDWRAP"			,	0x00800000	) ;
+define( "BLAMS_FORMAT_ESCAPE"			,	0x01000000	) ;
+define( "BLAMS_FORMAT_READONLY"			,	0x02000000	) ;
+define( "BLAMS_FORMAT_DISABLED"			,	0x04000000	) ;
+define( "BLAMS_FORMAT_PLANE"			,	0x80000000	) ;
+define( "BLAMS_FORMAT_MULTILINE_OUTPUT"	,	BLAMS_FORMAT_ESCAPE | BLAMS_FORMAT_WORDWRAP | 100 | BLAMS_FORMAT_NL2BR	) ;
+define( "BLAMS_FORMAT_MULTILINE_INPUT"	,	BLAMS_FORMAT_NOTAB														) ;
+
+$_FUNC = 1 ;
+define( "IME_ON"						,	$_FUNC ++	) ;
+define( "IME_OFF"						,	$_FUNC ++	) ;
+
+// 性別
+$_FUNC = 0 ;
+define( "DEF_GENDER_MALE"		,	$_FUNC ++	) ;		// 男性
+define( "DEF_GENDER_FEMALE"		,	$_FUNC ++	) ;		// 女性
+
+global	$arGender ;
+$arGender = array(
+	DEF_GENDER_MALE		=> "男性" ,
+	DEF_GENDER_FEMALE	=> "女性"
+) ;
+
+// 和暦
+global $arWareki ;
+$arWareki = array(
+	"M" => "明治" ,
+	"T" => "大正" ,
+	"S" => "昭和" ,
+	"H" => "平成" ,
+) ;
+
+$_FUNC = 0 ;
+define( "DEF_SUNDAY"			,	$_FUNC ++ ) ;
+define( "DEF_MONDAY"			,	$_FUNC ++ ) ;
+define( "DEF_TUESDAY"			,	$_FUNC ++ ) ;
+define( "DEF_WEDNESDAY"			,	$_FUNC ++ ) ;
+define( "DEF_THURSDAY"			,	$_FUNC ++ ) ;
+define( "DEF_FRIDAY"  			,	$_FUNC ++ ) ;
+define( "DEF_SATURDAY"			,	$_FUNC ++ ) ;
+define( "DEF_HOLYDAY"			,	$_FUNC ++ ) ;
+
+global $arDays ;
+$arDays = array(
+	DEF_SUNDAY			=>	"日" ,
+	DEF_MONDAY			=>	"月" ,
+	DEF_TUESDAY			=>	"火" ,
+	DEF_WEDNESDAY		=>	"水" ,
+	DEF_THURSDAY		=>	"木" ,
+	DEF_FRIDAY			=>	"金" ,
+	DEF_SATURDAY		=>	"土" ,
+	DEF_HOLYDAY			=>	"祝祭日" ,
+) ;
+
+// URCHINコードがなければ設定をする
+// SlimStatを使用する為削除
+// if ( defined( "DEF_GACODE" ) != true )
+//	define( "DEF_GACODE" , "UA-3053493-1" ) ;
+
+session_name( "SSID" ) ;
+
+class BLAMS
+{
+	var	$tmpl ;			// テンプレートクラス
+	var $commonPath ;	// 共通テンプレートパス
+
+	var	$arMenu ;
+	var	$arSubMenu ;
+	var	$funcAnchor ;
+	var	$arNavi ;
+
+	var	$obSession ;
+	var	$conn ;
+
+	// Constractor
+	function	__construct( $template = DEF_DEFAULT_TEMPLATENAME , $commonPath = "common/" )
+	{
+		$this -> init( $template , $commonPath ) ;
+
+		$this -> conn = "" ;
+	}
+
+	function	init( $template = DEF_DEFAULT_TEMPLATENAME , $commonPath = "common/" )
+	{
+		global	$arMenu ;
+		global	$arSubMenu ;
+		global	$funcAnchor ;
+		global	$arNavi ;
+
+		$this -> arMenu		= $arMenu ;
+		$this -> arSubMenu	= $arSubMenu ;
+		$this -> funcAnchor	= $funcAnchor ;
+		$this -> arNavi		= $arNavi ;
+	}
+
+	function	setPath( $name = "default" )
+	{
+		$smarty_template = $this -> tmpl -> setPath( $name ) ;
+		$this -> tmpl -> template_dir	= $smarty_template . "/" . $name . "/" ;
+	}
+	
+	// ファンクション名の取得
+	function	getFuncName( $funcno )
+	{
+		$funcname = $this -> arNavi[ $funcno ][ "anchor" ] ;
+
+		return $funcname ;
+	}
+
+	// URLから機能番号を取得する
+	function	getFuncNumber()
+	{
+		global	$PHP_SELF ;
+	
+		$this -> arMenu		= array() ;
+		$this -> arSubMenu	= array() ;
+		$this -> funcAnchor	= "" ;
+	
+		$func = -1 ;
+	
+		// URLが機能クラス名となっている
+		$obDB = new PARTS_Menu( $this -> conn ) ;
+	
+		if ( $obDB -> isOpen() )
+		{
+			$url	= $_SERVER[ "REQUEST_URI" ] ;
+			$self	= $_SERVER[ "SCRIPT_NAME" ] ;
+			$ext = array( ".php" => "/" , "index.html" => "" ) ;
+	
+			$keys = array_keys( $ext ) ;
+			for ( $f = 0 ; $f < count( $ext ) ; $f ++ )
+			{
+				$url = str_replace( $keys[ $f ] , $ext[ $keys[ $f ] ] , $url ) ;
+				$self = str_replace( $keys[ $f ] , $ext[ $keys[ $f ] ] , $self ) ;
+			}
+			
+			$alias = $obDB -> alias ;
+			
+			$self = trim( $self , "/" ) ;
+			$arSelf = explode( "/" , $self ) ;
+			
+			$where  = "" ;
+			$where .= sprintf( "AND ( %s.url = '%s' " , $alias , $url ) ;
+			
+			$self = "/" ;
+			for ( $i = 0 ; $i < count( $arSelf ) ; $i ++ )
+			{
+				$self = sprintf( "%s%s/" , $self , $arSelf[ $i ] ) ;
+				$where .= sprintf( "OR %s.url = '%s' " , $alias , $self ) ;
+			}
+			$where .= sprintf( ") " ) ;
+
+			$arWhere = array() ;
+			$arWhere[ "where" ] = $where ;
+			$arWhere[ "order" ] = sprintf( "length( %s.url ) DESC " , $alias ) ;
+
+			$arResult = $obDB -> getData( $arWhere ) ;
+			if ( count( $arResult ) > 0 )
+			{
+				$arData = $arResult[ 0 ] ;
+				
+				$func	= $arData[ $alias . "_standard"			] ;
+				$mid	= $arData[ $alias . "_menucategoryid"	] ;
+				$c1		= $arData[ $alias . "_category1"		] ;
+				$c2		= $arData[ $alias . "_category2"		] ;
+
+				$this -> funcAnchor	= $arData[ $alias . "_anchor"		] ;
+		
+				$this -> arMenu = GetMenu( $mid , $c1 , 0 , $obDB -> conn ) ;
+				if ( $c2 != 0 )
+					$this -> arSubMenu = GetMenu( $mid , $c1 , $c2 , $obDB -> conn ) ;
+			}
+		}
+
+		global	$arMenu ;
+		global	$arSubMenu ;
+		global	$funcAnchor ;
+
+		$arMenu		= $this -> arMenu		;
+		$arSubMenu	= $this -> arSubMenu	;
+		$funcAnchor	= $this -> funcAnchor	;
+
+		return $func ;
+	}
+
+	// ヘッダ情報の表示
+	function	printHeader( $screentype , $funcno = -1 )
+	{
+		$data = $this -> fetchHeader( $screentype , $funcno ) ;
+		printf( "%s" , $data ) ;
+	}
+	
+	// ヘッダ情報の生成
+	function	fetchAdminHeader( $screentype , $funcno , $script = "" , $name = "" , $title = "" )
+	{
+		$obCorp = new PARTS_Corp( $this -> conn ) ;
+		$arCorp = $obCorp -> getOwner() ;
+		if ( count( $arCorp ) > 0 )
+			$arCorp = $arCorp[ 0 ] ;
+
+		$arNavi = $this -> arNavi ;
+
+		$tmpl = $this -> tmpl ;
+		$ua = $tmpl -> getBrowserInfo() ;
+		$tmpl -> assign( "ua"				, $ua					) ;
+		$tmpl -> assign( "charaset"			, DEF_INTERNAL_ENCODE	) ;
+		$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH		) ;
+		$tmpl -> assign( "screentype"		, $screentype			) ;
+		$tmpl -> assign( "func_data"		, $arNavi[ $funcno ]	) ;
+		$tmpl -> assign( "corp_data"		, $arCorp				) ;
+		$tmpl -> assign( "script"			, $script				) ;
+		$tmpl -> assign( "name"				, $name					) ;
+		$tmpl -> assign( "title"			, $title				) ;
+		
+		$data = $tmpl -> fetch( $this -> commonPath . "header.tmpl"	) ;
+		$tmpl -> clearAllAssign() ;
+
+		// IE6の場合、xml宣言を削除する。
+		$data = $tmpl -> makeXhtmlString( $data ) ;
+		unset( $tmpl ) ;
+
+		if ( $screentype != "popup" )
+		{
+			$tmpl = new HTML_template( "default" ) ;
+			$ua = $tmpl -> getBrowserInfo() ;
+			$tmpl -> assign( "ua" , $ua ) ;
+			$tmpl -> assign( "func" , $funcno ) ;
+			$copyright = $tmpl -> fetch( "header.tmpl" ) ;
+			$tmpl -> clearAllAssign() ;
+	
+			$data = str_replace( "</HEAD>" , "</head>" , $data ) ;
+			$data = str_replace( "</head>" , $copyright . "</head>" , $data ) ;
+		}
+		
+		return	$data ;
+	}
+	
+	// フッター情報の表示
+	function	printFooter( $funcno )
+	{
+		$data = $this -> fetchFooter( $funcno ) ;
+		printf( "%s" , $data ) ;
+	}
+
+	// フッター情報の生成
+	function	fetchAdminFooter( $screentype , $funcno , $script = "" )
+	{
+		$data = "" ;
+		$obCorp = new PARTS_Corp( $this -> conn ) ;
+		$arCorp = $obCorp -> getOwner() ;
+		if ( count( $arCorp ) > 0 )
+			$arCorp = $arCorp[ 0 ] ;
+		$now_year = date( "Y" ) ;
+
+		$arNavi = $this -> arNavi ;
+
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "year"				, $now_year				) ;
+		$tmpl -> assign( "func_data"		, $arNavi[ $funcno ]	) ;
+		$tmpl -> assign( "screentype"		, $screentype			) ;
+		$tmpl -> assign( "script"			, $script				) ;
+		if ( count( $arCorp ) == 0 )
+		{
+			$arCorp[ sprintf( "%s_name"				, $obCorp -> alias )	] = TITLE_CORPORATION ;
+			$arCorp[ sprintf( "%s_name_en"			, $obCorp -> alias )	] = TITLE_CORPORATION_EN ;
+			$arCorp[ sprintf( "%s_sname"			, $obCorp -> alias )	] = TITLE_CORPORATION_EN ;
+			$arCorp[ sprintf( "%s_foundation_date"	, $obCorp -> alias )	] = sprintf( "%d-01-01" , TITLE_FOUNDATION ) ;
+		}
+		$tmpl -> assign( "corp_data"			, $arCorp ) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "footer.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+
+		$gacode = "" ;
+		if ( defined( "DEF_GACODE" ) == TRUE )
+			$gacode = DEF_GACODE ;
+
+		$root_path = "" ;
+		if ( defined( "DEF_SITE_ROOTPATH" ) == TRUE )
+			$root_path = DEF_SITE_ROOTPATH ;
+
+		if ( $screentype != "popup" )
+		{
+			$tmpl = new HTML_template( "default" ) ;
+			$tmpl -> assign( "root_path"		, $root_path ) ;
+			$tmpl -> assign( "gacode"			, $gacode ) ;
+			$copyright = $tmpl -> fetch( "footer.tmpl" ) ;
+			$tmpl -> clearAllAssign() ;
+	
+			$data = str_replace( "</BODY>" , "</body>" , $data ) ;
+			$data = str_replace( "</body>" , $copyright . "</body>" , $data ) ;
+		}
+		
+		return $data ;
+	}
+	
+	// 機能名の表示
+	function	printTitle( $funcname )
+	{
+		$data = $this -> fetchTitle( $funcname ) ;
+		
+		printf( "%s" , $data ) ;
+	}
+	
+	function	fetchTitle( $funcname )
+	{
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "funname"		, $funcname ) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "function.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+
+	function	fetchContents( $contents )
+	{
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "contents"		, $contents ) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "contents.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+
+	function	printBody( $header , $footer , $contents , $navi = "" )
+	{
+		$data = $this -> fetchBody( $header , $footer , $contents , $navi ) ;
+		
+		printf( "%s" , $data ) ;
+	}
+
+	function	fetchBody( $header , $footer , $contents , $navi = "" )
+	{
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "header"		, $header	) ;
+		$tmpl -> assign( "footer"		, $footer	) ;
+		$tmpl -> assign( "contents"		, $contents	) ;
+		$tmpl -> assign( "navi"			, $navi		) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "body.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+
+	// メニュー表示
+	function	fetchNavi( $func )
+	{
+		global	$arFunction ;
+		$funcName = array_search( $func , $arFunction) ;
+	
+		// 標準のメニューデータの取得
+		$arMenu = GetMenu( DEF_MENU_STANDARD ) ;
+	
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "func"				, $func ) ;
+		$tmpl -> assign( "funcName"			, $funcName ) ;
+		$tmpl -> assign( "function_data"	, $arFunction ) ;
+		$tmpl -> assign( "menu_data"		, $arMenu ) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "navi.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		
+		return $data ;
+	}
+
+	function	fetchSlideMenu( $func , $level )
+	{
+		global $arPermission ;
+		global $arMenuTitle ;
+		global $arFunction ;
+		global $arFunctionTitle ;
+		global $arNavi ;
+	
+		$arMenu = array() ;
+		$menucnt = 0 ;
+		for( $menu = 1 ; $menu < count( $arMenuTitle ) ; $menu ++ )
+		{
+			// メニューの項目を計算する。
+			$cnt = 0 ;
+			$keys = array_keys( $arNavi ) ;
+			for ( $i = 0 ; $i < count( $arNavi ) ; $i ++ )
+			{
+				// メニュー項目の番号が同じものを検索
+				if ( $arNavi[ $keys[ $i ] ][ 0 ] == $menu )
+				{
+					// メニューの表示が許可されているか
+					if ( empty( $arPermission[ $keys[ $i ] ] ) == false &&
+						empty( $arPermission[ $keys[ $i ] ][ $level ] ) == false )
+					{
+						if ( $arPermission[ $keys[ $i ] ][ $level ] > 0 )
+						{
+							$cnt ++ ;
+						}
+					}
+				}
+			}
+	
+			if ( $cnt > 0 )
+			{
+				$arData = array() ;
+				
+				// メニュー項目を表示
+				if ( $arMenuTitle[ $menu ] != "" )
+				{
+					$arData[ "title" ] = $arMenuTitle[ $menu ] ;
+				}
+	
+				// メニューリストの表示
+				$keys = array_keys( $arNavi ) ;
+				$vals = array_values( $arNavi ) ;
+				for ( $list = 0 ; $list < count( $arNavi ) ; $list ++ )
+				{
+					$funcno   = $keys[ $list ] ;
+					$menuid   = $vals[ $list ][ 0			] ;
+	
+					// メニュー項目の番号が同じものを検索
+					if ( $menuid == $menu )
+					{
+						// メニューの表示が許可されているか
+						if ( empty( $arPermission[ $funcno ] ) == false &&
+							empty( $arPermission[ $funcno ][ $level ] ) == false )
+						{
+							if ( $arPermission[ $funcno ][ $level ] > 0 )
+							{
+								// URLがある場合、リンクを表示する
+								$arData[ "item" ][$funcno] = $vals[ $list ] ;
+							}
+						}
+					}
+				}
+				
+				$arMenu[] = $arData ;
+				$menucnt ++ ;
+			}
+		}
+
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "func" , $func ) ;
+		$tmpl -> assign( "menu_data" , $arMenu ) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "slidemenu.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+
+		return $data ;
+	}
+
+	// ページングの表示
+	function	fetchPaging( $url , $arParamFind , $max , $limit , $var = "page" )
+	{
+		$page = $arParamFind[ $var ] ;
+
+		// パラメータの設定
+		unset( $arParamFind[ $var ] ) ;
+		$param = "" ;
+		$param .= $this -> makeParamLink( $arParamFind , "GET" ) ;
+
+		$paging = "" ;
+		
+		if ( $max > 0 )
+		{
+			$maxpage = ceil( $max / $limit ) ;
+			if ( $page >= $maxpage )
+				$page = $maxpage - 1;
+		
+			$start = $page * $limit ;
+			$end = $page * $limit + $limit ;
+			if ( $end >= $max )
+				$end = $max ;
+				
+			$tmpl = $this -> tmpl ;
+			$tmpl -> assign( "limit"	, $limit ) ;
+			$tmpl -> assign( "start"	, $start ) ;
+			$tmpl -> assign( "end"		, $end ) ;
+			$tmpl -> assign( "var"		, $var ) ;
+			$tmpl -> assign( "page"		, $page ) ;
+			$tmpl -> assign( "max"		, $max ) ;
+			$tmpl -> assign( "maxpage"	, $maxpage ) ;
+			$tmpl -> assign( "url"		, $url ) ;
+			$tmpl -> assign( "param"	, $param ) ;
+			$tmpl -> assign( "class"	, "" ) ;
+			$paging = $tmpl -> fetch( $this -> commonPath . "paging.tmpl" ) ;
+	
+			$tmpl -> clearAllAssign() ;
+		}
+		
+		return $paging ;
+	}
+
+	// ページングの表示
+	function	fetchPagejump( $url , $arParamFind , $maxpage , $jump , $limit , $var = "page" , $class = "" )
+	{
+		$page = $arParamFind[ $var ] ;
+
+		// パラメータの設定
+		unset( $arParamFind[ $var ] ) ;
+		$param = "" ;
+		$param .= $this -> makeParamLink( $arParamFind , "GET" ) ;
+
+		$pagejump = "" ;
+	
+		if ( $maxpage > 0 )
+		{
+			if ( $page >= $maxpage )
+				$page = $maxpage - 1;
+	
+			$start = floor( $page / $jump ) * $jump ;
+			$end = $start + $jump ;
+			if ( $maxpage < $end )
+				$end = $maxpage ;
+			
+			$tmpl = $this -> tmpl ;
+			$tmpl -> assign( "class"	, $class ) ;
+			$tmpl -> assign( "start"	, $start ) ;
+			$tmpl -> assign( "end"		, $end ) ;
+			$tmpl -> assign( "var"		, $var ) ;
+			$tmpl -> assign( "page"		, $page ) ;
+			$tmpl -> assign( "maxpage"	, $maxpage ) ;
+			$tmpl -> assign( "url"		, $url ) ;
+			$tmpl -> assign( "param"	, $param ) ;
+			$pagejump = $tmpl -> fetch( $this -> commonPath . "pagejump.tmpl" ) ;
+	
+			$tmpl -> clearAllAssign() ;
+		}
+		return $pagejump ;
+	}
+	
+	// ページングの表示
+	function	fetchPageback( $url , $arParamFind , $caption = "" , $parent = "" )
+	{
+		// パラメータの設定
+		$param = "" ;
+		$param = $this -> makeParamLink( $arParamFind , "GET" ) ;
+		
+		$pageback = "" ;
+
+		if( !isset( $class ) )
+			$class = "" ;
+
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "parent"	, $parent ) ;
+		$tmpl -> assign( "class"	, $class ) ;
+		$tmpl -> assign( "url"		, $url ) ;
+		$tmpl -> assign( "param"	, $param ) ;
+		$tmpl -> assign( "caption"	, $caption ) ;
+		$pageback = $tmpl -> fetch( $this -> commonPath . "pageback.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		
+		return $pageback ;
+	}
+
+	// データ行の出力
+	function	fetchTR( $value , $class = "" )
+	{
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "tr" ) ;
+		$tmpl -> assign( "value"		, $value ) ;
+		$tmpl -> assign( "class"		, $class ) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+	
+	// データテーブルの出力
+	function	fetchTHTD(
+			$label ,
+			$value ,
+			$lsize = 0 ,
+			$vsize = 0 ,
+			$color = "" ,
+			$lalign = "" ,
+			$valign = "" ,
+			$option = 0 ,
+			$lcolspan = 1 ,
+			$lrowspan = 1 ,
+			$vcolspan = 1 ,
+			$vrowspan = 1 ,
+			$cryptname = "" ,
+			$cryptvalue = ""
+		)
+	{
+		$data  = "" ;
+		$data .= $this -> fetchTH( $label , $lsize , $color , $lalign , $option & BLAMS_FORMAT_BORDER , $lcolspan , $lrowspan ) ;
+		$data .= $this -> fetchTD( $value , $vsize , $color , $valign , $option , $vcolspan , $vrowspan , $cryptname , $cryptvalue ) ;
+
+		return $data ;
+	}
+
+	// データテーブルの出力
+	function	fetchTDTD(
+			$label ,
+			$value ,
+			$lsize = 0 ,
+			$vsize = 0 ,
+			$color = "" ,
+			$lalign = "" ,
+			$valign = "" ,
+			$option = 0 ,
+			$lcolspan = 1 ,
+			$lrowspan = 1 ,
+			$vcolspan = 1 ,
+			$vrowspan = 1
+		)
+	{
+		$data  = "" ;
+		$data .= $this -> fetchTD( $label , $lsize , $color , $lalign , $option , $lcolspan , $lrowspan ) ;
+		$data .= $this -> fetchTD( $value , $vsize , $color , $valign , $option , $vcolspan , $vrowspan ) ;
+		return $data ;
+	}
+	
+	// テーブルヘッダの出力
+	function	fetchTH(
+			$value ,
+			$size = 0 ,
+			$color = "" ,
+			$align = "" ,
+			$option = 0 ,
+			$colspan = 1 ,
+			$rowspan = 1
+		)
+	{
+		return $this -> fetchTHorTD( "th" , $value , $size , $color , $align , $option , $colspan , $rowspan ) ;
+	}
+
+	// テーブルデータの出力
+	function	fetchTD(
+			$value ,
+			$size = 0 ,
+			$color = "" ,
+			$align = "" ,
+			$option = 0 ,
+			$colspan = 1 ,
+			$rowspan = 1 ,
+			$cryptname = "" ,
+			$cryptvalue = ""
+		)
+	{
+		return $this -> fetchTHorTD( "td" , $value , $size , $color , $align , $option , $colspan , $rowspan , $cryptname , $cryptvalue ) ;
+	}
+
+	// テーブルデータのWrapper関数
+	function	fetchTHorTD(
+			$item ,
+			$value ,
+			$size = 0 ,
+			$color = "" ,
+			$align = "" ,
+			$option = 0 ,
+			$colspan = 1 ,
+			$rowspan = 1 ,
+			$cryptname = "" ,
+			$cryptvalue = ""
+		)
+	{
+		$class = "" ;
+		if ( $color != "" )
+			$class .= sprintf( "%s " , $color ) ;
+
+		// ディフォルトでボーダーをつける
+		$option |= BLAMS_FORMAT_BORDER ;
+
+		// NO BORDER
+		if ( ( $option & BLAMS_FORMAT_NOBORDER ) != 0 )
+			$option &= ~BLAMS_FORMAT_BORDER ;
+
+		// BORDER
+		if ( ( $option & BLAMS_FORMAT_BORDER ) != 0 )
+			$class .= sprintf( "border " ) ;
+
+		// TEXT ALIGN
+		if ( $align != "" )
+			$class .= sprintf( "%s " , $align ) ;
+
+		// BOX WIDTH
+		if ( $size != 0 )
+			$class .= sprintf( "w%03d " , $size ) ;
+
+		$arModifiers = array() ;
+
+		// DATE FORMAT
+		if ( ( $option & BLAMS_FORMAT_DATE ) != 0 )
+		{
+			$value = trim( $value , "'" ) ;
+			if ( $value == DEF_DATE_MIN || $value == DEF_DATE_MAX )
+				$value = "" ;
+			else
+				$arModifiers[] = "date_format:%Y/%m/%d" ;
+		}
+		// DATE+TIME FORMAT
+		if ( ( $option & BLAMS_FORMAT_DATETIME ) != 0 )
+		{
+			$value = trim( $value , "'" ) ;
+			if ( $value == DEF_DATE_MIN || $value == DEF_DATE_MAX )
+				$value = "" ;
+			else
+				$arModifiers[] = "date_format:%Y/%m/%d %T" ;
+		}
+		// NUMBER FORMAT
+		if ( ( $option & BLAMS_FORMAT_NUMBER ) != 0 )
+			$arModifiers[] = "number_format" ;
+
+		// ESCAPE STRING
+		if ( ( $option & BLAMS_FORMAT_ESCAPE ) != 0 )
+			$arModifiers[] = "escape:html" ;
+
+		// WORDWRAP
+		if ( ( $option & BLAMS_FORMAT_WORDWRAP ) != 0 )
+		{
+			$num = $option & 0x0000ffff ;
+			if ( $num != 0 )
+				$arModifiers[] = sprintf( "wordwrap:%d:\n:true" , $num ) ;
+		}
+		
+		// NewLine to BR Tag
+		if ( ( $option & BLAMS_FORMAT_NL2BR ) != 0 )
+			$arModifiers[] = "nl2br" ;
+
+		// non TabStop FORMAT
+		if ( ( $option & BLAMS_FORMAT_NOTAB ) == 0 )
+			$arModifiers[] = "indent:2:\t" ;
+
+		// PLANE output
+		if ( ( $option & BLAMS_FORMAT_PLANE ) != 0 )
+			$arModifiers = array() ;
+
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+
+		$password = "" ;
+		if ( empty( $cryptname ) == false && empty( $cryptvalue ) == false )
+			$password = $this -> fetchHidden( $cryptname , $cryptvalue ) ;
+
+		if( empty( $id ) == true )
+			$id = "" ;
+
+		$tmpl -> assign( "item"			, $item			) ;
+		$tmpl -> assign( "colspan"		, $colspan		) ;
+		$tmpl -> assign( "rowspan"		, $rowspan		) ;
+		$tmpl -> assign( "value"		, $value		) ;
+		$tmpl -> assign( "password"		, $password		) ;
+		$tmpl -> assign( "class"		, $class		) ;
+		$tmpl -> assign( "innerWidth"	, $size			) ;
+		$tmpl -> assign( "modifiers"	, $arModifiers	) ;
+		$tmpl -> assign( "id"			, $id			) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+
+	// 入力BOXの表示
+	function fetchInputbox( $name , $value , $size = 0 , $max = 0 , $mode = IME_ON , $funcname = "" , $id = "" , $plane_flg = false , $add_class = "" )
+	{
+		$class = "" ;
+		if ( $size != 0 )
+			$class .= sprintf( "w%03d " , $size ) ;
+
+		if ( $mode == IME_OFF )
+			$class .= sprintf( "imeoff " ) ;
+
+		$ext = "" ;
+		if ( ( $mode & BLAMS_FORMAT_READONLY ) != 0 )
+		{
+			$class	.= "readonly " ;
+			$ext	.= "readonly=\"readonly\" tabindex=\"-1\"" ;
+		}
+		if ( ( $mode & BLAMS_FORMAT_DISABLED ) != 0 )
+		{
+			$class	.= "disabled " ;
+			$ext	.= "disabled=\"disabled\" " ;
+		}
+
+		if( $add_class != "" )
+			$class .= " " . $add_class ;
+
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "text"		) ;
+		$tmpl -> assign( "name"			, $name			) ;
+		$tmpl -> assign( "value"		, $value		) ;
+		$tmpl -> assign( "class"		, $class		) ;
+		$tmpl -> assign( "max"			, $max			) ;
+		$tmpl -> assign( "funcname"		, $funcname		) ;
+		$tmpl -> assign( "id"			, $id			) ;
+		$tmpl -> assign( "ext"			, $ext			) ;
+		$tmpl -> assign( "plane_flg"	, $plane_flg	) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+	
+	// パスワードBOXの表示
+	function fetchPasswordbox( $name , $value , $cryptname , $cryptvalue , $size = 0 , $max = 0 , $mode = IME_ON )
+	{
+		$class = "" ;
+
+		if ( $size != 0 )
+			$class .= sprintf( "w%03d " , $size ) ;
+
+		if ( $mode != IME_OFF )
+			$class .= sprintf( "imeoff " ) ;
+
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "password"	) ;
+		$tmpl -> assign( "name"			, $name			) ;
+		$tmpl -> assign( "value"		, $value		) ;
+		$tmpl -> assign( "class"		, $class		) ;
+		$tmpl -> assign( "max"			, $max			) ;
+		$tmpl -> assign( "id"			, ""			) ;
+		$tmpl -> assign( "funcname"		, ""			) ;
+		$tmpl -> assign( "ext"			, ""			) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+
+		$data .= $this -> fetchHidden( $cryptname , $cryptvalue ) ;
+		return $data ;
+	}
+
+	// セレクトBOXの表示
+	function fetchSelectbox( $name , $value , $arData , $size , $default , $undefine = 0 , $funcname = "" )
+	{
+		$class = "" ;
+
+		if ( $size != 0 )
+			$class .= sprintf( "w%03d " , $size ) ;
+
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "select"	) ;
+		$tmpl -> assign( "name"			, $name			) ;
+		$tmpl -> assign( "value"		, $value		) ;
+		$tmpl -> assign( "class"		, $class		) ;
+		$tmpl -> assign( "default"		, $default		) ;
+		$tmpl -> assign( "funcname"		, $funcname		) ;
+		$tmpl -> assign( "option_data"	, $arData		) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+
+	// テキストエリアの表示
+	function fetchTextarea( $name , $value , $size = 0 , $cols = 80 , $rows = 5 )
+	{
+		$class = "" ;
+		if ( $size != 0 )
+			$class .= sprintf( "w%03d " , $size ) ;
+
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "textarea"	) ;
+		$tmpl -> assign( "name"			, $name			) ;
+		$tmpl -> assign( "value"		, $value		) ;
+		$tmpl -> assign( "class"		, $class		) ;
+		$tmpl -> assign( "cols"			, $cols			) ;
+		$tmpl -> assign( "rows"			, $rows			) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+
+	// テキストエリアの表示
+	function fetchCKEditor( $name , $value , $size = 0 , $cols = 80 , $rows = 5 )
+	{
+		$data = "" ;
+		$data = $this -> fetchTextarea( $name , $value , $size , $cols , $rows ) ;
+
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "CKEditor"	) ;
+		$tmpl -> assign( "name"			, $name			) ;
+		$data .= $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+
+		return $data ;
+	}
+
+	// ラジオボタンの表示
+	function fetchRadio( $name , $value , $arData , $size , $separator = "" , $onclick = "" , $funcname = "" )
+	{
+		$class = "" ;
+
+		if ( $size != 0 )
+			$class .= sprintf( "w%03d " , $size ) ;
+
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "radio"		) ;
+		$tmpl -> assign( "name"			, $name			) ;
+		$tmpl -> assign( "value"		, $value		) ;
+		$tmpl -> assign( "class"		, $class		) ;
+		$tmpl -> assign( "separator"	, $separator	) ;
+		$tmpl -> assign( "onclick"		, $onclick		) ;
+		$tmpl -> assign( "funcname"		, $funcname		) ;
+		$tmpl -> assign( "option_data"	, $arData		) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+
+	// チェックBOXの表示
+	function fetchCheckbox( $name , $arValue , $arChecked , $size , $undefine = 0 , $funcname = "" , $mod_class = "" )
+	{
+		$class = "" ;
+
+		if ( $size != 0 )
+			$class .= sprintf( "w%03d " , $size ) ;
+
+		if ( $mod_class != "" )
+			$class .= sprintf( "%s " , $mod_class ) ;
+
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "check"	) ;
+		$tmpl -> assign( "name"			, $name			) ;
+		$tmpl -> assign( "option_data"	, $arValue		) ;
+		$tmpl -> assign( "checked_data"	, $arChecked	) ;
+		$tmpl -> assign( "class"		, $class		) ;
+		$tmpl -> assign( "funcname"		, $funcname		) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+	
+	// ボタンの表示
+	function fetchButton( $func , $name , $value , $class = ""  , $script = "" , $title = "" , $zipcode = false )
+	{
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "button"		) ;
+		$tmpl -> assign( "func"			, $func			) ;
+		$tmpl -> assign( "name"			, $name			) ;
+		$tmpl -> assign( "value"		, $value		) ;
+		$tmpl -> assign( "class"		, $class		) ;
+		$tmpl -> assign( "script"		, $script		) ;
+		$tmpl -> assign( "title"		, $title		) ;
+		$tmpl -> assign( "zipcode"		, $zipcode		) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+
+	// 外部JavaScriptの表示
+	function fetchScript( $script )
+	{
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "script"	) ;
+		$tmpl -> assign( "script"		, $script	) ;
+		$data .= $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+
+		return $data ;
+	}
+
+	// 画像ファイル表示（写真情報IDから）
+	function fetchImageFromID( $id , $width , $height , $subject = "" , $url = "" , $item = "img" )
+	{
+		if ( $item == "img" )
+		{
+			$obPhoto = new PARTS_Photo( $this -> conn ) ;
+			$arResult = $obPhoto -> getAt( $id ) ;
+			
+			if ( count( $arResult ) > 0 )
+			{
+				$alias	= $obPhoto -> alias ;
+				$type	= $arResult[ $alias . "_type" ] ;
+				$fname	= $arResult[ $alias . "_name" ] ;
+				
+				$subject = $fname . $subject ;
+				switch ( $type )
+				{
+				case	DEF_IMAGETYPE_GIF	:
+				case	DEF_IMAGETYPE_PNG	:
+				case	DEF_IMAGETYPE_JPEG	:
+					$item = "img" ;
+					break ;
+				case	DEF_IMAGETYPE_PSD	:
+					$item = "psd" ;
+					break ;
+				case	DEF_IMAGETYPE_AI	:
+					$item = "ai" ;
+					break ;
+				case	DEF_IMAGETYPE_AVI	:
+					$item = "avi" ;
+					break ;
+				case	DEF_IMAGETYPE_WMV	:
+					$item = "wmv" ;
+					break ;
+				case	DEF_IMAGETYPE_MPEG4	:
+					$item = "mpg" ;
+					break ;
+				case	DEF_IMAGETYPE_FLV	:
+					$item = "flv" ;
+					break ;
+				case	DEF_IMAGETYPE_PDF	:
+					$item = "pdf" ;
+					break ;
+				case	DEF_IMAGETYPE_ZIP	:
+					$item = "zip" ;
+					break ;
+				}
+			}
+		}
+		
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, $item			) ;
+		$tmpl -> assign( "id"			, $id			) ;
+		$tmpl -> assign( "width"		, $width		) ;
+		$tmpl -> assign( "height"		, $height		) ;
+		$tmpl -> assign( "subject"		, $subject		) ;
+		$tmpl -> assign( "url"			, $url			) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "imageItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+
+	// 画像の表示
+	function fetchDetailImageTHTD(
+			$tmpid ,
+			$orgid ,
+			$name ,
+			$filename ,
+			$width = 0 ,
+			$height = 0 ,
+			$label ,
+			$lsize = 0 ,
+			$vsize = 0 ,
+			$color = "" ,
+			$lalign = "" ,
+			$valign = "" ,
+			$border = FALSE ,
+			$lcolspan = 1 ,
+			$lrowspan = 1 ,
+			$vcolspan = 1 ,
+			$vrowspan = 1 ,
+			$mode = "img"
+		)
+	{
+		$image = $this -> fetchInputImage( $tmpid , $orgid , $name , $filename , $width , $height , FALSE , $mode ) ;
+	
+		$data = $this -> fetchTHTD( $label , $image , $lsize , $vsize , $color , $lalign , $valign , $border , $lcolspan , $lrowspan , $vcolspan , $vrowspan ) ;
+		return $data ;
+	}
+
+	// 画像入力Boxの表示
+	function fetchInputImageTHTD(
+			$tmpid ,
+			$orgid ,
+			$name ,
+			$filename ,
+			$width = 0 ,
+			$height = 0 ,
+			$label ,
+			$lsize = 0 ,
+			$vsize = 0 ,
+			$color = "" ,
+			$lalign = "" ,
+			$valign = "" ,
+			$border = FALSE ,
+			$lcolspan = 1 ,
+			$lrowspan = 1 ,
+			$vcolspan = 1 ,
+			$vrowspan = 1 ,
+			$mode = "img"
+		)
+	{
+		$image = $this -> fetchInputImage( $tmpid , $orgid , $name , $filename , $width , $height , TRUE , $mode ) ;
+	
+		$data = $this -> fetchTHTD( $label , $image , $lsize , $vsize , $color , $lalign , $valign , $border , $lcolspan , $lrowspan , $vcolspan , $vrowspan ) ;
+		return $data ;
+	}
+
+	// 画像入力Boxの表示
+	function fetchInputImage( $tmpid , $orgid , $name , $filename , $width , $height , $input_flg = FALSE , $mode = "img" )
+	{
+		$tmpimage = "" ;
+		if ( $tmpid != -1 )
+			$tmpimage = $this -> fetchImageFromID( $tmpid , $width , $height , $filename . "(一時)" , "" , $mode ) ;
+		
+		$orgimage = "" ;
+		if ( $orgid != -1 && $tmpid == -1 )
+			$orgimage = $this -> fetchImageFromID( $orgid , $width , $height , $filename . "(オリジナル)" , "" , $mode ) ;
+	
+		$deleteid = $orgid ;
+	
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "imageForm"	) ;
+		$tmpl -> assign( "input_flg"	, $input_flg	) ;
+		$tmpl -> assign( "tmpid"		, $tmpid		) ;
+		$tmpl -> assign( "orgid"		, $orgid		) ;
+		$tmpl -> assign( "deleteid"		, $deleteid		) ;
+		$tmpl -> assign( "name"			, $name			) ;
+		$tmpl -> assign( "width"		, $width		) ;
+		$tmpl -> assign( "height"		, $height		) ;
+		$tmpl -> assign( "tmpimage"		, $tmpimage		) ;
+		$tmpl -> assign( "orgimage"		, $orgimage		) ;
+		$tmpl -> assign( "filename"		, $filename		) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "imageItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+		return $data ;
+	}
+
+	// PDFの表示
+	function fetchDetailPdfTHTD(
+			$tmpid ,
+			$orgid ,
+			$name ,
+			$filename ,
+			$width = 0 ,
+			$height = 0 ,
+			$label ,
+			$lsize = 0 ,
+			$vsize = 0 ,
+			$color = "" ,
+			$lalign = "" ,
+			$valign = "" ,
+			$border = FALSE ,
+			$lcolspan = 1 ,
+			$lrowspan = 1 ,
+			$vcolspan = 1 ,
+			$vrowspan = 1
+		)
+	{
+		return $this -> fetchDetailImageTHTD(
+												$tmpid ,
+												$orgid ,
+												$name ,
+												$filename ,
+												$width ,
+												$height ,
+												$label ,
+												$lsize ,
+												$vsize ,
+												$color ,
+												$lalign ,
+												$valign ,
+												$border ,
+												$lcolspan ,
+												$lrowspan ,
+												$vcolspan ,
+												$vrowspan ,
+												"pdf"
+											) ;
+	}
+
+	// 画像入力Boxの表示
+	function fetchInputPdfTHTD(
+			$tmpid ,
+			$orgid ,
+			$name ,
+			$filename ,
+			$width = 0 ,
+			$height = 0 ,
+			$label ,
+			$lsize = 0 ,
+			$vsize = 0 ,
+			$color = "" ,
+			$lalign = "" ,
+			$valign = "" ,
+			$border = FALSE ,
+			$lcolspan = 1 ,
+			$lrowspan = 1 ,
+			$vcolspan = 1 ,
+			$vrowspan = 1
+		)
+	{
+		return $this -> fetchInputImageTHTD(
+												$tmpid ,
+												$orgid ,
+												$name ,
+												$filename ,
+												$width ,
+												$height ,
+												$label ,
+												$lsize ,
+												$vsize ,
+												$color ,
+												$lalign ,
+												$valign ,
+												$border ,
+												$lcolspan ,
+												$lrowspan ,
+												$vcolspan ,
+												$vrowspan ,
+												"pdf"
+											) ;
+	}
+
+	// HREFの表示
+	function fetchHref( $anchor , $url , $class , $title , $script = "" )
+	{
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "href"		) ;
+		$tmpl -> assign( "anchor"		, $anchor		) ;
+		$tmpl -> assign( "url"			, $url			) ;
+		$tmpl -> assign( "class"		, $class		) ;
+		$tmpl -> assign( "title"		, $title		) ;
+		$tmpl -> assign( "script"		, $script		) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+
+		return $data ;
+	}
+
+	//
+	// 目的別 入力フォーム関数
+	// 
+	// 年月日入力BOXの表示
+	function fetchInputDateTime(	$name ,
+									$year , $month , $day ,
+									$hour , $min   , $sec ,
+									$year_flg , $month_flg , $day_flg ,
+									$hour_flg , $min_flg   , $sec_flg ,
+									$mode = IME_OFF ,
+									$time_mode = "input" , $separate = array()
+								)
+	{
+		$data = "" ;
+		
+		$data .= $this -> fetchInputDate( $name , $year , $month , $day , $year_flg , $month_flg , $day_flg , $mode ) ;
+		if( $time_mode == "input" )
+			$data .= $this -> fetchInputTime( $name , $hour , $min   , $sec , $hour_flg , $min_flg   , $sec_flg , $mode ) ;
+		else if( $time_mode == "select" )
+			$data .= $this -> fetchSelectTime( $name , $hour , $min   , $sec , $hour_flg , $min_flg   , $sec_flg , $separate ) ;
+		return $data ;
+	}
+
+	// 年月日入力BOXの表示
+	function fetchInputDate( $name , $year , $month , $day , $year_flg , $month_flg , $day_flg , $mode = IME_OFF , $year_func = "" , $month_func = "" , $day_func = "" )
+	{
+		$data = "" ;
+		if ( $year_flg == TRUE )
+		{
+			$data .= $this -> fetchInputbox( $name . "_y" , $year , 40 , 4 , IME_OFF , $year_func ) ;
+			$data .= "&nbsp;年&nbsp;" ;
+		}
+		if ( $month_flg == TRUE )
+		{
+			$data .= $this -> fetchInputbox( $name . "_m" , $month , 24 , 2 , IME_OFF , $month_func ) ;
+			$data .= "&nbsp;月&nbsp;" ;
+		}
+		
+		if ( $day_flg == TRUE )
+		{
+			$data .= $this -> fetchInputbox( $name . "_d" , $day , 24 , 2 , IME_OFF , $day_func ) ;
+			$data .= "&nbsp;日&nbsp;" ;
+		}
+		return $data ;
+	}
+
+	// 時分秒BOXの表示
+	function fetchInputTime( $name , $hour , $min , $sec , $hour_flg , $min_flg , $sec_flg , $mode = IME_OFF )
+	{
+		$data = "" ;
+		if ( $hour_flg == TRUE )
+		{
+			$data .= $this -> fetchInputbox( $name . "_h" , $hour , 24 , 2 , IME_OFF ) ;
+			$data .= "&nbsp;時&nbsp;" ;
+		}
+		if ( $min_flg == TRUE )
+		{
+			$data .= $this -> fetchInputbox( $name . "_i" , $min , 24 , 2 , IME_OFF ) ;
+			$data .= "&nbsp;分&nbsp;" ;
+		}
+		
+		if ( $sec_flg == TRUE )
+		{
+			$data .= $this -> fetchInputbox( $name . "_s" , $sec , 24 , 2 , IME_OFF ) ;
+			$data .= "&nbsp;秒&nbsp;" ;
+		}
+		return $data ;
+	}
+
+	// 時分秒SELECTの表示
+	// $separate[ "hour"	] = num : 時区切り
+	// $separate[ "min"		] = num : 分区切り
+	// $separate[ "sec"		] = num : 秒区切り
+	function fetchSelectTime( $name , $hour , $min , $sec , $hour_flg , $min_flg , $sec_flg , $separate = array() )
+	{
+		$data = "" ;
+		if ( $hour_flg == TRUE )
+		{
+			$arHour = array() ;
+			$arHour[ -1 ] = "--" ;
+			$hour_count = sprintf( "%d" , $separate[ "hour" ] ) ;
+			if( $hour_count == 0 )
+				$hour_count = 1 ;
+			for( $i = 0 ; $i < 24 ; $i = $i + $hour_count )
+				$arHour[ $i ] = $i ;
+			$data .= $this -> fetchSelectbox( $name . "_h" , $hour , $arHour , 24 , "" ) ;
+			$data .= "&nbsp;時&nbsp;" ;
+		}
+		if ( $min_flg == TRUE )
+		{
+			$arMin = array() ;
+			$arMin[ -1 ] = "--" ;
+			$min_count = sprintf( "%d" , $separate[ "min" ] ) ;
+			if( $min_count == 0 )
+				$min_count = 1 ;
+			for( $i = 0 ; $i < 60 ; $i = $i + $min_count )
+				$arMin[ $i ] = $i ;
+			$data .= $this -> fetchSelectbox( $name . "_i" , $min , $arMin , 24 , "" ) ;
+			$data .= "&nbsp;分&nbsp;" ;
+		}
+		
+		if ( $sec_flg == TRUE )
+		{
+			$arSec = array() ;
+			$arSec[ -1 ] = "--" ;
+			$sec_count = sprintf( "%d" , $separate[ "sec" ] ) ;
+			if( $sec_count == 0 )
+				$sec_count = 1 ;
+			for( $i = 0 ; $i < 60 ; $i = $i + $sec_count )
+				$arSec[ $i ] = $i ;
+			$data .= $this -> fetchSelectbox( $name . "_s" , $sec , $arSec , 24 , "" ) ;
+			$data .= "&nbsp;秒&nbsp;" ;
+		}
+		return $data ;
+	}
+	
+	// 電話番号 入力BOXの表示
+	function fetchInputPhone( $name , $tel1 , $tel2 , $tel3 , $mode = IME_OFF )
+	{
+		$data = "" ;
+		$data .= $this -> fetchInputbox( $name . "1" , $tel1 , 48 , 5 , IME_OFF ) ;
+		$data .= "&nbsp;-&nbsp;" ;
+		$data .= $this -> fetchInputbox( $name . "2" , $tel2 , 48 , 5 , IME_OFF ) ;
+		$data .= "&nbsp;-&nbsp;" ;
+		$data .= $this -> fetchInputbox( $name . "3" , $tel3 , 48 , 4 , IME_OFF ) ;
+		
+		return $data ;
+	}
+	
+	// 郵便番号入力BOXの表示
+	function fetchInputZip( $name , $zip1 , $zip2 , $anchor = "" , $class = "" , $script = "" , $title = "" , $zipcode = false )
+	{
+		$data = "" ;
+		$data .= $this -> fetchInputbox( $name . "1" , $zip1 , 32 , 3 , IME_OFF ) ;
+		$data .= "&nbsp;-&nbsp;" ;
+		$data .= $this -> fetchInputbox( $name . "2" , $zip2 , 48 , 4 , IME_OFF ) ;
+
+		if ( $anchor != "" )
+		{
+			if ( $script != "" )
+				$script = sprintf( "ZipcodeSelectPopup( this , '%s' ) ;" , $script ) ;
+		
+			$data .= "&emsp;" ;
+			$data .= $this -> fetchButton( "button" , $name , $anchor , $class , $script , $title , $zipcode ) ;
+		}
+
+		return $data ;
+	}
+
+	// 名前入力BOXの表示
+	function fetchInputName( $name_last_name , $last_name , $name_first_name , $first_name , $size , $length )
+	{
+		$data  = "" ;
+		$data .= $this -> fetchInputbox( $name_last_name , $last_name , $size , $length , IME_ON ) ;
+		$data .= "&nbsp;" ;
+		$data .= $this -> fetchInputbox( $name_first_name , $first_name , $size  , $length , IME_ON ) ;
+
+		return $data ;
+	}
+
+	// 誕生日入力BOXの表示
+	function fetchInputBirthday( $name , $type , $year , $month , $day , $mode = IME_OFF )
+	{
+		$data = "" ;
+
+		$data .= $this -> fetchSelectbox( $name . "_type" , $type , $arWareki , 40 , "西暦" ) ;
+
+		$date .= $this -> fetchInputDate( $name , $year , $month , $day , true , true , true , $mode ) ;
+
+		return $data ;
+	}
+
+	// Hiddenエレメントの表示
+	function fetchHidden( $name , $value )
+	{
+		$data = "" ;
+		$tmpl = $this -> tmpl ;
+		$tmpl -> assign( "item"			, "hidden"		) ;
+		$tmpl -> assign( "name"			, $name			) ;
+		$tmpl -> assign( "value"		, $value		) ;
+		$tmpl -> assign( "id"			, ""			) ;
+		$tmpl -> assign( "max"			, ""			) ;
+		$tmpl -> assign( "class"		, ""			) ;
+		$tmpl -> assign( "funcname"		, ""			) ;
+		$tmpl -> assign( "ext"			, ""			) ;
+		$data = $tmpl -> fetch( $this -> commonPath . "formItem.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+
+		return $data ;
+	}
+
+	// POST/GET用のパラメータを作成する
+	function makeParamLink( $arParam , $mode = "POST" )
+	{
+		$link = "" ;
+		$arLink = array() ;
+	
+		$this -> makeParamLinkSub( "" , $arParam , $arLink ) ;
+		
+		if ( is_array( $arLink ) == TRUE )
+		{
+			$keys = array_keys( $arLink ) ;
+			$values = array_values( $arLink ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			{
+				if ( $mode == "POST" )
+					$link .= $this -> fetchHidden( $keys[ $i ] , $values[ $i ] ) ;
+				else if ( $mode == "GET" )
+					$link .= sprintf( "&%s=%s" , $keys[ $i ] , rawurlencode( $values[ $i ] ) ) ;
+			}
+		}
+		return $link ;
+	}
+	
+	// パラメータ作成用の再帰処理
+	function makeParamLinkSub( $parent , $arParam , &$arLink )
+	{
+		if ( is_array( $arParam ) == TRUE )
+		{
+			$keys	= array_keys( $arParam ) ;
+			$values	= array_values( $arParam ) ;
+		
+			for ( $i = 0 ; $i < count( $arParam ) ; $i ++ )
+			{
+				if ( $parent != "" )
+				{
+					$newparent = sprintf( "%s[%s]" , $parent , $keys[ $i ] ) ;
+				}
+				else
+				{
+					$newparent = $keys[ $i ] ;
+				}
+				
+				// 取り出したデータが配列の場合、再帰処理を行う
+				if ( is_array( $values[ $i ] ) == TRUE )
+				{
+					$this -> makeParamLinkSub( $newparent , $values[ $i ] , $arLink ) ;
+				}
+				else
+				{
+					$arLink[ $newparent ] = $values[ $i ] ;
+				}
+			}
+		}
+	}
+
+	// カテゴリーチェック項目を配列に戻す
+	function makeCategoryArray( $category )
+	{
+		$checkcategory = array() ;
+		
+		$category = trim( $category , "[" ) ;
+		$category = trim( $category , "]") ;
+		
+		if ( $category != "" )
+			$checkcategory = explode( "][" , $category ) ;
+	
+		return $checkcategory ;
+	}
+	
+	function makeCategoryList( $conn , $dat_subject , $mode = -1 )
+	{
+		$arCategory = array() ;
+	
+		$checkcategory = $this -> makeCategoryArray( $dat_subject ) ;
+		$cnt = count( $checkcategory ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			$arCategory[] = $this -> GetCategoryNameFromID( $conn , $checkcategory[ $i ] , $mode ) ;
+		}
+		
+		return $arCategory ;
+	}
+	
+	function makeCategoryListWithKind( $conn , $dat_subject , $mode = -1 , $kind = -1 )
+	{
+		$arCategory = array() ;
+	
+		$checkcategory = $this -> makeCategoryArray( $dat_subject ) ;
+		$cnt = count( $checkcategory ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			$arCategory[] = $this -> GetCategoryNameFromIDWithKind( $conn , $checkcategory[ $i ] , $mode , $kind ) ;
+		}
+		
+		return $arCategory ;
+	}
+	
+	function getCategoryNameFromIDWithKind( $conn , $categoryid , $mode , $kind )
+	{
+		$szCategoryName = "" ;
+	
+		$new = FALSE ;
+		if ( $conn == -1 )
+		{
+			$new = TRUE ;
+			$conn = ConnectDatabase();
+		}
+
+		if ( $conn )
+		{
+			$sql = sprintf( "SELECT * FROM category_data WHERE status = 1 AND categoryid = %d " , $categoryid ) ;
+			$record = ExecuteSQL( $conn , $sql ) ;
+
+			if ( $record )
+			{
+				if ( GetDataCount( $record ) > 0 )
+				{
+					$category_name	= GetValue( $record , "name" ) ;
+					$category_1		= GetValue( $record , "category1" ) ;
+					$category_2		= GetValue( $record , "category2" ) ;
+					$category_3		= GetValue( $record , "category3" ) ;
+					$kind			= GetValue( $record , "kind" ) ;
+
+					if ( $mode == 0 || $category_2 == 0 )
+					{
+						// 該当カテゴリのみモード指定、或いは当該カテゴリが大項目なので中項目以下は無視
+						$szCategoryName = $category_name ;
+					}
+					else
+					{
+						// 大項目カテゴリ名取得
+						$category1_name = GetCategoryName( $conn , $category_1 , 0 , 0 , $kind ) ;
+	
+						if ( $mode == 1 )
+						{
+							// 該当カテゴリ大項目のみモード指定なので中項目以下は無視
+							$szCategoryName = $category1_name ;
+						}
+						else
+						{
+							if ( $category_3 == 0 )
+							{
+								// 当該カテゴリが中項目なので小項目以下は無視
+								$szCategoryName = $category1_name . "－" . $category_name ;
+							}
+							else
+							{
+								// 中項目カテゴリ名取得
+								$category2_name = GetCategoryName( $conn , $category_1 , $category_2 , 0 , $kind ) ;
+	
+								// 当該カテゴリは小項目
+								$szCategoryName = $category1_name . "－" . $category2_name . "－" . $category_name ;
+							}
+						}
+					}
+				}
+				CloseRecord( $record ) ;
+			}
+	
+			if ( $new == TRUE )
+				DisconnectDatabase( $conn ) ;
+		}
+	
+		if ( $szCategoryName == "" )
+			$szCategoryName = "不明" ;
+	
+		return $szCategoryName ;
+	}
+
+	// 引数にURLが期待される場合に、
+	// 先頭文字列にhttp(s)プロトコルがなければ付加する
+	// ftpなどは非対応
+	function addHTTPProtocol( $url )
+	{
+		if( !preg_match( "/^(https?)(:\/\/)/" , $url ) )
+		{
+			$url = sprintf( "http://%s" , $url ) ;
+		}
+		return $url ;
+	}
+
+	// URL文字列が正しければ true
+	// 間違っていれば false
+	function is_url( $url )
+	{
+		if( preg_match( "/^(https?)(:\/\/[-_.!~*\'()a-zA-Z0-9;\/?:\@&=+\$,%#]+)$/" , $url ) )
+			return true ;
+		else
+			return false ;
+	}
+
+	// 管理画面の機能番号の取得
+	function getMode( &$mode , &$func , $arMode )
+	{
+		$mode = "" ;
+		$func = "" ;
+
+		$arForm  = $_GET ;
+		$arForm += $_POST ;
+
+		if ( isset( $_SESSION ) )
+			$arForm += $_SESSION ;
+		
+		for ( $m = 0 ; $m < count( $arMode ) ; $m ++ )
+		{
+			if ( isset( $arForm[ $arMode[ $m ] ] ) == TRUE )
+			{
+				$mode = $arMode[ $m ] ;
+				$postMode = $arForm[ $mode ] ;
+				if ( is_array( $postMode ) == TRUE )
+				{
+					$keys = array_keys( $postMode ) ;
+					$func = $keys[ 0 ] ;
+				}
+				break ;
+			}
+		}
+	}
+
+	// RGB to WebColor
+	function	rgb2web( $r , $g , $b )
+	{
+		$color = sprintf( "%02x%02x%02x" , $r , $g , $b ) ;
+		return $color ;
+	}
+	
+	// syslog 登録
+	function	writeSyslog( $szMsg )
+	{
+		define_syslog_variables() ;
+		
+		$szMsg = mb_convert_kana( $szMsg , "KV" , "sjis-win" ) ;
+		$szMsg = mb_convert_encoding( $szMsg , "utf8" , "sjis-win" ) ;
+		openlog( "MAKITA Uplink", LOG_PID , LOG_LOCAL7 ) ;
+		
+		syslog( LOG_INFO , $szMsg ) ;
+		
+		closelog() ;
+	}
+	
+	function	diff( &$stime , &$step , $bPrint = true )
+	{
+		$etime = microtime( true ) ;
+		
+		$step ++ ;
+		
+		$time = $etime - $stime ;
+
+		$msg = sprintf( "%d : %.3f  ( %.3f )  <br />\n" , $step , $time , $etime ) ;
+		if ( $bPrint == true )
+			printf( "%s" , $msg ) ;
+		
+		$stime = $etime ;
+	}
+}
+?>

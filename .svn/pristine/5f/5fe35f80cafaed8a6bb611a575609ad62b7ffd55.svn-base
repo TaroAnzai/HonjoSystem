@@ -1,0 +1,292 @@
+<?php
+//	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../../lib/system.php") ;
+
+	// 基本パラメータ変換
+	if ( empty( $mode ) == true )
+		$mode = "update" ;
+
+	if ( empty( $page ) == true )
+		$page = 0 ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$blams		= new BLAMS() ;
+	$obMM		= new PARTS_MerchandiseMaster() ;
+	$obCorp		= new PARTS_Corp() ;
+	$obCategory	= new PARTS_Category() ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obMM -> assignGlobal( $additional ) ;
+
+	if ( $S_CORPID == "" )
+		$S_CORPID = -1 ;
+
+	if ( $S_CATEGORYID == "" )
+		$S_CATEGORYID = -1 ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	$arParamFind[ "S_MERCHANDISECODE"	] = $S_MERCHANDISECODE	;
+	$arParamFind[ "S_JANCODE"			] = $S_JANCODE			;
+	$arParamFind[ "S_NAME"				] = $S_NAME				;
+	$arParamFind[ "S_CORPID"			] = $S_CORPID			;
+	$arParamFind[ "S_CATEGORYID"		] = $S_CATEGORYID		;
+	$arParamFind[ "page"				] = $page				;
+
+	$menu = FUNC_MERCHANDISE_MASTER ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	// リスト表示
+	$data = FetchList( $blams , $funcname , $arParamFind , true ) ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+exit ;
+
+//
+// データの表示
+//
+function	FetchList( $blams , $funcname , $arParamFind , $list_flg )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// 編集データ保存
+	$obMM	= new PARTS_MerchandiseMaster() ;
+
+	$arWhere = array() ;
+	$arWhere[ "merchandisecode"	] = $S_MERCHANDISECODE ;
+	$arWhere[ "jancode"			] = $S_JANCODE ;
+	$arWhere[ "name"			] = $S_NAME ;
+	$arWhere[ "corpid"			] = $S_CORPID ;
+	$arWhere[ "categoryid"		] = $S_CATEGORYID ;
+
+	$cnt = 0 ;
+	if ( $obMM -> isOpen() == true )
+	{
+		$cnt	= $obMM -> getCount( $arWhere ) ;
+		$arMM	= $obMM -> getData( $arWhere , $page , NUMBER_PER_PAGE ) ;
+	}
+
+	$paging		= "" ;
+	$pageJump	= "" ;
+	
+	// 登録データがある場合
+	$arList = array() ;
+	if ( $cnt != 0 )
+	{
+		// 最大ページ数を計算する
+		$maxpage = ceil( $cnt / NUMBER_PER_PAGE ) ;
+		if ( $page == "" )
+			$page = 0 ;
+		else if ( $page >= $maxpage )
+			$page = $maxpage - 1;
+		$arParamFind[ "page" ] = $page ;
+
+		$nStart = $page * NUMBER_PER_PAGE ;
+		$nEnd = $page * NUMBER_PER_PAGE + NUMBER_PER_PAGE ;
+		if ( $nEnd >= $cnt )
+			$nEnd = $cnt ;
+
+		// ページ移動の表示
+		$paging = $blams -> fetchPaging( "list.php" , $arParamFind , $cnt , NUMBER_PER_PAGE ) ;
+
+		// 一覧表示
+		$arList = GetList( $blams , $page , $arParamFind , $obMM ) ;
+
+		// ページジャンプの表示
+		$pageJump = $blams -> fetchPagejump( "list.php" , $arParamFind , $maxpage , JUMP_PER_PAGE , NUMBER_PER_PAGE ) ;
+	}
+
+	// 一覧表示時のみ検索フォームが有効
+	if ( $list_flg != FALSE )
+	{
+		// 検索フォームの表示
+		$search = FetchSearch( $blams , $arParamFind ) ;
+	}
+
+	$arHeader = array(
+		array( "caption" => "商品コード"		, "class" => "w128 left" ) ,
+		array( "caption" => "JANコード"			, "class" => "w128 left" ) ,
+		array( "caption" => "商品名"			, "class" => "w280 left" ) ,
+		array( "caption" => "製造元"			, "class" => "w200 left" ) ,
+		array( "caption" => "商品カテゴリ"		, "class" => "w160 left" ) ,
+	) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, "list"			) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "maxline"			, NUMBER_PER_PAGE	) ;
+	$tmpl -> assign( "list_flg"			, $list_flg			) ;
+	$tmpl -> assign( "search"			, $search			) ;
+	$tmpl -> assign( "paging"			, $paging			) ;
+	$tmpl -> assign( "page_jump"		, $pageJump			) ;
+	$tmpl -> assign( "header_data"		, $arHeader			) ;
+	$tmpl -> assign( "list_data"		, $arList			) ;
+	$tmpl -> assign( "error"			, ""				) ;
+	$tmpl -> assign( "noanchor_flg"		, false				) ;
+	$data = $tmpl -> fetch( "common/list.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 検索フォームの生成
+function	FetchSearch( $blams , $arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	global $obCorp ;
+	global $obCategory ;
+
+	$arCorp				= array() ;
+	$arCategory_local	= array() ;
+	$arCategory			= array() ;
+
+	// 製造元テーブル作成
+	$arWhere = array() ;
+	$arCorp = $obCorp -> getList( $arWhere , 0 , false ) ;
+
+	// カテゴリテーブル作成
+	$arCategory_local = $obCategory -> createCategoryArray( 0 , 0 , 0 , false , DEF_CATEGORY_ITEM ) ;
+	for( $i = 0 ; $i < count( $arCategory_local ) ; $i ++ )
+	{
+		$key = key( $arCategory_local[ $i ] ) ;
+		$value = $arCategory_local[ $i ][ $key ] ;
+		$arCategory[ $key ] = $value ;
+	}
+
+	$arFoem = array() ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_MERCHANDISECODE" , $S_MERCHANDISECODE , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "商品コード" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form   = $blams -> fetchInputbox( "S_JANCODE" , $S_JANCODE , 256 - 16  , 64 , IME_OFF ) ;
+	$value .= $blams -> fetchTDTD( "JANコード" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( "S_NAME" , $S_NAME , 640 - 16  , 64 , IME_ON ) ;
+	$value .= $blams -> fetchTDTD( "商品名" , $form , 128 , 640 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER , 1 , 1 , 3 ) ;
+
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form	= $blams -> fetchSelectbox( "S_CORPID" , $S_CORPID , $arCorp , 256 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "製造元" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$form	= $blams -> fetchSelectbox( "S_CATEGORYID" , $S_CATEGORYID , $arCategory , 256 - 16 , "すべて選択" , FALSE ) ;
+	$value .= $blams -> fetchTDTD( "商品カテゴリ" , $form , 128 , 256 , "" , "left" , "middle" , BLAMS_FORMAT_NOBORDER ) ;
+
+	$arForm[] = $value ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "list_url"			, "list.php"		) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "page"				, $page				) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "append_disable"	, false				) ;
+	$data = $tmpl -> fetch( "common/search.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 一覧の取得
+function	GetList( $blams , $page , $arParamFind , $obMM )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	// パラメータの設定
+	$param = "" ;
+	$param .= $blams -> MakeParamLink( $arParamFind , "GET" ) ;
+
+	$arMM	= $obMM -> arData ;
+	$alias 	= $obMM -> alias ;
+	$pkey 	= $obMM -> primarykey ;
+	$cnt = count( $arMM ) ;
+
+	global $obCorp ;
+	global $obCategory ;
+
+	for ( $index = 0 ; $index < $cnt ; $index ++ )
+	{
+		// データの取得
+		$arData		= $arMM[ $index ] ;
+		
+		$merchandise_masterid	= $arData[ $alias . "_" . $pkey				] ;
+		$corpid					= $arData[ $alias . "_corpid"				] ;
+		$jancode				= $arData[ $alias . "_jancode"				] ;
+		$merchandisecode		= $arData[ $alias . "_merchandisecode"		] ;
+		$productname			= $arData[ $alias . "_name"					] ;
+		$categoryid				= $arData[ $alias . "_categoryid"			] ;
+		$cp_name				= $arData[ $obCorp -> alias . "_name"		] ;
+		$c_name					= $arData[ $obCategory -> alias . "_name"	] ;
+
+		if( $merchandisecode == "" )
+			$jancode = "不明" ;
+
+		if( $jancode == "" )
+			$jancode = "不明" ;
+
+		if ( $productname == "" )
+			$productname = "不明" ;
+
+		if ( $cp_name == "" )
+			$cp_name = "不明" ;
+
+		if ( $c_name == "" )
+			$c_name = "不明" ;
+
+		$arAnchor[ "url" 			] = "edit.php"							;
+		$arAnchor[ "idname"			] = $alias . "_merchandise_masterid"	;
+		$arAnchor[ "id"				] = $merchandise_masterid				;
+		$arAnchor[ "param"			] = $param								;
+		$arAnchor[ "anchor"			] = $merchandisecode					;
+		$arAnchor[ "caption"		] = $merchandisecode					;
+		$arAnchor[ "class"			] = "border left"						;
+		$arAnchor[ "script"			] = ""									;
+		$arAnchor[ "date_format"	] = ""									;
+
+		$arData = array() ;
+		$arData[] = $arAnchor ;
+		$arData[] = array( "caption" => $jancode ,			"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $productname ,		"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $cp_name ,			"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arData[] = array( "caption" => $c_name ,			"class" => "border left"	, "date_format" => ""	, "anchor" => "" ) ;
+		$arList[] = $arData ;
+	}
+	
+	return $arList ;
+}
+
+?>

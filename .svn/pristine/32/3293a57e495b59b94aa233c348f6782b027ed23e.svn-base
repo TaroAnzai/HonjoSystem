@@ -1,0 +1,5027 @@
+<?php
+	ini_set( "display_errors" ,1 ) ;
+	require_once( "../../../lib/system.php") ;
+	require_once( "class/config.class.php" )  ;
+	require_once( "class/cart.class.php" )  ;
+	require_once( "class/cartitem.class.php" )  ;
+	require_once( "class/member.class.php" )  ;
+	require_once( "class/serialno.class.php" )  ;
+	require_once( "class/merchandise.class.php" )  ;
+	require_once( "class/price.class.php" )  ;
+	require_once( "class/category.class.php" )  ;
+	require_once( "class/session.class.php" )  ;
+
+	$blams = new BLAMS() ;
+	$mode = "" ;
+	$func = "" ;
+
+	// 登録ボタン名によって処理を分ける
+	$arMode = array( "append" , "update" , "delete" , "print" , "bill" , "trans" , "mailto" ) ;
+	GetSystemMode( $mode , $func , $arMode ) ;
+
+	$obSession = new PARTS_Session() ;
+	$obSession -> checkLogin( SESSION_ADMIN ) ;
+
+	// セッションからログイン者情報を取得する
+	$arr = $obSession -> getUserData( SESSION_ADMIN ) ;
+	$login_adminid	= $arr[ $obSession -> obAdmin -> alias . "_adminid" ] ;
+	$login_level	= $arr[ $obSession -> obAdmin -> alias . "_level" ] ;
+
+	$obConfig		= new PARTS_Config() ;
+	$obCart			= new PARTS_Cart() ;
+	$obCartItem		= $obCart -> obCartItem ;
+	$obMember		= $obCart -> obMember ;
+	$obMerchandise	= $obCart -> obMerchandise ;
+	$obCategory		= $obMerchandise -> obCategory ;
+
+	$cf_alias	= $obConfig -> alias ;
+	$ct_alias	= $obCart -> alias ;
+	$ci_alias	= $obCartItem -> alias ;
+	$mb_alias	= $obMember -> alias ;
+	$m_alias	= $obMerchandise -> alias ;
+	$c_alias	= $obCategory -> alias ;
+
+	$additional = array() ;
+	$additional[] = "page" ;
+	$obCart -> assignGlobal( $additional , $arParam ) ;
+
+	// 検索用パラメータ保存
+	$arParamFind = array() ;
+	foreach( $obCart -> searchkey as $name )
+		$arParamFind[ $name ] = ${ $name } ;
+	$arParamFind[ "page"	] = $page			;
+
+	// 編集データ初期化
+	$arParamKey = array() ;
+	$arParamKey[] = sprintf( "%s_cartid"			, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_sessionid"			, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_memberid"			, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_member_flg"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_sheetno"			, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_settlement"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_order_date"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_income_date"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_orderway"			, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_used_point"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_append_point"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_limit_point"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_limit_date"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_delivery_date"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_delivery_date_y"	, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_delivery_date_m"	, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_delivery_date_d"	, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_delivery_time"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_shipping"			, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_state"				, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_city"				, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_addr1"				, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_addr2"				, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_zip1"				, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_zip2"				, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_tel1"				, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_tel2"				, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_tel3"				, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_name"				, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_comment"			, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_state_trans"		, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_billing_status"	, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_shipped_status"	, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_print_status"		, $ct_alias ) ;
+
+	$arParamKey[] = sprintf( "%s_memberid"		, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_state"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_city"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_addr1"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_addr2"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_zip1"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_zip2"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_tel1"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_tel2"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_tel3"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_name"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_name_en"		, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_kana"			, $mb_alias ) ;
+	$arParamKey[] = sprintf( "%s_agent_email"	, $mb_alias ) ;
+
+	$arParamKey[] = sprintf( "%s_merchandiseid"	, $ci_alias ) ;
+	$arParamKey[] = sprintf( "%s_number"		, $ci_alias ) ;
+
+	$arParamKey[] = "wrapping_flg" ;
+	$arParamKey[] = "decoration_flg" ;
+	$arParamKey[] = "deco_used" ;
+	$arParamKey[] = "delivery" ;
+	$arParamKey[] = "used_unit" ;
+
+	$arParamKey[] = sprintf( "%s_create_date"	, $ct_alias ) ;
+	$arParamKey[] = sprintf( "%s_update_date"	, $ct_alias ) ;
+
+	$obCart -> assignGlobal( $arParamKey ) ;
+
+	// 編集データ変換
+	if( ${ sprintf( "%s_number" , $ci_alias ) } == "" )
+		${ sprintf( "%s_number" , $ci_alias ) } = 1 ;
+
+	if( ${ sprintf( "%s_merchandiseid" , $ci_alias ) } == "" )
+		${ sprintf( "%s_merchandiseid" , $ci_alias ) } = -1 ;
+
+	if( ${ sprintf( "%s_memberid" , $ct_alias ) } == "" )
+		${ sprintf( "%s_memberid" , $ct_alias ) } = -1 ;
+
+	if( ${ sprintf( "%s_settlement" , $ct_alias ) } == "" )
+		${ sprintf( "%s_settlement" , $ct_alias ) } = -1 ;
+
+	if( $wrapping_flg == "" )
+		$wrapping_flg = 0 ;
+
+	if( $decoration_flg == "" )
+		$decoration_flg = 0 ;
+
+	if( $deco_used == "" )
+		$deco_used = -1 ;
+
+	if( ${ sprintf( "%s_used_point" , $ct_alias ) } == "" )
+		${ sprintf( "%s_used_point" , $ct_alias ) } = 0 ;
+
+	if( ${ sprintf( "%s_append_point" , $ct_alias ) } == "" )
+		${ sprintf( "%s_append_point" , $ct_alias ) } = 0 ;
+
+	if( ${ sprintf( "%s_delivery_date_y" , $ct_alias ) } == "" && 
+		${ sprintf( "%s_delivery_date_m" , $ct_alias ) } == "" && 
+		${ sprintf( "%s_delivery_date_d" , $ct_alias ) } == "" )
+	{
+//		$obDelivery_date_default = $obConfig -> setDelivery_dateDefault() ;
+		$obDelivery_date_default = new DateTime() ;
+
+		${ sprintf( "%s_delivery_date_y" , $ct_alias ) } = $obDelivery_date_default -> format( "Y" ) ;
+		${ sprintf( "%s_delivery_date_m" , $ct_alias ) } = $obDelivery_date_default -> format( "n" ) ;
+		${ sprintf( "%s_delivery_date_d" , $ct_alias ) } = $obDelivery_date_default -> format( "j" ) ;
+	}
+
+	if( ${ sprintf( "%s_delivery_time" , $ct_alias ) } == "" )
+		${ sprintf( "%s_delivery_time" , $ct_alias ) } = -1 ;
+
+	if( ${ sprintf( "%s_billing_status" , $ct_alias ) } == "" )
+		${ sprintf( "%s_billing_status" , $ct_alias ) } = -1 ;
+
+	if( ${ sprintf( "%s_shipped_status" , $ct_alias ) } == "" )
+		${ sprintf( "%s_shipped_status" , $ct_alias ) } = -1 ;
+
+	if ( $delivery == "" )
+		 $delivery = 0 ;
+
+	// 編集データ保存
+	$arParam = array() ;
+	$arParam[ sprintf( "%s_cartid"			, $ct_alias ) ] = ${ sprintf( "%s_cartid"			, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_sessionid"		, $ct_alias ) ] = ${ sprintf( "%s_sessionid"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_memberid"		, $ct_alias ) ] = ${ sprintf( "%s_memberid"			, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_member_flg"		, $ct_alias ) ] = ${ sprintf( "%s_member_flg"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_sheetno"			, $ct_alias ) ] = ${ sprintf( "%s_sheetno"			, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_settlement"		, $ct_alias ) ] = ${ sprintf( "%s_settlement"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_order_date"		, $ct_alias ) ] = ${ sprintf( "%s_order_date"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_income_date"		, $ct_alias ) ] = ${ sprintf( "%s_income_date"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_orderway"		, $ct_alias ) ] = ${ sprintf( "%s_orderway"			, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_used_point"		, $ct_alias ) ] = ${ sprintf( "%s_used_point"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_append_point"	, $ct_alias ) ] = ${ sprintf( "%s_append_point"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_limit_point"		, $ct_alias ) ] = ${ sprintf( "%s_limit_point"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_limit_date"		, $ct_alias ) ] = ${ sprintf( "%s_limit_date"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_delivery_date"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_date"	, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_delivery_date_y"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_date_y"	, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_delivery_date_m"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_date_m"	, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_delivery_date_d"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_date_d"	, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_delivery_time"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_time"	, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_shipping"		, $ct_alias ) ] = ${ sprintf( "%s_shipping"			, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_state"			, $ct_alias ) ] = ${ sprintf( "%s_state"			, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_city"			, $ct_alias ) ] = ${ sprintf( "%s_city"				, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_addr1"			, $ct_alias ) ] = ${ sprintf( "%s_addr1"			, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_addr2"			, $ct_alias ) ] = ${ sprintf( "%s_addr2"			, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_zip1"			, $ct_alias ) ] = ${ sprintf( "%s_zip1"				, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_zip2"			, $ct_alias ) ] = ${ sprintf( "%s_zip2"				, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_tel1"			, $ct_alias ) ] = ${ sprintf( "%s_tel1"				, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_tel2"			, $ct_alias ) ] = ${ sprintf( "%s_tel2"				, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_tel3"			, $ct_alias ) ] = ${ sprintf( "%s_tel3"				, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_name"			, $ct_alias ) ] = ${ sprintf( "%s_name"				, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_comment"			, $ct_alias ) ] = ${ sprintf( "%s_comment"			, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_state_trans"		, $ct_alias ) ] = ${ sprintf( "%s_state_trans"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_billing_status"	, $ct_alias ) ] = ${ sprintf( "%s_billing_status"	, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_shipped_status"	, $ct_alias ) ] = ${ sprintf( "%s_shipped_status"	, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_print_status"	, $ct_alias ) ] = ${ sprintf( "%s_print_status"		, $ct_alias ) } ;
+
+	$arParam[ sprintf( "%s_memberid"		, $mb_alias ) ] = ${ sprintf( "%s_memberid"		, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_state"			, $mb_alias ) ] = ${ sprintf( "%s_state"		, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_city"			, $mb_alias ) ] = ${ sprintf( "%s_city"			, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_addr1"			, $mb_alias ) ] = ${ sprintf( "%s_addr1"		, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_addr2"			, $mb_alias ) ] = ${ sprintf( "%s_addr2"		, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_zip1"			, $mb_alias ) ] = ${ sprintf( "%s_zip1"			, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_zip2"			, $mb_alias ) ] = ${ sprintf( "%s_zip2"			, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_tel1"			, $mb_alias ) ] = ${ sprintf( "%s_tel1"			, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_tel2"			, $mb_alias ) ] = ${ sprintf( "%s_tel2"			, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_tel3"			, $mb_alias ) ] = ${ sprintf( "%s_tel3"			, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_name"			, $mb_alias ) ] = ${ sprintf( "%s_name"			, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_name_en"			, $mb_alias ) ] = ${ sprintf( "%s_name_en"		, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_kana"			, $mb_alias ) ] = ${ sprintf( "%s_kana"			, $mb_alias ) } ;
+	$arParam[ sprintf( "%s_agent_email"		, $mb_alias ) ] = ${ sprintf( "%s_agent_email"	, $mb_alias ) } ;
+
+	$arParam[ sprintf( "%s_merchandiseid"	, $ci_alias ) ] = ${ sprintf( "%s_merchandiseid"	, $ci_alias ) } ;
+	$arParam[ sprintf( "%s_number"			, $ci_alias ) ] = ${ sprintf( "%s_number"			, $ci_alias ) } ;
+
+	$arParam[ "wrapping_flg"	] = $wrapping_flg ;
+	$arParam[ "decoration_flg"	] = $decoration_flg ;
+	$arParam[ "deco_used"		] = $deco_used ;
+	$arParam[ "delivery"		] = $delivery ;
+
+	$arParam[ sprintf( "%s_create_date"	, $ct_alias ) ] = ${ sprintf( "%s_create_date"		, $ct_alias ) } ;
+	$arParam[ sprintf( "%s_update_date"	, $ct_alias ) ] = ${ sprintf( "%s_update_date"		, $ct_alias ) } ;
+
+	// 数量変更の変数を取得
+	// setitemcnt_nnn を期待
+	if( is_array( $_POST ) )
+	{
+		foreach( $_POST as $key_setitemcnt => $value_setitemcnt )
+		{
+			if( preg_match( "/^setitemcnt_/" , $key_setitemcnt ) )
+			{
+				list( $setitemkey , $setitemid ) = explode( "_" , $key_setitemcnt ) ;
+				$arParam[ "setitemcnt" ][ $setitemid ] = $value_setitemcnt ;
+			}
+		}
+	}
+
+	// データ取得時のキー初期化
+	$getdatakey = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+
+	// モードに従った処理実行
+	$error = "" ;
+	if ( $mode == "print" )
+	{
+		// 書類印刷状態変更
+		$error = ChangePrintStatus( $func , $arParam ) ;
+	}
+	else
+	if ( $mode == "bill" )
+	{
+		// 請求状態変更
+		$error = ChangeBillingStatus( $func , $arParam , $blams ) ;
+	}
+	else
+	if ( $mode == "trans" )
+	{
+		// 遷移状態変更
+		$error = ChangeStateTrans( $func , $arParam , $blams ) ;
+	}
+	else
+	if ( $mode == "mailto" )
+	{
+		// メール送信
+		if ( $func == "outof" )
+			$error = MailToOutOfStock( $arParam ) ;
+	}
+
+	// タイトル取得時のキー初期化
+	$menu = FUNC_ORDER ;
+
+	$screentype = "default" ;
+	$funcname = $blams -> GetFuncName( $menu ) ;
+	$header = $blams -> fetchAdminHeader( $screentype , $menu ) ;
+	$footer = $blams -> fetchAdminFooter( $screentype , $menu ) ;
+
+	switch ( $mode )
+	{
+	// 新規登録
+	case "append" :
+
+		// 機能分岐
+		switch( $func )
+		{
+
+		// 入力フォーム画面
+		case "member" :
+		case "back_shipinfo" :
+
+			// 入力フォーム画面への初回遷移時のみ、データを初期化
+			if ( $func != "back_shipinfo" )
+			{
+				$error = CheckCartData( $mode , $func , $arParam ) ;
+
+				$now_date = new DateTime();
+				$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+			}
+
+			if( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 注文者新規入力" , $funcname ) ;
+
+				// 入力フォーム画面表示
+				$data = FetchInputMember( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s カート情報新規入力" , $funcname ) ;
+
+				$func = "input" ;
+				// 入力フォーム画面表示
+				$data = FetchInputCart( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			break ;
+
+		case "input" :
+		case "back_member" :
+
+			if ( $func != "back_member" )
+			{
+				$now_date = new DateTime();
+				$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+				// カート情報系
+				$arParam[ sprintf( "%s_cartid"		, $ct_alias ) ] = -1 ;
+
+				$arParam[ sprintf( "%s_create_date"	, $ct_alias ) ] = $now ;
+				$arParam[ sprintf( "%s_update_date"	, $ct_alias ) ] = $now ;
+			}
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s カート情報新規入力" , $funcname ) ;
+
+			// 入力フォーム画面表示
+			$data = FetchInputCart( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		case "cartitem" :
+			// タイトルの表示
+			$subfuncname = sprintf( "%s カート情報新規入力" , $funcname ) ;
+
+			// カートに挿入
+			if( ${ sprintf( "%s_merchandiseid" , $ci_alias ) } != -1 )
+				$obCart -> appendOrder( ${ sprintf( "%s_merchandiseid" , $ci_alias ) } , ${ sprintf( "%s_number" , $ci_alias ) } , 0 , 0 , 0 , DF_BILLSTATUS_ADMINBUYING ) ;
+
+			// 入力フォーム画面表示
+			$data = FetchInputCart( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		// カート内個別削除
+		case ( preg_match( "/^deleteitem_/" , $func ) == 1 ) :
+
+			// 削除処理
+			list( $dummy , $deleteitemid ) = explode( "_" , $func ) ;
+			if( is_numeric( $deleteitemid ) )
+			{
+				$obCartItem -> deleteData( $deleteitemid ) ;
+			}
+			// 機能を戻す
+			$func = "input" ;
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s カート情報新規入力" , $funcname ) ;
+
+			// 入力フォーム画面表示
+			$data = FetchInputCart( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		// カート内数量変更
+		case "setitemcnt" :
+
+			// 数量変更処理
+			if( is_array( $arParam[ "setitemcnt" ] ) )
+			{
+				foreach( $arParam[ "setitemcnt" ] as $key_id => $value_number )
+				{
+					$obCartItem -> updateNumber( $key_id , $value_number ) ;
+				}
+			}
+
+			// 機能を戻す
+			$func = "input" ;
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s カート情報新規入力" , $funcname ) ;
+
+			// 入力フォーム画面表示
+			$data = FetchInputCart( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		case "shipinfo" :
+		case "back_confrm" :
+
+			// 入力フォーム画面への初回遷移時のみ、データを初期化
+			if ( $func != "back_confrm" )
+			{
+				$error = CheckMemberData( $mode , $func , $arParam ) ;
+
+				$now_date = new DateTime();
+				$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+			}
+
+			if( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s お届け情報新規入力" , $funcname ) ;
+				
+				// メンバー系の情報を上書きする
+				UpdateMember( $arParam ) ;
+
+				// 入力フォーム画面表示
+				// 画像サイトでは不必要なのでダミーデータを入れ込む
+				$data = FetchInputShipinfo( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+				// $funcをconfrmにして次のcaseへ
+				$func = "confrm" ;
+
+				// 入力データ検査
+				$error = CheckShipinfoData( $mode , $func , $arParam ) ;
+				if ( $error == "" )
+				{
+					// タイトルの表示
+					$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+	
+					// 包装・のしに関して上書き
+//					$obCartItem -> updateDecoWrap( ${ sprintf( "%s_cartid" , $ct_alias ) } , $wrapping_flg , $decoration_flg , $deco_used ) ;
+	
+					// 詳細表示画面表示
+					$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+				}
+				else
+				{
+					// タイトルの表示
+					$subfuncname = sprintf( "%s お届け情報新規入力" , $funcname ) ;
+	
+//					$func = "shipinfo" ;
+					$func = "member" ;
+					// 入力フォーム画面表示へ戻る
+					$data = FetchInputMember( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+				}
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 注文者新規入力" , $funcname ) ;
+
+				$func = "member" ;
+				// 入力フォーム画面表示
+				$data = FetchInputMember( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			break ;
+
+		// 新規確認画面
+		case "confrm" :
+
+			// 入力データ検査
+			$error = CheckShipinfoData( $mode , $func , $arParam ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 入力確認" , $funcname ) ;
+
+				// 包装・のしに関して上書き
+//				$obCartItem -> updateDecoWrap( ${ sprintf( "%s_cartid" , $ct_alias ) } , $wrapping_flg , $decoration_flg , $deco_used ) ;
+
+				// 詳細表示画面表示
+				$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s お届け情報新規入力" , $funcname ) ;
+
+				$func = "member" ;
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInputMember( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+/*
+				$func = "shipinfo" ;
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInputShipinfo( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+*/
+			}
+			break ;
+
+		// 新規完了画面
+		case "done" :
+
+			// 入力データ検査(使用ポイントについて直前の検査)
+			$error = CheckShipinfoData( $mode , $func , $arParam ) ;
+			if ( $error == "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 登録処理" , $funcname ) ;
+
+				// 登録処理（実際はUPDATE）
+				if ( InsertData( $arParam ) == TRUE )
+				{
+					$error = "正常に登録されました。\n" ;
+				}
+				else
+				{
+					$error  = "【エラーがあります】\n" ;
+					$error .= "・登録に失敗しました。\n" ;
+				}
+
+				// 詳細表示画面表示
+				$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			}
+			else
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s お届け情報新規入力" , $funcname ) ;
+
+				$func = "shipinfo" ;
+				// 入力フォーム画面表示へ戻る
+				$data = FetchInputShipinfo( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			break ;
+		}
+		break ;
+
+	// 書類印刷
+	case "print" :
+
+	// 請求状態変更
+	case "bill" :
+
+	// 遷移状態変更
+	case "trans" :
+
+	// メール送信
+	case "mailto" :
+
+	// 更新モード
+	case "update" :
+
+		// 機能分岐
+		switch( $func )
+		{
+		// 入力フォーム画面
+		case "cartinput" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s カート内容更新入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データをDBから再取得（初期化）
+			if ( $func != "cartback" )
+			{
+				// データをDBから再取得（初期化）
+				$arParam = GetData( $getdatakey ) ;
+				$now_date = new DateTime();
+				$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+				$arParam[ sprintf( "%s_update_date" , $ct_alias ) ] = $now ;
+				$arParam[ sprintf( "%s_number" , $ci_alias ) ] = 1 ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInputCart( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			break ;
+
+		case "cartitem" :
+			// タイトルの表示
+			$subfuncname = sprintf( "%s カート内容更新入力" , $funcname ) ;
+
+			// カートに挿入
+			if( ${ sprintf( "%s_merchandiseid" , $ci_alias ) } != -1 )
+				$obCart -> appendOrder( ${ sprintf( "%s_merchandiseid" , $ci_alias ) } , ${ sprintf( "%s_number" , $ci_alias ) } , 0 , 0 , 0 , DF_BILLSTATUS_ADMINBUYING , ${ sprintf( "%s_cartid" , $ct_alias ) } ) ;
+
+			// 入力フォーム画面表示
+			$data = FetchInputCart( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		// カート内数量変更
+		case "setitemcnt" :
+
+			// 数量変更処理
+			if( is_array( $arParam[ "setitemcnt" ] ) )
+			{
+				foreach( $arParam[ "setitemcnt" ] as $key_id => $value_number )
+				{
+					$obCartItem -> updateNumber( $key_id , $value_number ) ;
+				}
+			}
+
+			// 機能を戻す
+			$func = "cartinput" ;
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s カート内容更新入力" , $funcname ) ;
+
+			// 入力フォーム画面表示
+			$data = FetchInputCart( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		// カート内個別削除
+		case ( preg_match( "/^deleteitem_/" , $func ) == 1 ) :
+
+			// 削除処理
+			list( $dummy , $deleteitemid ) = explode( "_" , $func ) ;
+			if( is_numeric( $deleteitemid ) )
+			{
+				$obCartItem -> deleteData( $deleteitemid ) ;
+			}
+			// 機能を戻す
+			$func = "cartinput" ;
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s カート内容更新入力" , $funcname ) ;
+
+			// 入力フォーム画面表示
+			$data = FetchInputCart( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+
+			break ;
+
+		// 注文者情報更新入力
+		case "memberinput" :
+		case "memberback" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 注文者情報更新入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データをDBから再取得（初期化）
+			if ( $func != "memberback" )
+			{
+				// データをDBから再取得（初期化）
+				$arParam = GetData( $getdatakey ) ;
+				$now_date = new DateTime();
+				$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+				$arParam[ sprintf( "%s_update_date" , $ct_alias ) ] = $now ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInputMember( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			break ;
+
+		// 注文者情報更新確認
+		case "memberconfrm" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 注文者情報更新確認" , $funcname ) ;
+
+			$error = CheckMemberData( $mode , $func , $arParam ) ;
+
+			if( $error != "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s 注文者情報更新入力" , $funcname ) ;
+
+				$func = "memberinput" ;
+
+				// 入力フォーム画面表示
+				$data = FetchInputMember( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			else
+			{
+				// 入力フォーム画面表示
+				$data = FetchDetailMember( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			}
+			break ;
+
+		// 注文者情報更新完了画面
+		case "memberdone" :
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 注文者情報更新処理" , $funcname ) ;
+
+			// 更新登録実施
+			if ( UpdateCartMember( $arParam ) == TRUE )
+			{
+				$error = "正常に更新されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・更新に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+
+		// お届け情報更新入力
+		case "shipinfoinput" :
+		case "shipinfoback" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s お届け情報更新入力" , $funcname ) ;
+
+			// 入力フォーム画面への初回遷移時のみ、データをDBから再取得（初期化）
+			if ( $func != "shipinfoback" )
+			{
+				// データをDBから再取得（初期化）
+				$arParam = GetData( $getdatakey ) ;
+				$now_date = new DateTime();
+				$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+				$arParam[ sprintf( "%s_update_date" , $ct_alias ) ] = $now ;
+			}
+
+			// 入力フォーム画面表示
+			$data = FetchInputShipinfo( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			break ;
+
+		// お届け情報更新確認
+		case "shipinfoconfrm" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s お届け情報更新確認" , $funcname ) ;
+
+			$error = CheckShipinfoData( $mode , $func , $arParam ) ;
+
+			if( $error != "" )
+			{
+				// タイトルの表示
+				$subfuncname = sprintf( "%s お届け情報更新入力" , $funcname ) ;
+
+				$func = "shipinfoinput" ;
+
+				// 入力フォーム画面表示
+				$data = FetchInputShipinfo( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_level ) ;
+			}
+			else
+			{
+				// 入力フォーム画面表示
+				$data = FetchDetailShipinfo( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			}
+			break ;
+
+		// お届け情報更新完了画面
+		case "shipinfodone" :
+			// タイトルの表示
+			$subfuncname = sprintf( "%s お届け情報更新処理" , $funcname ) ;
+
+			// 更新登録実施
+			if ( UpdateCartShipinfo( $arParam ) == TRUE )
+			{
+				$error = "正常に更新されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・更新に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+
+		case "next_item" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			$arNextPrev = GetNextPrevCartID( $getdatakey , $arParamFind ) ;
+			if( $arNextPrev[ "next" ] != -1 )
+				$getdatakey = $arNextPrev[ "next" ] ;
+			
+			// データをDBから再取得（初期化）
+			$arParam = GetData( $getdatakey ) ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			break ;
+
+		case "prev_item" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			$arNextPrev = GetNextPrevCartID( $getdatakey , $arParamFind ) ;
+			if( $arNextPrev[ "prev" ] != -1 )
+				$getdatakey = $arNextPrev[ "prev" ] ;
+			
+			// データをDBから再取得（初期化）
+			$arParam = GetData( $getdatakey ) ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			break ;
+
+		// 初期画面、もしくはFunctionの指定がない場合
+		default :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 詳細表示" , $funcname ) ;
+
+			// データをDBから再取得（初期化）
+			$arParam = GetData( $getdatakey ) ;
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			break ;
+		}
+		break ;
+
+	// 削除モード
+	case "delete" :
+
+		// 機能分岐
+		switch( $func )
+		{
+
+		// 削除確認画面
+		case "confrm" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 削除確認" , $funcname ) ;
+
+			// 削除確認メッセージ表示
+			
+			$arParam = GetData( $getdatakey ) ;
+
+			// 詳細表示画面表示
+			$data = FetchDetail( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam , $login_adminid , $login_level ) ;
+			break ;
+
+		// 削除完了画面
+		case "done" :
+
+			// タイトルの表示
+			$subfuncname = sprintf( "%s 削除処理" , $funcname ) ;
+
+			// 削除処理実施
+			if ( DeleteData( $arParam ) == TRUE )
+			{
+				$error = "正常に削除されました。\n" ;
+			}
+			else
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・削除に失敗しました。\n" ;
+			}
+			$data = FetchDone( $blams , $mode , $func , $subfuncname , $error , $arParamFind , $arParam ) ;
+			break ;
+		}
+		break ;
+	}
+
+	// 「一覧に戻る」の表示
+	// 次の注文、前の注文でpageを修正するので下へ
+	if ( $mode != "append" )
+		$pageback = $blams -> fetchPageback( "list.php" , $arParamFind ) ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+
+	// ページ全体の生成
+	$contents = $blams -> fetchContents( $pageback . $data ) ;
+
+	// ナビゲーションメニュー
+	$navi = $blams -> fetchSlideMenu( $menu , $login_level ) ;
+
+	$blams -> PrintBody( $header , $footer , $contents , $navi ) ;
+
+	exit ;
+
+// ボタンの表示
+function	FetchButton( $blams , $mode , $func , $arParam = array() , $ct_cartid = -1 , $arParamFind = array() )
+{
+	global	$obCart ;
+
+	$ct_alias	= $obCart -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$cartid			= ${ sprintf( "%s_cartid"			, $ct_alias ) } ;
+	$settlement		= ${ sprintf( "%s_settlement"		, $ct_alias ) } ;
+	$state_trans	= ${ sprintf( "%s_state_trans"		, $ct_alias ) } ;
+	$billing_status	= ${ sprintf( "%s_billing_status"	, $ct_alias ) } ;
+	$shipped_status	= ${ sprintf( "%s_shipped_status"	, $ct_alias ) } ;
+	$print_status	= ${ sprintf( "%s_print_status"		, $ct_alias ) } ;
+	$orderway		= ${ sprintf( "%s_orderway"			, $ct_alias ) } ;
+
+	global	$arStateTransBySettle ;
+	$arStateTransBySettle_local = array() ;
+	if( $settlement != -1 )
+		$arStateTransBySettle_local = $arStateTransBySettle[ $settlement ] ;
+
+	if( $orderway == DEF_ORDER_FAX )
+		array_unshift( $arStateTransBySettle_local , DF_STATETRANS_FAX ) ;
+
+	$onclick  = "" ;
+	$onclick .= sprintf( "document.getElementById('edit_form').submit();" ) ;
+
+	$arProcess = array(
+		//					ボタン名								MODE							Action
+		"list"					=>	array( "value" => "一覧に戻る"		, "name" => "list"					, "action" => "list.php"	, "target" => "" , "org_action" => "" ) ,
+		"detail"				=>	array( "value" => "詳細に戻る"		, "name" => "update[default]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"append_member"			=>	array( "value" => "次へ"			, "name" => "append[member]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_shipinfo"		=>	array( "value" => "次へ"			, "name" => "append[shipinfo]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_confrm"			=>	array( "value" => "新規確認"		, "name" => "append[confrm]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_done"			=>	array( "value" => "登録します"		, "name" => "append[done]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_cancel"			=>	array( "value" => "キャンセル"		, "name" => "append[cancel]"		, "action" => "list.php"	, "target" => "" , "org_action" => "" ) ,
+		"append_back_member"	=>	array( "value" => "戻る"			, "name" => "append[back_member]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_back_shipinfo"	=>	array( "value" => "戻る"			, "name" => "append[back_shipinfo]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_back_confrm"	=>	array( "value" => "戻る"			, "name" => "append[back_confrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"append_cartitem"		=>	array( "value" => "商品を追加"		, "name" => "append[cartitem]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"append_setitemcnt"		=>	array( "value" => "数量を変更"		, "name" => "append[setitemcnt]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"update_cartinput"		=>	array( "value" => "カート内容更新"	, "name" => "update[cartinput]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_cartitem"		=>	array( "value" => "商品を追加"		, "name" => "update[cartitem]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_setitemcnt"		=>	array( "value" => "数量を変更"		, "name" => "update[setitemcnt]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"update_memberinput"	=>	array( "value" => "注文者更新"		, "name" => "update[memberinput]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_memberconfrm"	=>	array( "value" => "更新確認"		, "name" => "update[memberconfrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_memberdone"		=>	array( "value" => "更新します"		, "name" => "update[memberdone]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_memberback"		=>	array( "value" => "戻る"			, "name" => "update[memberback]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"update_shipinfoinput"	=>	array( "value" => "お届け情報更新"	, "name" => "update[shipinfoinput]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_shipinfoconfrm"	=>	array( "value" => "更新確認"		, "name" => "update[shipinfoconfrm]"	, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_shipinfodone"	=>	array( "value" => "更新します"		, "name" => "update[shipinfodone]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"update_shipinfoback"	=>	array( "value" => "戻る"			, "name" => "update[shipinfoback]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"update_cancel"			=>	array( "value" => "キャンセル"		, "name" => "update[default]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"print"					=>	array( "value" => "書類印刷"		, "name" => "print[default]"		, "action" => "pdf_list.php"			,	"target" => "_blank" 		, "org_action" => "edit.php" ) ,
+
+		"bill_settled"			=>	array( "value" => "決算確認完了"	, "name" => "bill[settled]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"bill_settling"			=>	array( "value" => "決算確認に戻す"	, "name" => "bill[settling]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"bill_cancel"			=>	array( "value" => "注文キャンセル"	, "name" => "bill[cancel]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"trans_lump"			=>	array( "value" => "一括処理"		, "name" => "trans[lump]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"trans_prev"			=>	array( "value" => "前に戻る"		, "name" => "trans[prev]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"trans_next"			=>	array( "value" => "次に進む"		, "name" => "trans[next]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"mailto_outof"			=>	array( "value" => "品切れ通知"		, "name" => "mailto[outof]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"delete_confrm"			=>	array( "value" => "削除"			, "name" => "delete[confrm]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"delete_done"			=>	array( "value" => "削除します"		, "name" => "delete[done]"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"delete_cancel"			=>	array( "value" => "キャンセル"		, "name" => "update[default]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"next"					=>	array( "value" => "次の注文へ"		, "name" => "update[next_item]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+		"prev"					=>	array( "value" => "前の注文へ"		, "name" => "update[prev_item]"		, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+
+		"StartNewLine"			=>	array( "value" => ""				, "name" => "StartNewLine"			, "action" => ""			, "target" => "" , "org_action" => "" ) ,
+	) ;
+
+	// 印刷済みマーク付加
+	if ( $print_status != 0 )
+		$arProcess[ "print" ][ "value" ] = "書類印刷 ※" ;
+
+	// 「前に戻る」ボタンの文字列書き換え
+	if ( $state_trans != 0 )
+	{
+		$prev_state = $arStateTransBySettle_local[ $state_trans - 1 ] ;
+		global	$arStateTrans ;
+		$szBtnTitle = $arStateTrans[ $prev_state ] ;
+
+		if ( $prev_state == DF_STATETRANS_DELIVERY || $prev_state == DF_STATETRANS_PAYMENT )
+			$szBtnTitle .= "待ちに戻す" ;
+		else
+			$szBtnTitle .= "中に戻す" ;
+
+		$arProcess[ "trans_prev" ][ "value" ] = $szBtnTitle ;
+	}
+
+	// 「次に進む」ボタンの文字列書き換え
+	if( count( $arStateTransBySettle_local ) > 0 && $state_trans != "" )
+	{
+		$now_state = $arStateTransBySettle_local[ $state_trans ] ;
+		if ( $now_state != DF_STATETRANS_ENDSTATE )
+		{
+			global	$arStateTrans ;
+			$szBtnTitle = $arStateTrans[ $now_state ] . "完了" ;
+			$arProcess[ "trans_next" ][ "value" ] = $szBtnTitle ;
+		}
+	}
+
+	$arOperation = array() ;
+	switch( $mode )
+	{
+	case "append" :
+		switch( $func )
+		{
+		case "input" :
+		case "back_member" :
+		case "cartitem" :
+		case "setitemcnt" :
+			$arOperation = array( "append_cartitem" , "append_setitemcnt" , "StartNewLine" , "append_member" , "append_cancel" ) ;
+			break ;
+		case "member" :
+		case "back_shipinfo" :
+			$arOperation = array( "append_shipinfo" , "append_back_member" , "append_cancel" ) ;
+			break ;
+		case "shipinfo" :
+		case "back_confrm" :
+			$arOperation = array( "append_confrm" , "append_back_shipinfo" , "append_cancel" ) ;
+			break ;
+		case "confrm" :
+			$arOperation = array( "append_done" , "append_back_confrm" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "list" ) ;
+			break ;
+		}
+		break ;
+
+	case "print" :
+	case "bill" :
+	case "trans" :
+	case "mailto" :
+	case "update" :
+		switch( $func )
+		{
+		case "cartinput" :
+		case "cartitem" :
+		case "setitemcnt" :
+			$arOperation = array( "update_cartitem" , "update_setitemcnt" , "update_cancel" ) ;
+			break ;
+
+		case "memberinput" :
+		case "memberback" :
+			$arOperation = array( "update_memberconfrm" , "update_cancel" ) ;
+			break ;
+
+		case "memberconfrm" :
+			$arOperation = array( "update_memberdone" , "update_memberback" , "update_cancel" ) ;
+			break ;
+
+		case "memberdone" :
+			$arOperation = array( "detail" ) ;
+			break ;
+
+		case "shipinfoinput" :
+		case "shipinfoback" :
+			$arOperation = array( "update_shipinfoconfrm" , "update_cancel" ) ;
+			break ;
+
+		case "shipinfoconfrm" :
+			$arOperation = array( "update_shipinfodone" , "update_shipinfoback" , "update_cancel" ) ;
+			break ;
+
+		case "shipinfodone" :
+			$arOperation = array( "detail" ) ;
+			break ;
+
+		default :
+			$arOperation = array( 
+				"prev" ,		 			// 0
+				"next" ,		 			// 1
+				"StartNewLine" , 			// 2
+				"update_cartinput" ,		// 3
+				"update_memberinput" ,		// 4
+//				"update_shipinfoinput" ,	// 5
+				"StartNewLine" , 			// 6
+				"StartNewLine" , 			// 7
+				"bill_cancel" , 			// 8
+				"delete_confrm" , 			// 9
+				"StartNewLine" , 			// 10
+				"StartNewLine" , 			// 11
+//				"bill_settled" , 			// 12
+//				"StartNewLine" , 			// 13
+//				"mailto_outof" , 			// 14
+//				"StartNewLine" , 			// 15
+//				"print" , 					// 16
+//				"StartNewLine" , 			// 17
+//				"StartNewLine" , 			// 18
+//				"trans_lump" , 				// 19
+//				"StartNewLine" , 			// 20
+//				"trans_next" , 				// 21
+//				"trans_prev" 				// 22
+			) ;
+/*
+			// 「決済済み」「注文キャンセル」の場合は、「決済中に戻す」ボタンに変更
+			if ( $billing_status == DF_BILLSTATUS_SETTLED || $billing_status == DF_BILLSTATUS_CANCEL )
+				$arOperation[ 13 ] = "bill_settling" ;
+
+			// 前に戻れない場合は、ボタン表示無し
+			if ( $state_trans == 0 )
+				unset( $arOperation[ 22 ] ) ;
+
+			// 次に進めない場合は、ボタン表示無し
+			$now_state = $arStateTransBySettle_local[ $state_trans ] ;
+			if ( $now_state == DF_STATETRANS_ENDSTATE )
+				unset( $arOperation[ 21 ] ) ;
+
+			if ( $state_trans == 0 && $now_state == DF_STATETRANS_ENDSTATE )
+			{
+				unset( $arOperation[ 17 ] ) ;
+				unset( $arOperation[ 18 ] ) ;
+			}
+*/
+			$arNextPrev = GetNextPrevCartID( $cartid , $arParamFind ) ;
+			if( $arNextPrev[ "next" ] == -1 )
+				unset( $arOperation[ 1 ] ) ;
+			if( $arNextPrev[ "prev" ] == -1 )
+				unset( $arOperation[ 0 ] ) ;
+			if( $arNextPrev[ "next" ] == -1 && $arNextPrev[ "prev" ] == -1 )
+			{
+				unset( $arOperation[ 2 ] ) ;
+			}
+			break ;
+		}
+		break ;
+
+	case "delete" :
+		switch( $func )
+		{
+		case "confrm" :
+			$arOperation = array( "delete_done" , "delete_cancel" ) ;
+			break ;
+		case "done" :
+			$arOperation = array( "list" ) ;
+			break ;
+		}
+		break ;
+	}
+
+	$arButton = array() ;
+	if( is_array( $arOperation ) )
+	{
+		foreach( $arOperation as $value )
+			$arButton[] = $arProcess[ $value ] ;
+	}
+
+	if( !isset( $funcname ) )
+		$funcname = "" ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "id"				, "edit_form"		) ;
+	$tmpl -> assign( "button_data"		, $arButton			) ;
+	$data = $tmpl -> fetch( "common/button.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+
+}
+
+// データ検査（カート登録から会員情報入力画面への遷移時）
+function	CheckCartData( $mode , $func , &$arParam )
+{
+	$error = "" ;
+
+	global	$obCart ;
+	global	$obCartItem ;
+
+	$ct_alias	= $obCart -> alias ;
+	$ci_alias	= $obCartItem -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$arCart = GetData( ${ sprintf( "%s_cartid" , $ct_alias ) } ) ;
+	if( !( count( $arCart[ "cartitem_data" ] ) > 0 ) )
+	{
+		$error .= "・カートに一件も登録されていません。\n" ;
+	}
+
+	return $error ;
+}
+
+// データ検査（会員情報入力画面からお届け先入力画面への遷移時）
+function	CheckMemberData( $mode , $func , &$arParam )
+{
+	$error = "" ;
+
+	global	$obCart ;
+	global	$obCartItem ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$ci_alias	= $obCartItem -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	$obMail = new PARTS_Mail() ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// 非会員時
+	if( ${ sprintf( "%s_memberid" , $mb_alias ) } == -1 )
+	{
+		$error .= "・注文者を選択してください。\n" ;
+/*
+		// 名前（姓 名）
+		if ( ${ sprintf( "%s_name" , $mb_alias ) } == "" )
+			$error .= "・名前が入力されていません。\n" ;
+
+		// フリガナ（姓 名）
+		if ( ${ sprintf( "%s_kana" , $mb_alias ) } == "" )
+			$error .= "・フリガナが入力されていません。\n" ;
+
+		// 都道府県
+		if ( ${ sprintf( "%s_state" , $mb_alias ) } == -1 )
+			$error .= "・都道府県が選択されていません。\n" ;
+
+		// 市区町村
+		if ( ${ sprintf( "%s_city" , $mb_alias ) } == "" )
+			$error .= "・市区町村が入力されていません。\n" ;
+
+		// 住所１
+		if ( ${ sprintf( "%s_addr1" , $mb_alias ) } == "" )
+			$error .= "・住所が入力されていません。\n" ;
+
+		// 郵便番号
+		if ( ${ sprintf( "%s_zip1" , $mb_alias ) } == "" || ${ sprintf( "%s_zip2" , $mb_alias ) } == "" )
+			$error .= "・郵便番号が入力されていません。\n" ;
+
+		// 電話番号
+		if( is_numeric( ${ sprintf( "%s_tel1" , $mb_alias ) } ) == FALSE || 
+			is_numeric( ${ sprintf( "%s_tel2" , $mb_alias ) } ) == FALSE || 
+			is_numeric( ${ sprintf( "%s_tel3" , $mb_alias ) } ) == FALSE )
+		{
+			$error .= "・電話番号が正しく入力されていません。\n" ;
+		}
+
+		if ( ${ sprintf( "%s_agent_email" , $mb_alias ) } == "" )
+		{
+			$error .= "・メールアドレスが入力されていません。\n" ;
+		}
+		else
+		{
+			if ( $obMail -> checkData( ${ sprintf( "%s_agent_email" , $mb_alias ) } ) == FALSE )
+			{
+				$error .= "・メールアドレスが正しくありません。\n" ;
+			}
+			else
+			{
+				$arWhere = array() ;
+				$arWhere[ "where" ]  = sprintf( "AND %s.level <> %d " , $mb_alias , DEF_MEMBER_LEVEL_NON ) ;
+				$arWhere[ "where" ] .= sprintf( "AND ( " ) ;
+				$arWhere[ "where" ] .= sprintf( "%s.agent_email = '%s' " , $mb_alias , ${ sprintf( "%s_agent_email" , $mb_alias ) } ) ;
+				$arWhere[ "where" ] .= sprintf( ") " ) ;
+				// 重複検定
+				$arMember = $obMember -> getData( $arWhere ) ;
+				if ( count( $arMember ) > 0 )
+				{
+					$error .= "・同じメールアドレスが既に登録されています。\n" ;
+				}
+			}
+		}
+		$arParam[ sprintf( "%s_member_flg"	, $ct_alias ) ] = 0 ;
+*/
+	}
+	else
+	{
+		// 更新時には、使用ポイントが超過していないか調べる
+		$arWhere = array() ;
+		$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $mb_alias ) } ;
+		$arMember = $obMember -> getData( $arWhere ) ;
+
+		if( $mode == "update" )
+		{
+			if( ${ sprintf( "%s_used_point" , $ct_alias ) } > $arMember[ 0 ][ sprintf( "%s_point" , $mb_alias ) ] )
+				$error .= "・使用ポイントが超過しています。\n" ;
+		}
+
+		$arParam[ sprintf( "%s_name"		, $mb_alias ) ] = $arMember[ 0 ][ sprintf( "%s_name"		, $mb_alias ) ] ;
+		$arParam[ sprintf( "%s_kana"		, $mb_alias ) ] = $arMember[ 0 ][ sprintf( "%s_kana"		, $mb_alias ) ] ;
+		$arParam[ sprintf( "%s_state"		, $mb_alias ) ] = $arMember[ 0 ][ sprintf( "%s_state"		, $mb_alias ) ] ;
+		$arParam[ sprintf( "%s_city"		, $mb_alias ) ] = $arMember[ 0 ][ sprintf( "%s_city"		, $mb_alias ) ] ;
+		$arParam[ sprintf( "%s_addr1"		, $mb_alias ) ] = $arMember[ 0 ][ sprintf( "%s_addr1"		, $mb_alias ) ] ;
+		$arParam[ sprintf( "%s_addr2"		, $mb_alias ) ] = $arMember[ 0 ][ sprintf( "%s_addr2"		, $mb_alias ) ] ;
+
+		$arZip = explode( '-' , $arMember[ 0 ][ sprintf( "%s_zip"		, $mb_alias ) ] ) ;
+		$arTel = explode( '-' , $arMember[ 0 ][ sprintf( "%s_tel"		, $mb_alias ) ] ) ;
+		$arParam[ sprintf( "%s_zip1"		, $mb_alias ) ] = $arZip[ 0 ] ;
+		$arParam[ sprintf( "%s_zip2"		, $mb_alias ) ] = $arZip[ 1 ] ;
+		$arParam[ sprintf( "%s_tel1"		, $mb_alias ) ] = $arTel[ 0 ] ;
+		$arParam[ sprintf( "%s_tel2"		, $mb_alias ) ] = $arTel[ 1 ] ;
+		$arParam[ sprintf( "%s_tel3"		, $mb_alias ) ] = $arTel[ 2 ] ;
+		$arParam[ sprintf( "%s_agent_email"	, $mb_alias ) ] = $arMember[ 0 ][ sprintf( "%s_agent_email"	, $mb_alias ) ] ;
+
+		$arParam[ sprintf( "%s_member_flg"	, $ct_alias ) ] = 1 ;
+	}
+	return $error ;
+}
+
+function	CheckShipinfoData( $mode , $func , &$arParam )
+{
+	$error = "" ;
+
+	global	$obCart ;
+	global	$obCartItem ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$ci_alias	= $obCartItem -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// 決済方法
+	if ( ${ sprintf( "%s_settlement" , $ct_alias ) } == -1 )
+		$error .= "・決済方法が選択されていません。\n" ;
+	
+	// ポイント（決済直前でもチェックする）
+	if( $mode == "append" )
+	{
+		if( ${ sprintf( "%s_memberid" , $mb_alias ) } != -1 )
+		{
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $mb_alias ) } ;
+			$arMember = $obMember -> getData( $arWhere ) ;
+			if( ${ sprintf( "%s_used_point" , $ct_alias ) } > $arMember[ 0 ][ sprintf( "%s_point" , $mb_alias ) ] )
+				$error .= "・使用ポイントが超過しています。\n" ;
+		}
+	}
+	else
+	{
+		$arWhere = array() ;
+		$arWhere[ "cartid" ] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+		$arTempCart = $obCart -> getData( $arWhere ) ;
+		$tempmemberid = $arTempCart[ 0 ][ sprintf( "%s_memberid" , $ct_alias ) ] ;
+		if( $tempmemberid != -1 )
+		{
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = $tempmemberid ;
+			$arMember = $obMember -> getData( $arWhere ) ;
+
+			// 今現在のユーザの使用可能ポイント
+			$mem_used_point = $arMember[ 0 ][ sprintf( "%s_point" , $mb_alias ) ] ;
+
+			// 元の使用ポイント
+			$org_used_point = $arTempCart[ 0 ][ sprintf( "%s_used_point" , $ct_alias ) ] ;
+
+			// 更新画面からの使用ポイント
+			$new_used_point = ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+
+			// 一旦、使用ポイントを戻してからチェックする
+			if( $new_used_point > $mem_used_point + $org_used_point )
+				$error .= "・使用ポイントが超過しています。\n" ;
+		}
+	}
+
+	// 配送指定日
+	$arParam[ sprintf( "%s_delivery_date" , $ct_alias ) ] = "" ;
+/*
+	if ( ( is_numeric( ${ sprintf( "%s_delivery_date_y" , $ct_alias ) } ) ) &&
+		 ( is_numeric( ${ sprintf( "%s_delivery_date_m" , $ct_alias ) } ) ) &&
+		 ( is_numeric( ${ sprintf( "%s_delivery_date_d" , $ct_alias ) } ) ) )
+	{
+		if ( checkdate( ${ sprintf( "%s_delivery_date_m" , $ct_alias ) } , 
+						${ sprintf( "%s_delivery_date_d" , $ct_alias ) } , 
+						${ sprintf( "%s_delivery_date_y" , $ct_alias ) } ) != FALSE )
+		{
+			// 更新時には検査しない
+			if( $mode == "append" )
+			{
+				$obConfig = new PARTS_Config() ;
+				$arConfig = $obConfig -> getConfig() ;
+				
+				$obNow = new DateTime() ;
+				$obDelivery_date_default = $obConfig -> setDelivery_dateDefault() ;
+				$obDelivery_date_default -> setTime( 0 , 0 , 0 ) ;
+		
+				$obDelivery_date_new = new DateTime() ;
+				$obDelivery_date_new -> setDate( ${ sprintf( "%s_delivery_date_y" , $ct_alias ) } ,
+												 ${ sprintf( "%s_delivery_date_m" , $ct_alias ) } ,
+												 ${ sprintf( "%s_delivery_date_d" , $ct_alias ) } ) ;
+				$obDelivery_date_new -> setTime( 0 , 0 , 0 ) ;
+				if ( $obDelivery_date_new -> format( "YmdHis" ) >= $obDelivery_date_default -> format( "YmdHis" ) )
+				{
+					$arParam[ sprintf( "%s_delivery_date" , $ct_alias ) ] = $obDelivery_date_new -> format( "Y-m-d H:i:s" ) ;
+				}
+				else
+				{
+					if ( $obNow -> format( "G" ) < $arConfig[ "deliver_limittime" ] )
+						$error .= sprintf( "・配送指定日は、本日より%d日後から指定が可能です。\n" , $arConfig[ "deliver_start" ] ) ;
+					else
+						$error .= sprintf( "・配送指定日は、本日より%d日後から指定が可能です。\n" , $arConfig[ "deliver_start" ]+1 ) ;
+				}
+			}
+			else
+			{
+				$arParam[ sprintf( "%s_delivery_date" , $ct_alias ) ] = 
+						sprintf( "%s-%s-%s 00:00:00" , ${ sprintf( "%s_delivery_date_y" , $ct_alias ) }
+													 , ${ sprintf( "%s_delivery_date_m" , $ct_alias ) }
+													 , ${ sprintf( "%s_delivery_date_d" , $ct_alias ) } ) ;
+			}
+		}
+		else
+		{
+			$error .= "・指定された配送指定日は正しくありません。\n" ;
+		}
+	}
+	else
+	{
+		$error .= "・配送指定日が正しく入力されていません。\n" ;
+	}
+*/
+	// 配送先指定（新規登録）がある場合
+	if( $delivery == -1 )
+	{
+		if ( ${ sprintf( "%s_settlement" , $ct_alias ) } == DF_SETTLEMENT_COD )
+			$error .= "・決済方法が代金引換の場合は配送先指定はできません。\n" ;
+	
+		if ( ${ sprintf( "%s_name" , $ct_alias ) } == "" )
+			$error .= "・配送先名が入力されていません。\n" ;
+	
+		// 都道府県
+		if ( ${ sprintf( "%s_state" , $ct_alias ) } == -1 )
+			$error .= "・配送先都道府県が選択されていません。\n" ;
+	
+		// 市区町村
+		if ( ${ sprintf( "%s_city" , $ct_alias ) } == "" )
+			$error .= "・配送先市区町村が入力されていません。\n" ;
+	
+		// 住所１
+		if ( ${ sprintf( "%s_addr1" , $ct_alias ) } == "" )
+			$error .= "・配送先住所が入力されていません。\n" ;
+	
+		// 住所２
+	
+		// 配送先郵便番号
+		if ( ${ sprintf( "%s_zip1" , $ct_alias ) } == "" || ${ sprintf( "%s_zip2" , $ct_alias ) } == "" )
+			$error .= "・配送先郵便番号が入力されていません。\n" ;
+	
+		// 電話番号
+		if( is_numeric( ${ sprintf( "%s_tel1" , $ct_alias ) } ) == FALSE || 
+			is_numeric( ${ sprintf( "%s_tel2" , $ct_alias ) } ) == FALSE || 
+			is_numeric( ${ sprintf( "%s_tel3" , $ct_alias ) } ) == FALSE )
+		{
+			$error .= "・配送先電話番号が正しく入力されていません。\n" ;
+		}
+		$arParam[ sprintf( "%s_shipping" , $ct_alias ) ] = DEF_SHIPPING_ON ;
+	}
+	// 配送先指定が本人である場合
+	elseif( $delivery == 0 )
+	{
+		$arParam[ sprintf( "%s_name"		, $ct_alias ) ] = "" ;
+		$arParam[ sprintf( "%s_state"		, $ct_alias ) ] = "" ;
+		$arParam[ sprintf( "%s_city"		, $ct_alias ) ] = "" ;
+		$arParam[ sprintf( "%s_addr1"		, $ct_alias ) ] = "" ;
+		$arParam[ sprintf( "%s_addr2"		, $ct_alias ) ] = "" ;
+		$arParam[ sprintf( "%s_zip1"		, $ct_alias ) ] = "" ;
+		$arParam[ sprintf( "%s_zip2"		, $ct_alias ) ] = "" ;
+		$arParam[ sprintf( "%s_tel1"		, $ct_alias ) ] = "" ;
+		$arParam[ sprintf( "%s_tel2"		, $ct_alias ) ] = "" ;
+		$arParam[ sprintf( "%s_tel3"		, $ct_alias ) ] = "" ;
+		$arParam[ sprintf( "%s_shipping"	, $ct_alias ) ] = 0 ;
+	}
+	else
+	{
+		if ( ${ sprintf( "%s_settlement" , $ct_alias ) } == DF_SETTLEMENT_COD )
+			$error .= "・決済方法が代金引換の場合は配送先指定はできません。\n" ;
+		
+		if( $error == "" )
+		{
+			// cartid から配送先を取得しarParamに設定する
+			$arWhere = array() ;
+			$arWhere[ "cartid" ] = $delivery ;
+			$arSettledCart = $obCart -> getData( $arWhere ) ;
+	
+			if( count( $arSettledCart ) )
+			{
+				$arParam[ sprintf( "%s_name"		, $ct_alias ) ] = $arSettledCart[ 0 ][ sprintf( "%s_name"		, $ct_alias ) ] ;
+				$arParam[ sprintf( "%s_state"		, $ct_alias ) ] = $arSettledCart[ 0 ][ sprintf( "%s_state"		, $ct_alias ) ] ;
+				$arParam[ sprintf( "%s_city"		, $ct_alias ) ] = $arSettledCart[ 0 ][ sprintf( "%s_city"		, $ct_alias ) ] ;
+				$arParam[ sprintf( "%s_addr1"		, $ct_alias ) ] = $arSettledCart[ 0 ][ sprintf( "%s_addr1"		, $ct_alias ) ] ;
+				$arParam[ sprintf( "%s_addr2"		, $ct_alias ) ] = $arSettledCart[ 0 ][ sprintf( "%s_addr2"		, $ct_alias ) ] ;
+				$arZip			= explode( '-' , $arSettledCart[ 0 ][ sprintf( "%s_zip"		, $ct_alias ) ] ) ;
+				$arTel			= explode( '-' , $arSettledCart[ 0 ][ sprintf( "%s_tel"		, $ct_alias ) ] ) ;
+				$arParam[ sprintf( "%s_zip1"		, $ct_alias ) ] = $arZip[ 0 ] ;
+				$arParam[ sprintf( "%s_zip2"		, $ct_alias ) ] = $arZip[ 1 ] ;
+				$arParam[ sprintf( "%s_tel1"		, $ct_alias ) ] = $arTel[ 0 ] ;
+				$arParam[ sprintf( "%s_tel2"		, $ct_alias ) ] = $arTel[ 1 ] ;
+				$arParam[ sprintf( "%s_tel3"		, $ct_alias ) ] = $arTel[ 2 ] ;
+				$arParam[ sprintf( "%s_shipping"	, $ct_alias ) ] = DEF_SHIPPING_ON ;
+			}
+		}
+	}
+	
+	if( $mode == "append" )
+	{
+		// 注文日
+		$obNow = new DateTime() ;
+		$arParam[ sprintf( "%s_order_date"	, $ct_alias ) ] = $obNow -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ sprintf( "%s_orderway"	, $ct_alias ) ] = DEF_ORDER_ONLINE ;
+	}
+
+	return $error ;
+}
+
+function	GetNextPrevCartID( $getdatakey , &$arParamFind )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParamFind ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParamFind[ $keys[ $i ] ] ;
+
+	global	$obCart ;
+
+	$ct_alias	= $obCart -> alias ;
+
+	$arWhere = array() ;
+	$arWhere[ "where" ] = "" ;
+
+	// 伝票番号
+	if ( $S_SHEETNO != "" )
+		$arWhere[ "sheetno" ] = $S_SHEETNO ;
+
+	// 請求状態
+	if ( $S_BILL_STATUS != -1 )
+		$arWhere[ "billing_status" ] = $S_BILL_STATUS ;
+	else
+		$arWhere[ "where" ] .= sprintf( "AND %s.billing_status not in ( %d , %d ) " , $ct_alias , DF_BILLSTATUS_BUYING , DF_BILLSTATUS_ADMINBUYING ) ;
+
+	// 出庫状態
+	if ( $S_SHIP_STATUS != -1 )
+		$arWhere[ "shipped_status" ] = $S_SHIP_STATUS ;
+
+	// 会員判定フラグ
+	if ( $S_MEMBER_FLG != -1 )
+		$arWhere[ "member_flg" ] = $S_MEMBER_FLG ;
+
+	// limit条件なしで取得する
+//	$arWhere[ "order" ] = "sheetno" ;
+	$arWhere[ "order" ] = sprintf( "%s.order_date DESC , %s.sheetno" , $ct_alias , $ct_alias ) ;
+
+	$arCart = $obCart -> getData( $arWhere ) ;
+
+	$now_id = $getdatakey ;
+	$target_index = -1 ;
+	$prev_index = -1 ;
+	$next_index = -1 ;
+	$arResult = array() ;
+	$arCartID = array() ;
+
+	$cnt = count( $arCart ) ;
+	for ( $index = 0 ; $index < $cnt ; $index ++ )
+	{
+		// データの取得
+		$cartid = $arCart[ $index ][ sprintf( "%s_cartid" , $ct_alias ) ] ;
+		$arCartID[ $index ] = $cartid ;
+		
+		if( $cartid == $now_id )
+		{
+			$target_index = $index ;
+			if( $index != 0 )
+				$prev_index = $index - 1 ;
+			
+			if( $index != ( $cnt - 1 ) )
+				$next_index = $index + 1 ;
+		}
+	}
+
+	if ( $target_index != -1 )
+	{
+		$page = floor( $target_index / ( NUMBER_PER_PAGE - 1 ) ) ;
+		$arParamFind[ "page" ] = $page ;
+	}
+
+	if( $prev_index != -1 )
+		$arResult[ "prev" ] = $arCartID[ $prev_index ] ;
+	else
+		$arResult[ "prev" ] = -1 ;
+
+	if( $next_index != -1 )
+		$arResult[ "next" ] = $arCartID[ $next_index ] ;
+	else
+		$arResult[ "next" ] = -1 ;
+
+	return $arResult ;
+}
+
+// データ取得
+function	GetData( $getdatakey , $conn = -1 )
+{
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	$arWhere = array() ;
+	$arWhere[ "cartid" ] = $getdatakey ;
+	$arCart = $obCart -> getData( $arWhere ) ;
+	$arResult = $arCart[ 0 ] ;
+
+	$arZip_m	= explode( '-' , $arResult[ sprintf( "%s_zip"		, $mb_alias ) ] ) ;
+	if( !isset( $arZip_m[ 0 ] ) )
+		$arZip_m[ 0 ] = "" ;
+	if( !isset( $arZip_m[ 1 ] ) )
+		$arZip_m[ 1 ] = "" ;
+
+	$arTelH_m	= explode( '-' , $arResult[ sprintf( "%s_tel"		, $mb_alias ) ] ) ;
+	if( !isset( $arTelH_m[ 0 ] ) )
+		$arTelH_m[ 0 ] = "" ;
+	if( !isset( $arTelH_m[ 1 ] ) )
+		$arTelH_m[ 1 ] = "" ;
+	if( !isset( $arTelH_m[ 2 ] ) )
+		$arTelH_m[ 2 ] = "" ;
+
+	$arResult[ sprintf( "%s_zip1"		, $mb_alias ) ] = $arZip_m[ 0 ] ;
+	$arResult[ sprintf( "%s_zip2"		, $mb_alias ) ] = $arZip_m[ 1 ] ;
+	if ( $arTelH_m[ 0 ] != "" && $arTelH_m[ 1 ] != "" && $arTelH_m[ 2 ] != "" )
+	{
+		$arResult[ sprintf( "%s_tel1"		, $mb_alias ) ] = $arTelH_m[ 0 ] ;
+		$arResult[ sprintf( "%s_tel2"		, $mb_alias ) ] = $arTelH_m[ 1 ] ;
+		$arResult[ sprintf( "%s_tel3"		, $mb_alias ) ] = $arTelH_m[ 2 ] ;
+	}
+
+	$arZip_c	= explode( '-' , $arResult[ sprintf( "%s_zip"		, $ct_alias ) ] ) ;
+	if( !isset( $arZip_c[ 0 ] ) )
+		$arZip_c[ 0 ] = "" ;
+	if( !isset( $arZip_c[ 1 ] ) )
+		$arZip_c[ 1 ] = "" ;
+
+	$arTelH_c	= explode( '-' , $arResult[ sprintf( "%s_tel"		, $ct_alias ) ] ) ;
+	if( !isset( $arTelH_c[ 0 ] ) )
+		$arTelH_c[ 0 ] = "" ;
+	if( !isset( $arTelH_c[ 1 ] ) )
+		$arTelH_c[ 1 ] = "" ;
+	if( !isset( $arTelH_c[ 2 ] ) )
+		$arTelH_c[ 2 ] = "" ;
+
+	$arResult[ sprintf( "%s_zip1"		, $ct_alias ) ] = $arZip_c[ 0 ] ;
+	$arResult[ sprintf( "%s_zip2"		, $ct_alias ) ] = $arZip_c[ 1 ] ;
+	$arResult[ sprintf( "%s_tel1"		, $ct_alias ) ] = $arTelH_c[ 0 ] ;
+	$arResult[ sprintf( "%s_tel2"		, $ct_alias ) ] = $arTelH_c[ 1 ] ;
+	$arResult[ sprintf( "%s_tel3"		, $ct_alias ) ] = $arTelH_c[ 2 ] ;
+
+	$obDelivery_date = new DateTime( $arResult[ sprintf( "%s_delivery_date" , $ct_alias ) ] ) ;
+	$arResult[ sprintf( "%s_delivery_date_y"	, $ct_alias ) ] = $obDelivery_date -> format( "Y" ) ;
+	$arResult[ sprintf( "%s_delivery_date_m"	, $ct_alias ) ] = $obDelivery_date -> format( "n" ) ;
+	$arResult[ sprintf( "%s_delivery_date_d"	, $ct_alias ) ] = $obDelivery_date -> format( "j" ) ;
+
+	return $arResult ;
+}
+
+// 詳細表示
+function	FetchDetail( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_adminid , $login_level )
+{
+	global	$obCart ;
+	global	$obCartItem ;
+	global	$obMember ;
+	global	$obCategory ;
+
+	$ct_alias	= $obCart -> alias ;
+	$ci_alias	= $obCartItem -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	if( $mode == "append" )
+	{
+		$arTempCart = array() ;
+		$arTempCart[ sprintf( "%s_shipping"		, $ct_alias ) ] = ${ sprintf( "%s_shipping"		, $ct_alias ) } ;
+		$arTempCart[ sprintf( "%s_order_date"	, $ct_alias ) ] = ${ sprintf( "%s_order_date"	, $ct_alias ) } ;
+		$arTempCart[ sprintf( "%s_settlement"	, $ct_alias ) ] = ${ sprintf( "%s_settlement"	, $ct_alias ) } ;
+		$arTempCart[ sprintf( "%s_state"		, $ct_alias ) ] = ${ sprintf( "%s_state"		, $ct_alias ) } ;
+		$arTempCart[ sprintf( "%s_state"		, $mb_alias ) ] = ${ sprintf( "%s_state"		, $mb_alias ) } ;
+
+		$arParam[ "cartitem_data" ] = array() ;
+		$arWhere = array() ;
+		$arWhere[ "cartid" ] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+		$arParam[ "cartitem_data" ] = $obCartItem -> getData( $arWhere ) ;
+		
+		$arParam[ "cart_order" ] = $obCart -> createOtherParam( $arTempCart , $arParam[ "cartitem_data" ] ) ;
+
+		$minus_yen = ${ sprintf( "%s_used_point"	, $ct_alias ) } * YEN_PER_POINT ;
+		$purchase_yen = $arParam[ "cart_order" ][ "total_price" ] - $minus_yen ;
+		if( $purchase_yen < 0 )
+			$purchase_yen = 0 ;
+
+		// 加算ポイント数
+		$szAppendPoint = sprintf( "%d&nbsp;pt" , $purchase_yen / POINT_PER_YEN ) ;
+
+		// 伝票番号
+		$szSheetNo = "---" ;
+	}
+	else
+	{
+		// 伝票番号
+		$szSheetNo = ${ sprintf( "%s_sheetno" , $ct_alias ) } ;
+
+		// 加算ポイント数
+		$szAppendPoint = sprintf( "%d&nbsp;pt" , ${ sprintf( "%s_append_point" , $ct_alias ) } ) ;
+	}
+
+	$keys = array_keys( $arParam[ "cart_order" ] ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ "cart_order" ][ $keys[ $i ] ] ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+
+	// 伝票番号
+	if ( $szSheetNo == "" )
+		$szSheetNo = "不明" ;
+
+	// ご注文者 請求先
+	global	$arState ;
+	$szAddress  = $arState[ ${ sprintf( "%s_state" , $mb_alias ) } ][ 2 ] ;
+	$szAddress .= ${ sprintf( "%s_city" , $mb_alias ) } ;
+	$szAddress .= ${ sprintf( "%s_addr1" , $mb_alias ) } ;
+	$szAddress .= "　" ;
+	$szAddress .= ${ sprintf( "%s_addr2" , $mb_alias ) } ;
+	$szAddress = sprintf( "〒%s-%s　%s" , 
+					${ sprintf( "%s_zip1" , $mb_alias ) } , 
+					${ sprintf( "%s_zip2" , $mb_alias ) } , 
+					$szAddress ) ;
+
+	if( ${ sprintf( "%s_tel1" , $mb_alias ) } != "" && 
+		${ sprintf( "%s_tel2" , $mb_alias ) } != "" && 
+		${ sprintf( "%s_tel3" , $mb_alias ) } != "" )
+	{
+		$szTel = sprintf( "%s-%s-%s" , 
+				${ sprintf( "%s_tel1" , $mb_alias ) } , 
+				${ sprintf( "%s_tel2" , $mb_alias ) } , 
+				${ sprintf( "%s_tel3" , $mb_alias ) } ) ;
+	}
+	else
+	{
+		$szTel = "不明" ;
+	}
+
+	$szGuestName = sprintf( "%s" , ${ sprintf( "%s_name" , $mb_alias ) } ) ;
+	if ( $szGuestName != "不明" )
+		$szGuestName .= " 様" ;
+
+	// 会員判定
+	if ( ${ sprintf( "%s_member_flg" , $ct_alias ) } == 1 )
+		$szGuestName .= "(会員)" ;
+	else
+		$szGuestName .= "(非会員)" ;
+
+	// 注文方法
+	global $arOrderWay ;
+	$szOrderWay = $arOrderWay[ ${ sprintf( "%s_orderway" , $ct_alias ) } ] ;
+	if ( $szOrderWay == "" )
+		$szOrderWay = "不明" ;
+
+	if ( ${ sprintf( "%s_orderway" , $ct_alias ) } == DEF_ORDER_FAX )
+		$szOrderWay = sprintf( "<strong>%s</strong>" , $szOrderWay ) ;
+
+	// 配送先
+	if ( ${ sprintf( "%s_shipping" , $ct_alias ) } == 0 )
+	{
+		// 配送先名
+		$szDst_name = "ご注文者と同じ" ;
+
+		// 配送先住所
+		$szDstAddress = "ご注文者と同じ" ;
+
+		// 配送先電話番号
+		$szDstTel = "ご注文者と同じ" ;
+	}
+	else
+	{
+		// 配送先名
+		$szDst_name = ${ sprintf( "%s_name" , $ct_alias ) } ;
+		if ( $szDst_name == "" )
+			$szDst_name = "不明" ;
+
+		// 配送先住所
+		$szDstAddress  = $arState[ ${ sprintf( "%s_state" , $ct_alias ) } ][ 2 ] ;
+		$szDstAddress .= ${ sprintf( "%s_city" , $ct_alias ) } ;
+		$szDstAddress .= ${ sprintf( "%s_addr1" , $ct_alias ) } ;
+		$szDstAddress .= "　" ;
+		$szDstAddress .= ${ sprintf( "%s_addr2" , $ct_alias ) } ;
+		$szDstAddress = sprintf( "〒%s-%s　%s" , 
+						${ sprintf( "%s_zip1" , $ct_alias ) } , 
+						${ sprintf( "%s_zip2" , $ct_alias ) } , 
+						$szDstAddress ) ;
+
+		// 配送先電話番号
+		if( ${ sprintf( "%s_tel1" , $ct_alias ) } != "" && 
+			${ sprintf( "%s_tel2" , $ct_alias ) } != "" && 
+			${ sprintf( "%s_tel3" , $ct_alias ) } != "" )
+		{
+			$szDstTel = sprintf( "%s-%s-%s" , 
+					${ sprintf( "%s_tel1" , $ct_alias ) } , 
+					${ sprintf( "%s_tel2" , $ct_alias ) } , 
+					${ sprintf( "%s_tel3" , $ct_alias ) } ) ;
+		}
+		else
+		{
+			$szDstTel = "不明" ;
+		}
+	}
+
+	// 入金日
+	$szIncomeDate = "" ;
+	if ( ${ sprintf( "%s_income_date" , $ct_alias ) } != "" )
+	{
+		$obIncomeDate = new DateTime( ${ sprintf( "%s_income_date" , $ct_alias ) } ) ;
+		$szIncomeDate = $obIncomeDate -> format( "Y/m/d" ) ;
+	}
+
+	// 購入に使用したポイント数
+	$szUsedPoint = sprintf( "%d&nbsp;pt" , ${ sprintf( "%s_used_point" , $ct_alias ) } ) ;
+
+	// 期限で消えるポイント数
+	$szLimitPoint = sprintf( "%d&nbsp;pt" , ${ sprintf( "%s_limit_point" , $ct_alias ) } ) ;
+
+	// ポイントの有効期限
+	$szLimitDate = "" ;
+	if ( ${ sprintf( "%s_limit_date" , $ct_alias ) } != "" )
+		$szLimitDate = ${ sprintf( "%s_limit_date" , $ct_alias ) } ;
+
+	// 配送指定時間
+	global	$arDeliveryTime ;
+	if( ${ sprintf( "%s_delivery_time" , $ct_alias ) } != -1 )
+	{
+		$szDeliveryTime = $arDeliveryTime[ ${ sprintf( "%s_delivery_time" , $ct_alias ) } ] ;
+		if ( $szDeliveryTime == "" )
+			$szDeliveryTime = "指定なし" ;
+	}
+	else
+	{
+		$szDeliveryTime = "指定なし" ;
+	}
+
+	// 請求状態
+	global	$arBillStatus ;
+	$szBillStatus = "" ;
+	if( ${ sprintf( "%s_billing_status" , $ct_alias ) } != -1 )
+		$szBillStatus = $arBillStatus[ ${ sprintf( "%s_billing_status" , $ct_alias ) } ] ;
+
+	if ( $szBillStatus == "" )
+		$szBillStatus = "不明" ;
+	else if ( ${ sprintf( "%s_billing_status" , $ct_alias ) } == DF_BILLSTATUS_SETTLED )
+		$szBillStatus = sprintf( "<strong>%s（%s）</strong>" , $szBillStatus , $szIncomeDate ) ;
+/*
+	// 出庫状態
+	global	$arShipStatus ;
+	$szShipStatus = "" ;
+	if( ${ sprintf( "%s_shipped_status" , $ct_alias ) } != -1 )
+		$szShipStatus = $arShipStatus[ ${ sprintf( "%s_shipped_status" , $ct_alias ) } ] ;
+	if ( $szShipStatus == "" )
+		$szShipStatus = "不明" ;
+*/
+	// 決済方法
+	global	$arSettlement ;
+	$szSettlement = $arSettlement[ ${ sprintf( "%s_settlement" , $ct_alias ) } ] ;
+	if ( $szSettlement == "" )
+		$szSettlement = "不明" ;
+
+	// 包装
+	global	$arWrapStatus ;
+	$szWrapStatus = $arWrapStatus[ $wrapping_flg ] ;
+
+	// のし
+	global	$arDecorStatus ;
+	$szDecorStatus = $arDecorStatus[ $decoration_flg ] ;
+	if( $decoration_flg == DF_DECORSTATUS_TRUE && $deco_used != -1 )
+	{
+		$arWhere = array() ;
+		$arWhere[ "categoryid"	] = $deco_used ;
+		$arWhere[ "kind"		] = DEF_CATEGORY_DECORATION ;
+		$arDecorCategory = $obCategory -> getData( $arWhere ) ;
+		$szDecorName = $arDecorCategory[ 0 ][ sprintf( "%s_name" , $obCategory -> alias ) ] ;
+		$szDecorStatus .= sprintf( "（%s）" , $szDecorName ) ;
+	}
+
+	// 請求金額
+	$minus_yen = ${ sprintf( "%s_used_point" , $ct_alias ) } * YEN_PER_POINT ;
+	$purchase_yen = $total_price - $minus_yen ;
+	if( $purchase_yen < 0 )
+		$purchase_yen = 0 ;
+	if ( ${ sprintf( "%s_used_point" , $ct_alias ) } == 0 )
+	{
+		if ( ${ sprintf( "%s_member_flg" , $ct_alias ) } == 1 )
+			$szTotalPrice = sprintf( "%s&nbsp;円（税込）&nbsp;（&nbsp;ポイント使用なし&nbsp;）" , $purchase_yen ) ;
+		else
+			$szTotalPrice = sprintf( "%s&nbsp;円（税込）" , $purchase_yen ) ;
+	}
+	else
+	{
+		$szTotalPrice = sprintf( "%s&nbsp;円（税込）&nbsp;（&nbsp;%dポイント使用&nbsp;：&nbsp;＝&nbsp;%s&nbsp;円&nbsp;－&nbsp;%s&nbsp;円&nbsp;）"
+			, $purchase_yen , ${ sprintf( "%s_used_point" , $ct_alias ) } , $total_price , $minus_yen ) ;
+	}
+
+	// 専用BOXの指定がある場合は、詳細を表示する
+	$szPackageInfo = "" ;
+	if ( is_array( $package ) == TRUE )
+	{
+		$szPackage	= "" ;
+		$keys		= array_keys( $package ) ;
+		$values		= array_values( $package ) ;
+		for ( $pkg = 0 ; $pkg < count( $keys ) ; $pkg ++ )
+		{
+			if ( $szPackage != "" )
+				$szPackage .= " ＋ " ;
+				
+			$szPackage .= sprintf( "%d円 × %d個" , $keys[ $pkg ] , $values[ $pkg ] ) ;
+		}
+		$szPackageInfo  = sprintf( "<br />（" ) ;
+		$szPackageInfo .= sprintf( "商品代 %s円\n" , $total_item - $minus_yen ) ;
+		$szPackageInfo .= sprintf( " ＋ 専用BOX代 %s円［\n" , $total_package ) ;
+		$szPackageInfo .= sprintf( "%s\n" , $szPackage ) ;
+		$szPackageInfo .= sprintf( "］\n" ) ;
+		$szPackageInfo .= sprintf( "）\n" ) ;
+	}
+
+	// 代引手数料
+	$szPriceCharge = sprintf( "%s&nbsp;円" , $price_charge ) ;
+	
+	// 送料
+	$szPriceTransport = sprintf( "%s&nbsp;円&nbsp;（%s&nbsp;円/個）" , $price_transport * $package_count , $price_transport ) ;
+
+	// 梱包数
+	$szPackageCount = sprintf( "%s&nbsp;個口" , $package_count ) ;
+
+	// クール便
+	if ( $coolpack > 0 )
+	{
+		$szPackageCount .= sprintf( "&nbsp;（内クール便 %s&nbsp;個口）" , $coolpack ) ;
+		$szPriceCoolpack = sprintf( "%s&nbsp;円&nbsp;（%s&nbsp;円/個）" , $coolpack * PRICE_COOLPACK , PRICE_COOLPACK ) ;
+	}
+	else
+	{
+		$szPriceCoolpack = sprintf( "なし" ) ;
+	}
+
+	// 請求金額
+	$szTotalCharge = sprintf( "<strong>%s&nbsp;円</strong>（税込）" ,
+																$purchase_yen
+																+ ( $price_transport * $package_count )
+																+ $price_charge
+																+ ( $coolpack * PRICE_COOLPACK )
+							) ;
+
+	$arForm = array() ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "伝票番号" , $szSheetNo , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "購入日" , ${ sprintf( "%s_order_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$arForm[] = $value ;
+/*
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "申込方法" , $szOrderWay , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+*/
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "ご注文者" , $szGuestName , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "請求先住所" , $szAddress , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "請求先電話番号" , $szTel , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+/*
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "配送先名" , $szDst_name , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "配送先住所" , $szDstAddress , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "配送先電話番号" , $szDstTel , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "配送指定日" , ${ sprintf( "%s_delivery_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$value .= $blams -> fetchTHTD( "配送指定時間" , $szDeliveryTime , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+*/
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "その他連絡事項" , ${ sprintf( "%s_comment" , $ct_alias ) } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_WORDWRAP | 80 | BLAMS_FORMAT_NL2BR , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+/*
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "包装" , $szWrapStatus , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$value .= $blams -> fetchTHTD( "のし" , $szDecorStatus , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "梱包数" , $szPackageCount , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$value .= $blams -> fetchTHTD( "商品金額合計" , ( $szTotalPrice . $szPackageInfo ) , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "送料" , $szPriceTransport , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$value .= $blams -> fetchTHTD( "クール便指定" , $szPriceCoolpack , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "代金引換手数料" , $szPriceCharge , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$value .= $blams -> fetchTHTD( "請求金額" , $szTotalCharge , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "請求状態" , $szBillStatus , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "出庫状態" , $szShipStatus , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "請求状態" , $szBillStatus , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "決済方法" , $szSettlement , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+*/
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "購入ポイント" , $szAppendPoint , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "使用ポイント" , $szUsedPoint , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "期限付きポイント" , $szLimitPoint , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$value .= $blams -> fetchTHTD( "有効期限" , $szLimitDate , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$arForm[] = $value ;
+/*
+	if( $mode != "append" )
+	{
+		$value = "" ;
+		$value .= $blams -> fetchTHTD( "遷移状態" , DrawStateTrans( $arParam , $blams ) , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+		$arForm[] = $value ;
+	}
+*/
+	if ( count( $arParam[ "cartitem_data" ] ) == 0 )
+	{
+		$value = "" ;
+		$value .= $blams -> fetchTHTD( "注文商品" , "無し" , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+		$arForm[] = $value ;
+	}
+	else
+	{
+		for ( $i = 0 ; $i < count( $arParam[ "cartitem_data" ] ) ; $i ++ )
+		{
+			$szTitle = sprintf( "注文商品 No.%2d" , $i + 1 ) ;
+			$szCartOrder = DrawCartOrderEx( $arParam , $blams , $mode , $func , $i ) ;
+
+			$value = "" ;
+			$value .= $blams -> fetchTHTD( $szTitle , $szCartOrder , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+			$arForm[] = $value ;
+		}
+	}
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ sprintf( "%s_update_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ sprintf( "%s_create_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParam , $ct_cartid , $arParamFind ) ;
+
+	$script  = "" ;
+	$script .= sprintf( "<script type=\"text/javascript\" src=\"/admin/js/pdf.js\"></script>\n" ) ;
+	$script .= sprintf( "<script type=\"text/javascript\">" ) ;
+	$script .= sprintf( "PrintPagePopup( %s , %s );" , $ct_cartid , time() ) ;
+	$script .= sprintf( "</script>" ) ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, $pageback			) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "input_data"		, $arParam			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	if( $mode == "print" )
+		$tmpl -> assign( "add_script"			, $script			) ;
+	else
+		$tmpl -> assign( "add_script"			, ""				) ;
+	$data = $tmpl -> fetch( "common/confrm.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+
+}
+
+// 購入者入力フォームの表示
+function	FetchInputMember( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_level )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// 都道府県テーブル生成
+	global	$arStateName ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$isize	= $vsize - 16 ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+	$isize3	= $vsize3 - 16 ;
+
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	$arWhere[ "where" ] = sprintf( "AND level NOT IN ( %d , %d ) " , DEF_MEMBER_LEVEL_NON , 99 ) ;
+	$arMemberList = $obMember -> getList( $arWhere ) ;
+
+	$mb_alias = $mb_alias ;
+
+	// 正規会員の場合は入力欄を空欄にする
+	if( ${ sprintf( "%s_memberid" , $mb_alias ) } != -1 && 
+		$obMember -> inTrueMember( ${ sprintf( "%s_memberid" , $mb_alias ) } ) == TRUE )
+	{
+		${ sprintf( "%s_name"			, $mb_alias ) } = "" ;
+		${ sprintf( "%s_kana"			, $mb_alias ) } = "" ;
+		${ sprintf( "%s_state"			, $mb_alias ) } = -1 ;
+		${ sprintf( "%s_city"			, $mb_alias ) } = "" ;
+		${ sprintf( "%s_addr1"			, $mb_alias ) } = "" ;
+		${ sprintf( "%s_addr2"			, $mb_alias ) } = "" ;
+		${ sprintf( "%s_zip1"			, $mb_alias ) } = "" ;
+		${ sprintf( "%s_zip2"			, $mb_alias ) } = "" ;
+		${ sprintf( "%s_tel1"			, $mb_alias ) } = "" ;
+		${ sprintf( "%s_tel2"			, $mb_alias ) } = "" ;
+		${ sprintf( "%s_tel3"			, $mb_alias ) } = "" ;
+		${ sprintf( "%s_agent_email"	, $mb_alias ) } = "" ;
+	}
+
+	$arForm = array() ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( sprintf( "%s_memberid" , $mb_alias ) , 
+										${ sprintf( "%s_memberid" , $mb_alias ) } , 
+										$arMemberList , 
+										$isize ,  "選択してください" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "注文者 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+/*
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( sprintf( "%s_name" , $mb_alias ) , 
+										${ sprintf( "%s_name" , $mb_alias ) } , 
+										$isize  , MAX_USERNAME , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "名前 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( sprintf( "%s_kana" , $mb_alias ) , 
+										${ sprintf( "%s_kana" , $mb_alias ) } , 
+										$isize  , MAX_USERNAME , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "フリガナ ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$nZip	= sprintf( "%s_zip" , $mb_alias ) ;
+	$nState	= sprintf( "%s_state" , $mb_alias ) ;
+	$nCity	= sprintf( "%s_city" , $mb_alias ) ;
+	$nAddr1	= sprintf( "%s_addr1" , $mb_alias ) ;
+	$nAddr2	= sprintf( "%s_addr2" , $mb_alias ) ;
+	$nTel	= sprintf( "%s_tel" , $mb_alias ) ;
+
+	$zip1	= ${ $nZip . "1"	} ;
+	$zip2	= ${ $nZip . "2"	} ;
+	$state	= ${ $nState		} ;
+	$city	= ${ $nCity			} ;
+	$addr1	= ${ $nAddr1		} ;
+	$addr2	= ${ $nAddr2		} ;
+	$tel1	= ${ $nTel . "1"	} ;
+	$tel2	= ${ $nTel . "2"	} ;
+	$tel3	= ${ $nTel . "3"	} ;
+	$script = sprintf( "%s,%s,%s,%s" , $nZip , $nState , $nCity , $nAddr1 ) ;
+
+	if( !isset( $name ) )
+		$name = "" ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputZip( $nZip , $zip1 , $zip2 , "郵便番号検索" , $name , $script , "郵便番号検索" , true ) ;
+	$value .= $blams -> fetchTHTD( "郵便番号 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $nState , $state , $arStateName , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "都道府県 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+
+	$form   = $blams -> fetchInputbox( $nCity , $city , $isize  , MAX_CITY , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "市区町村 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $nAddr1 , $addr1 , $isize3  , MAX_ADDR , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "住所 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $nAddr2 , $addr2 , $isize3  , MAX_ADDR , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "ビル名" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputPhone( $nTel , $tel1 , $tel2 , $tel3 ) ;
+	$value .= $blams -> fetchTHTD( "自宅電話番号 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+
+	$form   = $blams -> fetchInputbox( sprintf( "%s_agent_email" , $mb_alias ) , 
+										${ sprintf( "%s_agent_email" , $mb_alias ) } , 
+										$isize  , MAX_EMAIL , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "eメール ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" , "" ) ;
+	$arForm[] = $value ;
+*/
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ sprintf( "%s_update_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ sprintf( "%s_create_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$arForm[] = $value ;
+
+//	$button = FetchButton( $blams , $mode , $func ) ;
+	$button = FetchButton( $blams , $mode , $func , $arParam , $ct_cartid , $arParamFind ) ;
+
+	if( empty( $wrapping_flg ) )
+		$wrapping_flg = 0 ;
+
+	if( empty( $decoration_flg ) )
+		$decoration_flg = 0 ;
+
+	if( empty( $deco_used ) )
+		$deco_used = 0 ;
+
+	if( empty( $delivery ) )
+		$delivery = "" ;
+
+	$arHidden = array() ;
+	$arHidden[ sprintf( "%s_memberid"			, $ct_alias ) ] = ${ sprintf( "%s_memberid"			, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_member_flg"			, $ct_alias ) ] = ${ sprintf( "%s_member_flg"		, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_settlement"			, $ct_alias ) ] = ${ sprintf( "%s_settlement"		, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_billing_status"		, $ct_alias ) ] = ${ sprintf( "%s_billing_status"	, $ct_alias ) } ;
+	$arHidden[ "wrapping_flg"	] = $wrapping_flg ;
+	$arHidden[ "decoration_flg"	] = $decoration_flg ;
+	$arHidden[ "deco_used"		] = $deco_used ;
+	$arHidden[ sprintf( "%s_used_point"			, $ct_alias ) ] = ${ sprintf( "%s_used_point"		, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_delivery_date_y"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_date_y"	, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_delivery_date_m"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_date_m"	, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_delivery_date_d"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_date_d"	, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_delivery_time"		, $ct_alias ) ] = ${ sprintf( "%s_delivery_time"	, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_comment"			, $ct_alias ) ] = ${ sprintf( "%s_comment"			, $ct_alias ) } ;
+	$arHidden[ "delivery"		] = $delivery ;
+//	$arHidden[ sprintf( "%s_name"				, $ct_alias ) ] = ${ sprintf( "%s_name"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_state"				, $ct_alias ) ] = ${ sprintf( "%s_state"			, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_city"				, $ct_alias ) ] = ${ sprintf( "%s_city"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_addr1"				, $ct_alias ) ] = ${ sprintf( "%s_addr1"			, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_addr2"				, $ct_alias ) ] = ${ sprintf( "%s_addr2"			, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_zip1"				, $ct_alias ) ] = ${ sprintf( "%s_zip1"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_zip2"				, $ct_alias ) ] = ${ sprintf( "%s_zip2"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_tel1"				, $ct_alias ) ] = ${ sprintf( "%s_tel1"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_tel2"				, $ct_alias ) ] = ${ sprintf( "%s_tel2"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_tel3"				, $ct_alias ) ] = ${ sprintf( "%s_tel3"				, $ct_alias ) } ;
+
+	$arHidden[ sprintf( "%s_update_date"		, $ct_alias ) ] = ${ sprintf( "%s_update_date"		, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_create_date"		, $ct_alias ) ] = ${ sprintf( "%s_create_date"		, $ct_alias ) } ;
+
+	$arParamFind = $arParamFind + $arHidden ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, $pageback			) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, sprintf( "%s_cartid" , $ct_alias )			) ;
+	$tmpl -> assign( "idvalue"			, ${ sprintf( "%s_cartid" , $ct_alias ) }	) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 詳細表示
+function	FetchDetailMember( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_adminid , $login_level )
+{
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+
+	// ご注文者 請求先
+	global	$arState ;
+	$szAddress  = $arState[ ${ sprintf( "%s_state" , $mb_alias ) } ][ 2 ] ;
+	$szAddress .= ${ sprintf( "%s_city" , $mb_alias ) } ;
+	$szAddress .= ${ sprintf( "%s_addr1" , $mb_alias ) } ;
+	$szAddress .= "　" ;
+	$szAddress .= ${ sprintf( "%s_addr2" , $mb_alias ) } ;
+	$szAddress = sprintf( "〒%s-%s　%s" , 
+					${ sprintf( "%s_zip1" , $mb_alias ) } , 
+					${ sprintf( "%s_zip2" , $mb_alias ) } , 
+					$szAddress ) ;
+
+	if( ${ sprintf( "%s_tel1" , $mb_alias ) } != "" && 
+		${ sprintf( "%s_tel2" , $mb_alias ) } != "" && 
+		${ sprintf( "%s_tel3" , $mb_alias ) } != "" )
+	{
+		$szTel = sprintf( "%s-%s-%s" , 
+				${ sprintf( "%s_tel1" , $mb_alias ) } , 
+				${ sprintf( "%s_tel2" , $mb_alias ) } , 
+				${ sprintf( "%s_tel3" , $mb_alias ) } ) ;
+	}
+	else
+	{
+		$szTel = "不明" ;
+	}
+
+	$szGuestName = sprintf( "%s" , ${ sprintf( "%s_name" , $mb_alias ) } ) ;
+	if ( $szGuestName != "不明" )
+		$szGuestName .= " 様" ;
+
+	// 会員判定
+	if ( ${ sprintf( "%s_member_flg" , $ct_alias ) } == 1 )
+		$szGuestName .= "(会員)" ;
+	else
+		$szGuestName .= "(非会員)" ;
+
+	$arForm = array() ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "ご注文者" , $szGuestName , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "請求先住所" , $szAddress , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "請求先電話番号" , $szTel , $tsize , $vsize , "col1" , "left" , "middle" , "" ) ;
+	$value .= $blams -> fetchTHTD( "メールアドレス" , ${ sprintf( "%s_agent_email" , $mb_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , "" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ sprintf( "%s_update_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ sprintf( "%s_create_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParam , $ct_cartid , $arParamFind ) ;
+
+	$script  = "" ;
+	$script .= sprintf( "<script type=\"text/javascript\" src=\"/admin/js/pdf.js\"></script>\n" ) ;
+	$script .= sprintf( "<script type=\"text/javascript\">" ) ;
+	$script .= sprintf( "PrintPagePopup( %s , %s );" , $ct_cartid , time() ) ;
+	$script .= sprintf( "</script>" ) ;
+
+	if( empty( $pageback ) )
+		$pageback = "" ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, $pageback			) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "input_data"		, $arParam			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+
+	$data = $tmpl -> fetch( "common/confrm.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+
+}
+
+// お届け情報入力フォームの表示
+// 画像サイトでは不必要なのでダミーデータを入れ込む
+function	FetchInputShipinfo( $blams , $mode , $func , $funcname , $error , &$arParamFind , &$arParam , $login_level )
+{
+	global	$obCart ;
+	global	$obMember ;
+	global	$obCategory ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+	$c_alias	= $obCategory -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+/*
+	if( $mode == "update" )
+	{
+		if( is_array( $arParam[ "cart_order" ] ) )
+		{
+			$keys = array_keys( $arParam[ "cart_order" ] ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ "cart_order" ][ $keys[ $i ] ] ;
+
+			if( $delivery == "" && ${ sprintf( "%s_name" , $ct_alias ) } != "" )
+				$delivery = $obCart -> getDstId( ${ sprintf( "%s_memberid" , $ct_alias ) } , ${ sprintf( "%s_name" , $ct_alias ) } ) ;
+			else
+				$delivery = 0 ;
+		}
+	}
+
+	// 都道府県テーブル生成
+	global	$arStateName ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$isize	= $vsize - 16 ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+	$isize3	= $vsize3 - 16 ;
+
+	global $arSettlement ;
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( sprintf( "%s_settlement" , $ct_alias ) , 
+										${ sprintf( "%s_settlement" , $ct_alias ) } , 
+										$arSettlement , 
+										$isize ,  "選択してください" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "決済方法 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	global $arWrapStatus ;
+	$value = "" ;
+	$form   = $blams -> fetchRadio( "wrapping_flg" , 
+									$wrapping_flg , 
+									$arWrapStatus , 
+									$isize , 
+									"" , 
+									"change_wrapping();" ) ;
+	$value .= $blams -> fetchTHTD( "包装" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	global $arDecorStatus ;
+	// のし種類
+	$arCategory_local = $obCategory -> createCategoryArray( 0 , 0 , 0 , false , DEF_CATEGORY_DECORATION ) ;
+	for( $i = 0 ; $i < count( $arCategory_local ) ; $i ++ )
+	{
+		$key = key( $arCategory_local[ $i ] ) ;
+		$value = $arCategory_local[ $i ][ $key ] ;
+		$arCategory[ $key ] = $value ;
+	}
+	$value = "" ;
+	$form   = $blams -> fetchRadio( "decoration_flg" , 
+									$decoration_flg , 
+									$arDecorStatus , 
+									$isize , 
+									"" , 
+									"change_decoration();" ) ;
+	$value .= $blams -> fetchTHTD( "のし" , $form , $tsize , $vsize , "col1" , "left" , "middle" , "" ) ;
+	$form   = $blams -> fetchSelectbox( "deco_used" , 
+										$deco_used , 
+										$arCategory , 
+										$isize ,  "選択してください" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "のし用途" , $form , $tsize , $vsize , "col1" , "left" , "middle" , "" ) ;
+	$arForm[] = $value ;
+
+	if( ${ sprintf( "%s_memberid" , $mb_alias ) } != -1 && ${ sprintf( "%s_member_flg" , $ct_alias ) } == 1 )
+	{
+		$arWhere = array() ;
+		$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $mb_alias ) } ;
+		$arTempMember = $obMember -> getData( $arWhere ) ;
+		$point_limit = $arTempMember[ 0 ][ sprintf( "%s_point" , $mb_alias ) ] ;
+
+		// 更新時には一旦、使用ポイントを戻す
+		if( $mode == "update" )
+		{
+			$arWhere = array() ;
+			$arWhere[ "cartid" ] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+			$arTempCart = $obCart -> getData( $arWhere ) ;
+			$point_limit = $point_limit + $arTempCart[ 0 ][ sprintf( "%s_used_point" , $ct_alias ) ] ;
+		}
+
+		if( !isset( $used_unit ) )
+			$used_unit = "" ;
+
+		$value = "" ;
+		$form   = $blams -> fetchInputbox( "used_unit" , 
+											$used_unit , 
+											48  , 10 , 
+											IME_OFF , 
+											sprintf( "onkeyup=\"javascript:CalcPoint( this.value , '%d' );\"" , POINT_UNIT ) , 
+											"used_unit" ) ;
+		$form  .= sprintf( " × %dpt = " , POINT_UNIT ) ;
+		$form  .= $blams -> fetchInputbox( "temp" , 
+											${ sprintf( "%s_used_point" , $ct_alias ) } , 
+											48  , 10 , 
+											IME_OFF , 
+											sprintf( "disabled=\"disabled\"" ) , 
+											"temp"  ) ;
+		$form  .= sprintf( "（%dptまで）" , floor( $point_limit ) ) ;
+		$value .= $blams -> fetchTHTD( "使用ポイント" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+		$arForm[] = $value ;
+	}
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( sprintf( "%s_delivery_date_y" , $ct_alias ) , 
+										${ sprintf( "%s_delivery_date_y" , $ct_alias ) } , 
+										48  , 4 , IME_OFF ) ;
+	$form  .= sprintf( "/" ) ;
+	$form  .= $blams -> fetchInputbox( sprintf( "%s_delivery_date_m" , $ct_alias ) , 
+										${ sprintf( "%s_delivery_date_m" , $ct_alias ) } , 
+										32  , 2 , IME_OFF ) ;
+	$form  .= sprintf( "/" ) ;
+	$form  .= $blams -> fetchInputbox( sprintf( "%s_delivery_date_d" , $ct_alias ) , 
+										${ sprintf( "%s_delivery_date_d" , $ct_alias ) } , 
+										32  , 2 , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "配送指定日 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	global $arDeliveryTime ;
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( sprintf( "%s_delivery_time" , $ct_alias ) , 
+										${ sprintf( "%s_delivery_time" , $ct_alias ) } , 
+										$arDeliveryTime , 
+										$isize ,  "指定なし" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "配送指定時間 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchTextarea( sprintf( "%s_comment" , $ct_alias ) , 
+										${ sprintf( "%s_comment" , $ct_alias ) } , 
+										$isize3 ) ;
+	$value .= $blams -> fetchTHTD( "その他ご連絡事項" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$arDeliver = $obCart -> getDst( ${ sprintf( "%s_memberid" , $mb_alias ) } ) ;
+	$value = "" ;
+	$form   = $blams -> fetchRadio( "delivery" , 
+									$delivery , 
+									$arDeliver , 
+									$isize , 
+									"<br />"  ) ;
+	$value .= $blams -> fetchTHTD( "配送先" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( sprintf( "%s_name" , $ct_alias ) , 
+										${ sprintf( "%s_name" , $ct_alias ) } , 
+										$isize3  , MAX_USERNAME , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "配送先名 ※1" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$nZip	= sprintf( "%s_zip" , $ct_alias ) ;
+	$nState	= sprintf( "%s_state" , $ct_alias ) ;
+	$nCity	= sprintf( "%s_city" , $ct_alias ) ;
+	$nAddr1	= sprintf( "%s_addr1" , $ct_alias ) ;
+	$nAddr2	= sprintf( "%s_addr2" , $ct_alias ) ;
+	$nTel	= sprintf( "%s_tel" , $ct_alias ) ;
+
+	$zip1	= ${ $nZip . "1"	} ;
+	$zip2	= ${ $nZip . "2"	} ;
+	$state	= ${ $nState		} ;
+	$city	= ${ $nCity			} ;
+	$addr1	= ${ $nAddr1		} ;
+	$addr2	= ${ $nAddr2		} ;
+	$tel1	= ${ $nTel . "1"	} ;
+	$tel2	= ${ $nTel . "2"	} ;
+	$tel3	= ${ $nTel . "3"	} ;
+	$script = sprintf( "%s,%s,%s,%s" , $nZip , $nState , $nCity , $nAddr1 ) ;
+
+	if( !isset( $name ) )
+		$name = "" ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputZip( $nZip , $zip1 , $zip2 , "郵便番号検索" , $name , $script , "郵便番号検索" , true ) ;
+	$value .= $blams -> fetchTHTD( "配送先郵便番号 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( $nState , $state , $arStateName , $isize ,  "選択してください。" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "配送先都道府県 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+
+	$form   = $blams -> fetchInputbox( $nCity , $city , $isize  , MAX_CITY , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "配送先市区町村 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $nAddr1 , $addr1 , $isize3  , MAX_ADDR , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "配送先住所 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputbox( $nAddr2 , $addr2 , $isize3  , MAX_ADDR , IME_ON ) ;
+	$value .= $blams -> fetchTHTD( "配送先ビル名" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchInputPhone( $nTel , $tel1 , $tel2 , $tel3 ) ;
+	$value .= $blams -> fetchTHTD( "配送先電話番号 ※" , $form , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ sprintf( "%s_update_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ sprintf( "%s_create_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$arForm[] = $value ;
+
+//	$button = FetchButton( $blams , $mode , $func ) ;
+	$button = FetchButton( $blams , $mode , $func , $arParam , $ct_cartid , $arParamFind ) ;
+*/
+
+	$arHidden = array() ;
+	$arHidden[ sprintf( "%s_memberid"		, $mb_alias ) ] = ${ sprintf( "%s_memberid"		, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_state"			, $mb_alias ) ] = ${ sprintf( "%s_state"		, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_city"			, $mb_alias ) ] = ${ sprintf( "%s_city"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_addr1"			, $mb_alias ) ] = ${ sprintf( "%s_addr1"		, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_addr2"			, $mb_alias ) ] = ${ sprintf( "%s_addr2"		, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_zip1"			, $mb_alias ) ] = ${ sprintf( "%s_zip1"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_zip2"			, $mb_alias ) ] = ${ sprintf( "%s_zip2"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_tel1"			, $mb_alias ) ] = ${ sprintf( "%s_tel1"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_tel2"			, $mb_alias ) ] = ${ sprintf( "%s_tel2"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_tel3"			, $mb_alias ) ] = ${ sprintf( "%s_tel3"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_name"			, $mb_alias ) ] = ${ sprintf( "%s_name"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_kana"			, $mb_alias ) ] = ${ sprintf( "%s_kana"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_agent_email"	, $mb_alias ) ] = ${ sprintf( "%s_agent_email"	, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_used_point"		, $ct_alias ) ] = ${ sprintf( "%s_used_point"	, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_member_flg"		, $ct_alias ) ] = ${ sprintf( "%s_member_flg"	, $ct_alias ) } ;
+
+	// 配送先を自分自身に
+	$arHidden[ "delivery" ] = 0 ;
+	$arParam[ "delivery" ] = 0 ;
+
+	// 決済方法を振込みに
+	$arHidden[ sprintf( "%s_settlement"		, $ct_alias ) ] = DF_SETTLEMENT_TRANSFER ;
+	$arParam[ sprintf( "%s_settlement"		, $ct_alias ) ] = DF_SETTLEMENT_TRANSFER ;
+
+	$arHidden[ sprintf( "%s_update_date"	, $ct_alias ) ] = ${ sprintf( "%s_update_date"	, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_create_date"	, $ct_alias ) ] = ${ sprintf( "%s_create_date"	, $ct_alias ) } ;
+
+	$arParamFind = $arParamFind + $arHidden ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+
+	$data = "" ;
+/*
+	$add_script = sprintf( "<script type=\"text/javascript\" src=\"/admin/js/orderform.js\" ></script>" ) ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, $pageback			) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, sprintf( "%s_cartid" , $ct_alias )			) ;
+	$tmpl -> assign( "idvalue"			, ${ sprintf( "%s_cartid" , $ct_alias ) }	) ;
+	$tmpl -> assign( "add_script"		, $add_script			) ;
+	$data = $tmpl -> fetch( "common/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+*/
+	return $data ;
+
+}
+
+// 詳細表示
+function	FetchDetailShipinfo( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_adminid , $login_level )
+{
+	global	$obCart ;
+	global	$obCartItem ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$ci_alias	= $obCartItem -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+
+	// 配送先
+	if ( ${ sprintf( "%s_shipping" , $ct_alias ) } == 0 )
+	{
+		// 配送先名
+		$szDst_name = "ご注文者と同じ" ;
+
+		// 配送先住所
+		$szDstAddress = "ご注文者と同じ" ;
+
+		// 配送先電話番号
+		$szDstTel = "ご注文者と同じ" ;
+	}
+	else
+	{
+		// 配送先名
+		$szDst_name = ${ sprintf( "%s_name" , $ct_alias ) } ;
+		if ( $szDst_name == "" )
+			$szDst_name = "不明" ;
+
+		// 配送先住所
+		$szDstAddress  = $arState[ ${ sprintf( "%s_state" , $ct_alias ) } ][ 2 ] ;
+		$szDstAddress .= ${ sprintf( "%s_city" , $ct_alias ) } ;
+		$szDstAddress .= ${ sprintf( "%s_addr1" , $ct_alias ) } ;
+		$szDstAddress .= "　" ;
+		$szDstAddress .= ${ sprintf( "%s_addr2" , $ct_alias ) } ;
+		$szDstAddress = sprintf( "〒%s-%s　%s" , 
+						${ sprintf( "%s_zip1" , $ct_alias ) } , 
+						${ sprintf( "%s_zip2" , $ct_alias ) } , 
+						$szDstAddress ) ;
+
+		// 配送先電話番号
+		if( ${ sprintf( "%s_tel1" , $ct_alias ) } != "" && 
+			${ sprintf( "%s_tel2" , $ct_alias ) } != "" && 
+			${ sprintf( "%s_tel3" , $ct_alias ) } != "" )
+		{
+			$szDstTel = sprintf( "%s-%s-%s" , 
+					${ sprintf( "%s_tel1" , $ct_alias ) } , 
+					${ sprintf( "%s_tel2" , $ct_alias ) } , 
+					${ sprintf( "%s_tel3" , $ct_alias ) } ) ;
+		}
+		else
+		{
+			$szDstTel = "不明" ;
+		}
+	}
+
+	// 購入に使用したポイント数
+	$szUsedPoint = sprintf( "%d&nbsp;pt" , ${ sprintf( "%s_used_point" , $ct_alias ) } ) ;
+
+	// 配送指定時間
+	global	$arDeliveryTime ;
+	$szDeliveryTime = $arDeliveryTime[ ${ sprintf( "%s_delivery_time" , $ct_alias ) } ] ;
+	if ( $szDeliveryTime == "" )
+		$szDeliveryTime = "指定なし" ;
+
+	// 決済方法
+	global	$arSettlement ;
+	$szSettlement = $arSettlement[ ${ sprintf( "%s_settlement" , $ct_alias ) } ] ;
+	if ( $szSettlement == "" )
+		$szSettlement = "不明" ;
+
+	// 包装
+	global	$arWrapStatus ;
+	$szWrapStatus = $arWrapStatus[ $wrapping_flg ] ;
+
+	// のし
+	global	$arDecorStatus ;
+	$szDecorStatus = $arDecorStatus[ $decoration_flg ] ;
+	if( $decoration_flg == DF_DECORSTATUS_TRUE && $deco_used != -1 )
+	{
+		$szDecorName = GetCategoryNameFromID( -1 , $deco_used , -1 , DEF_CATEGORY_DECORATION ) ;
+		$szDecorStatus .= sprintf( "（%s）" , $szDecorName ) ;
+	}
+
+	$arForm = array() ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "決済方法" , $szSettlement , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "包装" , $szWrapStatus , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$value .= $blams -> fetchTHTD( "のし" , $szDecorStatus , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_NUMBER ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "使用ポイント" , $szUsedPoint , $tsize , $vsize , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "配送指定日" , ${ sprintf( "%s_delivery_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$value .= $blams -> fetchTHTD( "配送指定時間" , $szDeliveryTime , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "その他連絡事項" , ${ sprintf( "%s_comment" , $ct_alias ) } , $tsize , $vsize3 , "col1" , "left" , "middle" , BLAMS_FORMAT_WORDWRAP | 80 | BLAMS_FORMAT_NL2BR , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "配送先名" , $szDst_name , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "配送先住所" , $szDstAddress , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "配送先電話番号" , $szDstTel , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ sprintf( "%s_update_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ sprintf( "%s_create_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParam , $ct_cartid , $arParamFind ) ;
+
+	$script  = "" ;
+	$script .= sprintf( "<script type=\"text/javascript\" src=\"/admin/js/pdf.js\"></script>\n" ) ;
+	$script .= sprintf( "<script type=\"text/javascript\">" ) ;
+	$script .= sprintf( "PrintPagePopup( %s , %s );" , $ct_cartid , time() ) ;
+	$script .= sprintf( "</script>" ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, $pageback			) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "input_data"		, $arParam			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	if( $mode == "print" )
+		$tmpl -> assign( "add_script"			, $script			) ;
+	else
+		$tmpl -> assign( "add_script"			, ""				) ;
+
+	$data = $tmpl -> fetch( "common/confrm.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+
+}
+
+// 購入者入力フォームの表示
+function	FetchInputCart( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam , $login_level )
+{
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$isize	= $vsize - 16 ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+	$isize3	= $vsize3 - 16 ;
+
+	global	$obCart ;
+	global	$obCartItem ;
+	global	$obMember ;
+	global	$obMerchandise ;
+
+	$ct_alias	= $obCart -> alias ;
+	$ci_alias	= $obCartItem -> alias ;
+	$mb_alias	= $obMember -> alias ;
+	$m_alias	= $obMerchandise -> alias ;
+	$mm_alias	= $obMerchandise -> obMaster -> alias ;
+
+	// カート内容
+	if( ${ sprintf( "%s_cartid" , $ct_alias ) } == -1 )
+	{
+		$obSession = new PARTS_Session() ;
+		${ sprintf( "%s_sessionid"	, $ct_alias ) } = $obSession -> getID() ;
+		${ sprintf( "%s_cartid"		, $ct_alias ) } = $obCart -> getID( ${ sprintf( "%s_sessionid" , $ct_alias ) } , ${ sprintf( "%s_memberid"	, $ct_alias ) } , DF_BILLSTATUS_ADMINBUYING ) ;
+
+	}
+
+	$arCart = array() ;
+	$arCart[ "cartitem_data" ] = array() ;
+	if( ${ sprintf( "%s_cartid" , $ct_alias ) } != -1 )
+	{
+		$arCart = GetData( ${ sprintf( "%s_cartid" , $ct_alias ) } ) ;
+	}
+	$arTempItemID = array() ;
+
+	$arForm = array() ;
+	if ( count( $arCart[ "cartitem_data" ] ) == 0 )
+	{
+		$value = "" ;
+		$value .= $blams -> fetchTHTD( "注文商品" , "無し" , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+		$arForm[] = $value ;
+	}
+	else
+	{
+		for ( $i = 0 ; $i < count( $arCart[ "cartitem_data" ] ) ; $i ++ )
+		{
+			$szTitle = sprintf( "注文商品 No.%2d" , $i + 1 ) ;
+			$szCartOrder = DrawCartOrderEx( $arCart , $blams , $mode , $func , $i ) ;
+			$arTempItemID[] = $arCart[ "cartitem_data" ][ $i ][ sprintf( "%s_merchandiseid" , $ci_alias ) ] ;
+
+			$value = "" ;
+			$value .= $blams -> fetchTHTD( $szTitle , $szCartOrder , $tsize , $vsize3 , "col1" , "left" , "middle" , "" , 1 , 1 , 3 ) ;
+			$arForm[] = $value ;
+		}
+	}
+
+	// 商品
+	$now_date = new DateTime();
+	$now = $now_date -> format( "Ymd" ) ;
+	$arWhere = array() ;
+	$arWhere[ "where" ]  = "" ;
+	$arWhere[ "where" ] .= sprintf( "AND %s.start_date <= to_date( '%s' , 'YYYYMMDD' ) " , $obMerchandise -> alias , $now ) ;
+	$arWhere[ "where" ] .= sprintf( "AND %s.end_date >= to_date( '%s' , 'YYYYMMDD' ) " , $obMerchandise -> alias , $now ) ;
+
+//	$arMerchandise = $obMerchandise -> getList( $arWhere ) ;
+	$arMerchandise = $obMerchandise -> getData( $arWhere ) ;
+	$arMerchandiseID = array() ;
+
+	for( $i = 0 ; $i < count( $arMerchandise ) ; $i ++ )
+	{
+		$arMerchandiseData = $arMerchandise[ $i ] ;
+
+		if( !in_array( $arMerchandiseData[ $m_alias . "_merchandiseid" ] , $arTempItemID ) )
+			$arMerchandiseID[ $arMerchandiseData[ $m_alias . "_merchandiseid" ] ] = sprintf( "%s:%s" , $arMerchandiseData[ $mm_alias . "_name" ] , $arMerchandiseData[ $m_alias . "_info" ] ) ;
+	}
+/*
+	if( is_array( $arMerchandise ) )
+	{
+		foreach( $arMerchandise as $key => $value )
+		{
+			if( !in_array( $key , $arTempItemID ) )
+				$arMerchandiseID[ $key ] = $value ;
+		}
+	}
+*/
+	if( empty( ${ sprintf( "%s_merchandiseid" , $ci_alias ) } ) == true )
+		${ sprintf( "%s_merchandiseid" , $ci_alias ) } = -1 ;
+
+	if( empty( $wrapping_flg ) == true )
+		$wrapping_flg = "" ;
+
+	if( empty( $decoration_flg ) == true )
+		$decoration_flg = "" ;
+
+	if( empty( $deco_used ) == true )
+		$deco_used = "" ;
+
+	if( empty( $delivery ) == true )
+		$delivery = "" ;
+
+	if( empty( ${ sprintf( "%s_name" , $ct_alias ) } ) == true )
+		${ sprintf( "%s_name" , $ct_alias ) } = "" ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$form   = $blams -> fetchSelectbox( sprintf( "%s_merchandiseid" , $ci_alias ) , ${ sprintf( "%s_merchandiseid" , $ci_alias ) } , $arMerchandiseID , $isize ,  "選択してください" , FALSE , "" ) ;
+	$value .= $blams -> fetchTHTD( "商品 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$form   = $blams -> fetchInputbox( sprintf( "%s_number" , $ci_alias ) , ${ sprintf( "%s_number" , $ci_alias ) } , $isize  , 10 , IME_OFF ) ;
+	$value .= $blams -> fetchTHTD( "購入数量 ※" , $form , $tsize , $vsize , "col1" , "left" , "middle" ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTD( "&nbsp;" , $vsize , "" , "" , BLAMS_FORMAT_NOBORDER , 4 , 1 ) ;
+	$arForm[] = $value ;
+
+	$value = "" ;
+	$value .= $blams -> fetchTHTD( "更新日" , ${ sprintf( "%s_update_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$value .= $blams -> fetchTHTD( "登録日" , ${ sprintf( "%s_create_date" , $ct_alias ) } , $tsize , $vsize , "col1" , "left" , "middle" , BLAMS_FORMAT_DATE ) ;
+	$arForm[] = $value ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParam , $ct_cartid , $arParamFind ) ;
+
+	$arHidden = array() ;
+	$arHidden[ sprintf( "%s_memberid"		, $mb_alias ) ] = ${ sprintf( "%s_memberid"		, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_state"			, $mb_alias ) ] = ${ sprintf( "%s_state"		, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_city"			, $mb_alias ) ] = ${ sprintf( "%s_city"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_addr1"			, $mb_alias ) ] = ${ sprintf( "%s_addr1"		, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_addr2"			, $mb_alias ) ] = ${ sprintf( "%s_addr2"		, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_zip1"			, $mb_alias ) ] = ${ sprintf( "%s_zip1"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_zip2"			, $mb_alias ) ] = ${ sprintf( "%s_zip2"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_tel1"			, $mb_alias ) ] = ${ sprintf( "%s_tel1"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_tel2"			, $mb_alias ) ] = ${ sprintf( "%s_tel2"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_tel3"			, $mb_alias ) ] = ${ sprintf( "%s_tel3"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_name"			, $mb_alias ) ] = ${ sprintf( "%s_name"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_kana"			, $mb_alias ) ] = ${ sprintf( "%s_kana"			, $mb_alias ) } ;
+	$arHidden[ sprintf( "%s_agent_email"	, $mb_alias ) ] = ${ sprintf( "%s_agent_email"	, $mb_alias ) } ;
+
+	$arHidden[ sprintf( "%s_member_flg"			, $ct_alias ) ] = ${ sprintf( "%s_member_flg"		, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_settlement"			, $ct_alias ) ] = ${ sprintf( "%s_settlement"		, $ct_alias ) } ;
+	$arHidden[ "wrapping_flg"	] = $wrapping_flg ;
+	$arHidden[ "decoration_flg"	] = $decoration_flg ;
+	$arHidden[ "deco_used"		] = $deco_used ;
+	$arHidden[ sprintf( "%s_used_point"			, $ct_alias ) ] = ${ sprintf( "%s_used_point"		, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_delivery_date_y"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_date_y"	, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_delivery_date_m"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_date_m"	, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_delivery_date_d"	, $ct_alias ) ] = ${ sprintf( "%s_delivery_date_d"	, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_delivery_time"		, $ct_alias ) ] = ${ sprintf( "%s_delivery_time"		, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_comment"			, $ct_alias ) ] = ${ sprintf( "%s_comment"			, $ct_alias ) } ;
+	$arHidden[ "delivery"		] = $delivery ;
+	$arHidden[ sprintf( "%s_name"				, $ct_alias ) ] = ${ sprintf( "%s_name"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_state"				, $ct_alias ) ] = ${ sprintf( "%s_state"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_city"				, $ct_alias ) ] = ${ sprintf( "%s_city"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_addr1"				, $ct_alias ) ] = ${ sprintf( "%s_addr1"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_addr2"				, $ct_alias ) ] = ${ sprintf( "%s_addr2"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_zip1"				, $ct_alias ) ] = ${ sprintf( "%s_zip1"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_zip2"				, $ct_alias ) ] = ${ sprintf( "%s_zip2"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_tel1"				, $ct_alias ) ] = ${ sprintf( "%s_tel1"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_tel2"				, $ct_alias ) ] = ${ sprintf( "%s_tel2"				, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_tel3"				, $ct_alias ) ] = ${ sprintf( "%s_tel3"				, $ct_alias ) } ;
+
+	$arHidden[ sprintf( "%s_update_date"		, $ct_alias ) ] = ${ sprintf( "%s_update_date"		, $ct_alias ) } ;
+	$arHidden[ sprintf( "%s_create_date"		, $ct_alias ) ] = ${ sprintf( "%s_create_date"		, $ct_alias ) } ;
+
+	$arParamFind = $arParamFind + $arHidden ;
+
+	if( !isset( $pageback ) )
+		$pageback = "" ;
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "pageback"			, $pageback			) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "form_data"		, $arForm			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, sprintf( "%s_cartid" , $ct_alias )			) ;
+	$tmpl -> assign( "idvalue"			, ${ sprintf( "%s_cartid" , $ct_alias ) }	) ;
+	$tmpl -> assign( "add_script"		, ""				) ;
+	$data = $tmpl -> fetch( "common/input.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 詳細表示
+function	FetchDone( $blams , $mode , $func , $funcname , $error , $arParamFind , $arParam )
+{
+	global	$obCart ;
+
+	$ct_alias	= $obCart -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$button = FetchButton( $blams , $mode , $func , $arParam , $ct_cartid , $arParamFind ) ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "rootpath"			, DEF_SITE_ROOTPATH	) ;
+	$tmpl -> assign( "funcname"			, $funcname			) ;
+	$tmpl -> assign( "mode"				, $mode				) ;
+	$tmpl -> assign( "func"				, $func				) ;
+	$tmpl -> assign( "error"			, $error			) ;
+	$tmpl -> assign( "search_data"		, $arParamFind		) ;
+	$tmpl -> assign( "edit_url"			, "edit.php"		) ;
+	$tmpl -> assign( "button"			, $button			) ;
+	$tmpl -> assign( "idname"			, sprintf( "%s_cartid" , $ct_alias )			) ;
+	$tmpl -> assign( "idvalue"			, ${ sprintf( "%s_cartid" , $ct_alias ) }	) ;
+	$data = $tmpl -> fetch( "common/done.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// データの削除
+function	DeleteData( $arParam )
+{
+	$result = FALSE ;
+	global	$obCart ;
+
+	$ct_alias	= $obCart -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$arData = array() ;
+	$arData[ $ct_alias . "_cartid" ] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+	$arData[ $ct_alias . "_status" ] = -1 ;
+
+	if( ${ sprintf( "%s_cartid" , $ct_alias ) } != -1 )
+	{
+		$result = $obCart -> deleteData( $arData ) ;
+	}
+	return $result ;
+}
+
+// 遷移状態表示
+function	DrawStateTrans( $arParam , $blams )
+{
+	$tsize	= DEF_BASE_TSIZE ;
+	$vsize	= DEF_BASE_VSIZE ;
+	$vsize3	= $tsize + ( $vsize * 2 ) ;
+
+	global $obCart ;
+
+	$ct_alias	= $obCart -> alias ;
+
+	$settlement		= $arParam[ sprintf( "%s_settlement"		, $ct_alias ) ] ;
+	$state_trans	= $arParam[ sprintf( "%s_state_trans"		, $ct_alias ) ] ;
+	$billing_status	= $arParam[ sprintf( "%s_billing_status"	, $ct_alias ) ] ;
+	$orderway		= $arParam[ sprintf( "%s_orderway"			, $ct_alias ) ] ;
+
+	// 遷移状態
+	global	$arStateTransBySettle ;
+	$arStateTransBySettle_local = $arStateTransBySettle[ $settlement ] ;
+
+	if( $orderway == DEF_ORDER_FAX )
+		array_unshift( $arStateTransBySettle_local , DF_STATETRANS_FAX ) ;
+
+	$StateTransSub = "" ;
+	$StateTransIncome = "" ;
+	if ( $billing_status == DF_BILLSTATUS_CANCEL )
+	{
+		// 注文キャンセル状態表示
+		global	$arBillStatus ;
+		$szValue = $arBillStatus[ DF_BILLSTATUS_CANCEL ] ;
+		$StateTransSub .= DrawStateTransSub( $szValue , 0 , 0 , -1 , $blams , $orderway ) ;
+	}
+	else
+	{
+		// 通常遷移状態表示
+		$cnt = count( $arStateTransBySettle_local ) ;
+		for ( $i = 0 ; $i < $cnt ; $i ++ )
+		{
+			$state = $arStateTransBySettle_local[ $i ] ;
+
+			global	$arStateTrans ;
+			$szValue = $arStateTrans[ $state ] ;
+
+			// 「入金確認」「入金」時は、現在の請求状態を渡す
+			if ( $state == DF_STATETRANS_PAIDCHK || $state == DF_STATETRANS_PAYMENT )
+				$StateTransSub .= DrawStateTransSub( $szValue , $state_trans , $i , $billing_status , $blams , $orderway ) ;
+			else
+				$StateTransSub .= DrawStateTransSub( $szValue , $state_trans , $i , -1 , $blams , $orderway ) ;
+		}
+
+		// 入金状態
+		$StateTransIncome = DrawStateTransIncome( $arParam , $blams ) ;
+	}
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "orderway"					, $orderway			) ;
+//	$tmpl -> assign( "StateTransSub"			, $StateTransSub	) ;
+	$tmpl -> assign( "StateTransIncome"			, $StateTransIncome	) ;
+	$data = $tmpl -> fetch( "order/statetrans.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 注文商品表示
+function	DrawCartOrderEx( $arCart , $blams , $mode = "" , $func = "" , $i = 0 )
+{
+	if( isset( $arCart[ "package_price" ] ) == false)
+		$arCart[ "package_price" ] = 0 ;
+
+	$arCartOrder = $arCart[ "cartitem_data" ][ $i ] ;
+
+	// 注文商品表示
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "itemcnt"	, $arCart[ "cart_order" ][ "data_count" ]		) ;
+	$tmpl -> assign( "mode"		, $mode							) ;
+	$tmpl -> assign( "func"		, $func							) ;
+	$tmpl -> assign( "cart"		, $arCart						) ;
+	$tmpl -> assign( "cartitem"	, $arCartOrder					) ;
+	$data = $tmpl -> fetch( "order/order_cart.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+function	DrawStateTransSub( $szValue , $state , $compire_state , $billing_status , $blams , $orderway )
+{
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "orderway"					, $orderway					) ;
+	$tmpl -> assign( "state"					, $state					) ;
+	$tmpl -> assign( "compire_state"			, $compire_state			) ;
+	$tmpl -> assign( "value"					, $szValue					) ;
+	$tmpl -> assign( "billing_status"			, $billing_status			) ;
+	$data = $tmpl -> fetch( "order/statetrans_sub.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+function	DrawStateTransIncome( $arParam , $blams )
+{
+	global $obCart ;
+
+	$ct_alias	= $obCart -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$tmpl = $blams -> tmpl ;
+	$tmpl -> assign( "data"						, $arParam					) ;
+	$data = $tmpl -> fetch( "order/statetrans_income.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+	return $data ;
+}
+
+// 書類印刷状態変更
+function	ChangePrintStatus( $func , $arParam )
+{
+	$error = "" ;
+
+	global $obCart ;
+
+	$ct_alias	= $obCart -> alias ;
+
+	$arUpdate[ "print_status" ] = 1 ;
+	$arWhere[ "cartid" ] = $arParam[ sprintf( "%s_cartid" , $ct_alias ) ] ;
+
+	$result = $obCart -> updateData( $arUpdate , $arWhere ) ;
+	if( $result )
+		$error = "" ;
+
+	return $error ;
+}
+
+// 請求状態変更
+function	ChangeBillingStatus( $func , $arParam , $blams )
+{
+	$error  = "【エラーがあります】\n" ;
+	$error .= "・請求状態変更に失敗しました。\n" ;
+
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// 機能分岐
+	if ( $func == "settled" )
+	{
+		// 会員のカートの場合のみ、入金時に購入ポイントを加算する
+		if ( ${ sprintf( "%s_member_flg" , $ct_alias ) } == 1 && ${ sprintf( "%s_memberid" , $ct_alias ) } != -1 )
+		{
+			// 会員の現在のポイント数を取得
+			$point = -1 ;
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+			$arMember = array() ;
+			$arMember = $obMember -> getData( $arWhere ) ;
+			$point			= $arMember[ 0 ][ sprintf( "%s_point"		, $mb_alias ) ] ;
+			$total_point	= $arMember[ 0 ][ sprintf( "%s_total_point"	, $mb_alias ) ] ;
+
+			// ポイントを加算する
+			if ( $point != -1 )
+			{
+				$point			+= ${ sprintf( "%s_append_point" , $ct_alias ) } ;
+				$total_point	+= ${ sprintf( "%s_append_point" , $ct_alias ) } ;
+
+				$arUpdate = array() ;
+				$arUpdate[ $mb_alias . "_point"			] = $point ;
+				$arUpdate[ $mb_alias . "_total_point"	] = $total_point ;
+				$arUpdate[ $mb_alias . "_memberid"		] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+				$obMember -> skip_check = true ;
+				$obMember -> updateData( $arUpdate ) ;
+				$obMember -> skip_check = false ;
+			}
+		}
+
+		// 入金日設定
+		$income_date = "LOCALTIMESTAMP(0)" ;
+
+		// 請求状態設定
+		$billing_status = DF_BILLSTATUS_SETTLED ;
+	}
+	else
+	if ( $func == "settling" )
+	{
+		// 会員のカート、購入ポイントを戻す（減算）
+		if ( ${ sprintf( "%s_member_flg" , $ct_alias ) } == 1 && ${ sprintf( "%s_memberid" , $ct_alias ) } != -1 )
+		{
+			$point = -1 ;
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+			$arMember = array() ;
+			$arMember = $obMember -> getData( $arWhere ) ;
+			$point			= $arMember[ 0 ][ sprintf( "%s_point"		, $mb_alias ) ] ;
+			$total_point	= $arMember[ 0 ][ sprintf( "%s_total_point"	, $mb_alias ) ] ;
+
+			$point			-= ${ sprintf( "%s_append_point" , $ct_alias ) } ;
+			$total_point	-= ${ sprintf( "%s_append_point" , $ct_alias ) } ;
+
+			$arUpdate = array() ;
+			$arUpdate[ $mb_alias . "_point"			] = $point ;
+			$arUpdate[ $mb_alias . "_total_point"	] = $total_point ;
+			$arUpdate[ $mb_alias . "_memberid"		] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+			$obMember -> skip_check = true ;
+			$obMember -> updateData( $arUpdate ) ;
+			$obMember -> skip_check = false ;
+		}
+
+		// 入金日設定
+		$income_date = sprintf( "'%s'" , DEF_DATE_MIN ) ;
+
+		// 請求状態設定
+		if ( $func == "settling" )
+			$billing_status = DF_BILLSTATUS_SETTLING ;
+		else
+			$billing_status = DF_BILLSTATUS_CANCEL ;
+	}
+	else
+	if ( $func == "cancel" )
+	{
+		// 会員のカートの場合、使用ポイントを戻す
+		if ( ${ sprintf( "%s_member_flg"		, $ct_alias ) } == 1 &&
+			 ${ sprintf( "%s_memberid"			, $ct_alias ) } != -1 &&
+			 ${ sprintf( "%s_used_point"		, $ct_alias ) } != -1 &&
+			 ${ sprintf( "%s_billing_status"	, $ct_alias ) } != DF_BILLSTATUS_CANCEL )
+		{
+			$point = -1 ;
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+			$arMember = array() ;
+			$arMember = $obMember -> getData( $arWhere ) ;
+			$point			= $arMember[ 0 ][ sprintf( "%s_point"		, $mb_alias ) ] ;
+			$total_point	= $arMember[ 0 ][ sprintf( "%s_total_point"	, $mb_alias ) ] ;
+
+			// 決済済みだった場合は、購入ポイントは減算する
+			if( ${ sprintf( "%s_billing_status" , $ct_alias ) } == DF_BILLSTATUS_SETTLED )
+			{
+				$point			-= ${ sprintf( "%s_append_point" , $ct_alias ) } ;
+				$total_point	-= ${ sprintf( "%s_append_point" , $ct_alias ) } ;
+			}
+
+			// FAX申込で申込書確認中なら、まだ使用ポイントを減算していないので、使用ポイントは戻さない
+			if( ${ sprintf( "%s_orderway" , $ct_alias ) } == DEF_ORDER_FAX && ${ sprintf( "%s_shipped_status" , $ct_alias ) } == DF_STATETRANS_FAX )
+			{
+				$arUpdate = array() ;
+				$arUpdate[ $mb_alias . "_point"			] = $point ;
+				$arUpdate[ $mb_alias . "_total_point"	] = $total_point ;
+				$arUpdate[ $mb_alias . "_memberid"		] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+				$obMember -> skip_check = true ;
+				$obMember -> updateData( $arUpdate ) ;
+				$obMember -> skip_check = false ;
+			}
+			else
+			{
+				$arUpdate = array() ;
+				$arUpdate[ $mb_alias . "_point"			] = $point + ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+				$arUpdate[ $mb_alias . "_total_point"	] = $total_point + ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+				$arUpdate[ $mb_alias . "_memberid"		] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+				$obMember -> skip_check = true ;
+				$obMember -> updateData( $arUpdate ) ;
+				$obMember -> skip_check = false ;
+			}
+		}
+
+		// 入金日設定
+		$income_date = sprintf( "'%s'" , DEF_DATE_MIN ) ;
+
+		// 請求状態設定
+		if ( $func == "settling" )
+			$billing_status = DF_BILLSTATUS_SETTLING ;
+		else
+			$billing_status = DF_BILLSTATUS_CANCEL ;
+	
+		$obConfig = new PARTS_Config() ;
+		if( $obConfig )
+		{
+			if( $obConfig -> in_MailTiming( DEF_MAILTIMING_CANCEL ) )
+			{
+				// FAX申込で申込書確認中なら、キャンセルメールは送信しない
+				if( ${ sprintf( "%s_orderway" , $ct_alias ) } == DEF_ORDER_FAX && ${ sprintf( "%s_shipped_status" , $ct_alias ) } == DF_STATETRANS_FAX )
+				{
+					$mail_result = "・FAX申込書確認中の為、キャンセル通知メールは送信しません。" ;
+				}
+				else
+				{
+					$mail_result = SendCancelMail( $arParam , $conn ) ;
+				}
+			}
+		}
+	}
+
+	if ( $billing_status != -1 )
+	{
+		$arUpdate = array() ;
+		$arUpdate[ $ct_alias . "_income_date"		] = $income_date ;
+		$arUpdate[ $ct_alias . "_billing_status"	] = $billing_status ;
+		$arUpdate[ $ct_alias . "_cartid"			] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+		$result = $obCart -> updateData( $arUpdate ) ;
+		if( $result )
+		{
+			if( $mail_result != "" )
+				$error = $mail_result ;
+			else
+				$error = "" ;
+		}
+		else
+		{
+			if( $mail_result != "" )
+				$error = $mail_result . "\n" . $error ;
+		
+		}
+	}
+	return $error ;
+}
+
+// 遷移状態変更
+function	ChangeStateTrans( $func , $arParam , $blams )
+{
+	$ct_cartid		= $arParam[ "ct_cartid"			] ;
+	$settlement		= $arParam[ "settlement"		] ;
+	$state_trans	= $arParam[ "state_trans"		] ;
+	$shipped_status	= $arParam[ "shipped_status"	] ;
+	$orderway		= $arParam[ "orderway"			] ;
+
+	$memberid		= $arParam[ "memberid"			] ;
+	$member_flg		= $arParam[ "member_flg"		] ;
+	$used_point		= $arParam[ "used_point"		] ;
+	$append_point	= $arParam[ "append_point"		] ;
+
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// 遷移後の状態取得
+	$new_state_trans = -1 ;
+	if ( $func == "prev" )
+		$new_state_trans = ${ sprintf( "%s_state_trans" , $ct_alias ) } - 1 ;
+	else if ( $func == "next" )
+		$new_state_trans = ${ sprintf( "%s_state_trans" , $ct_alias ) } + 1 ;
+
+	$shipped_status = ${ sprintf( "%s_shipped_status" , $ct_alias ) } ;
+
+	// 決済方法による遷移状態配列取得
+	global	$arStateTransBySettle ;
+	$arStateTransBySettle_local = $arStateTransBySettle[ ${ sprintf( "%s_settlement" , $ct_alias ) } ] ;
+	if( ${ sprintf( "%s_orderway" , $ct_alias ) } == DEF_ORDER_FAX )
+		array_unshift( $arStateTransBySettle_local , DF_STATETRANS_FAX ) ;
+
+	// 遷移状態による出庫状態更新処理
+	$now_state_trans = $arStateTransBySettle_local[ ${ sprintf( "%s_state_trans" , $ct_alias ) } ] ;
+
+	// 一括処理の場合とで切り分け
+	if( $func == "lump" )
+	{
+		switch ( $now_state_trans )
+		{
+		// FAX申込書確認
+		case DF_STATETRANS_FAX :
+			$point_error = TransFax( "next" , $arParam , $shipped_status ) ;
+			TransStockchk( "next" , $arParam , $shipped_status ) ;
+			$error = TransStocksave( "next" , $arParam , $shipped_status ) ;
+			TransPacking( "next" , $arParam , $shipped_status ) ;
+			$error = TransDelivery( "next" , $arParam , $shipped_status ) ;
+			break ;
+
+		// 在庫確認
+		case DF_STATETRANS_STOCKCHK :
+			TransStockchk( "next" , $arParam , $shipped_status ) ;
+			$error = TransStocksave( "next" , $arParam , $shipped_status ) ;
+			TransPacking( "next" , $arParam , $shipped_status ) ;
+			$error = TransDelivery( "next" , $arParam , $shipped_status ) ;
+			break ;
+
+		// 商品確保
+		case DF_STATETRANS_STOCKSAVE :
+			$error = TransStocksave( "next" , $arParam , $shipped_status ) ;
+			TransPacking( "next" , $arParam , $shipped_status ) ;
+			$error = TransDelivery( "next" , $arParam , $shipped_status ) ;
+			break ;
+
+		// 梱包
+		case DF_STATETRANS_PACKING :
+			TransPacking( "next" , $arParam , $shipped_status ) ;
+			$error = TransDelivery( "next" , $arParam , $shipped_status ) ;
+			break ;
+	
+		// 発送
+		case DF_STATETRANS_DELIVERY :
+			$error = TransDelivery( "next" , $arParam , $shipped_status ) ;
+			break ;
+		}
+		$new_state_trans = count( $arStateTransBySettle_local ) - 1 ;
+	}
+	else
+	{
+		switch ( $now_state_trans )
+		{
+		// FAX申込書確認
+		case DF_STATETRANS_FAX :
+			$point_error = TransFax( $func , $arParam , $shipped_status ) ;
+			break ;
+	
+		// 在庫確認
+		case DF_STATETRANS_STOCKCHK :
+			TransStockchk( $func , $arParam , $shipped_status ) ;
+			break ;
+	
+		// 商品確保
+		case DF_STATETRANS_STOCKSAVE :
+			$error = TransStocksave( $func , $arParam , $shipped_status ) ;
+			break ;
+	
+		// 梱包
+		case DF_STATETRANS_PACKING :
+			TransPacking( $func , $arParam , $shipped_status ) ;
+			break ;
+	
+		// 発送
+		case DF_STATETRANS_DELIVERY :
+			$error = TransDelivery( $func , $arParam , $shipped_status ) ;
+			break ;
+	
+		// 例外処理（発送済みを戻す）
+		default :
+			if ( $func == "prev" && $new_state_trans != -1 )
+			{
+				if ( $arStateTransBySettle_local[ $new_state_trans ] == DF_STATETRANS_DELIVERY )
+				{
+					// 状態遷移の戻り先が、発送中になる場合、出庫状態を発送中に戻す
+					$shipped_status = DF_STATETRANS_DELIVERY ;
+				}
+			}
+			break ;
+		}
+	}
+
+	if ( $new_state_trans != -1 )
+	{
+		if( $point_error == "" )
+		{
+			$arUpdate = array() ;
+			$arUpdate[ "state_trans"	] = $new_state_trans ;
+			$arUpdate[ "shipped_status"	] = $shipped_status ;
+			$arWhere = array() ;
+			$arWhere[ "cartid" ] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+			$result = $obCart -> updateData( $arUpdate , $arWhere ) ;
+			if ( !$result )
+			{
+				$error  = "【エラーがあります】\n" ;
+				$error .= "・遷移状態変更に失敗しました。\n" ;
+			}
+		}
+	}
+
+	return $error ;
+}
+
+// FAX申込書確認 処理
+function	TransFax( $func , $arParam , &$shipped_status )
+{
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	if ( $func == "next" )
+	{
+		// FAX申込書確認が完了したので、次の出庫状態（在庫確認中）に更新
+		$shipped_status = DF_STATETRANS_STOCKCHK ;
+
+		// FAX申し込みの場合はこの時点で使用ポイントを減算する
+		// 使用ポイントが超過していた場合はエラー
+		if ( ${ sprintf( "%s_member_flg" , $ct_alias ) } == 1 && ${ sprintf( "%s_memberid" , $ct_alias ) } != -1 )
+		{
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+			$arMember = array() ;
+			$arMember = $obMember -> getData( $arWhere ) ;
+			$point			= $arMember[ 0 ][ sprintf( "%s_point"		, $mb_alias ) ] ;
+			$total_point	= $arMember[ 0 ][ sprintf( "%s_total_point"	, $mb_alias ) ] ;
+
+			if( $point < ${ sprintf( "%s_used_point" , $ct_alias ) } )
+			{
+				$point_error = "・使用ポイントが超過しています。\n" ;
+			}
+			else
+			{
+				$arUpdate = array() ;
+				$arUpdate[ "point"			] = $point - ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+				$arUpdate[ "total_point"	] = $total_point - ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+				$arWhere = array() ;
+				$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+				$obMember -> updateData( $arUpdate , $arWhere ) ;
+			}
+		}
+	}
+	return $point_error ;
+}
+
+// 在庫確認 処理
+function	TransStockchk( $func , $arParam , &$shipped_status )
+{
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	if ( $func == "next" )
+	{
+		// 在庫確認が完了したので、次の出庫状態（商品確保中）に更新
+		$shipped_status = DF_STATETRANS_STOCKSAVE ;
+	}
+	else
+	if ( $func == "prev" )
+	{
+		// FAX申込書確認中に戻す
+		$shipped_status = DF_STATETRANS_FAX ;
+
+		// 使用ポイントを戻す
+		if ( ${ sprintf( "%s_member_flg" , $ct_alias ) } == 1 && ${ sprintf( "%s_memberid" , $ct_alias ) } != -1 )
+		{
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+			$arMember = array() ;
+			$arMember = $obMember -> getData( $arWhere ) ;
+			$point			= $arMember[ 0 ][ sprintf( "%s_point"		, $mb_alias ) ] ;
+			$total_point	= $arMember[ 0 ][ sprintf( "%s_total_point"	, $mb_alias ) ] ;
+
+			$arUpdate = array() ;
+			$arUpdate[ "point"			] = $point + ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+			$arUpdate[ "total_point"	] = $total_point + ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+			$obMember -> updateData( $arUpdate , $arWhere ) ;
+		}
+	}
+}
+
+// 商品確保 処理
+function	TransStocksave( $func , $arParam , &$shipped_status )
+{
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	if ( $func == "next" )
+	{
+		// 商品確保が完了したので、次の出庫状態（梱包中）に更新
+		$shipped_status = DF_STATETRANS_PACKING ;
+
+		// 商品確保通知メールを送信
+		if( ${ sprintf( "%s_orderway" , $ct_alias ) } == DEF_ORDER_ONLINE )
+			$error = SendStockSaveedMail( $arParam ) ;
+		
+		// 現状ではメール送信はしない（SendStockSaveedMailの中で）
+		$error = "" ;
+	}
+	else
+	if ( $func == "prev" )
+	{
+		// 在庫確認中に戻す
+		$shipped_status = DF_STATETRANS_STOCKCHK ;
+	}
+	return $error ;
+}
+
+// 梱包 処理
+function	TransPacking( $func , $arParam , &$shipped_status )
+{
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	if ( $func == "next" )
+	{
+		// 梱包が完了したので、次の出庫状態（発送中）に更新
+		$shipped_status = DF_STATETRANS_DELIVERY ;
+	}
+	else
+	if ( $func == "prev" )
+	{
+		// 商品確保中に戻す
+		$shipped_status = DF_STATETRANS_STOCKSAVE ;
+	}
+}
+
+// 発送 処理
+function	TransDelivery( $func , $arParam , &$shipped_status )
+{
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	if ( $func == "next" )
+	{
+		// 発送が完了したので、次の出庫状態（発送済み）に更新
+		$shipped_status = DF_STATETRANS_DELIVERED ;
+
+		// 商品発送通知メールを送信
+		$obConfig = new PARTS_Config() ;
+		if( $obConfig )
+			if( $obConfig -> in_MailTiming( DEF_MAILTIMING_DELIVERY ) )
+				$error = SendDeliveredMail( $arParam ) ;
+	}
+	else
+	if ( $func == "prev" )
+	{
+		// 梱包中に戻す
+		$shipped_status = DF_STATETRANS_PACKING ;
+	}
+	return $error ;
+}
+
+// 品切れ通知メール送信
+function	MailToOutOfStock( $arParam )
+{
+	$error  = "【エラーがあります】\n" ;
+	$error .= "・品切れ通知メールの送信に失敗しました。\n" ;
+
+	global	$obCart ;
+	global	$obMember ;
+	
+	$obCorp = new PARTS_Corp ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	$arParam = GetData( $arParam[ sprintf( "%s_cartid" , $ct_alias ) ] ) ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$keys = array_keys( $arParam[ "cart_order" ] ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ "cart_order" ][ $keys[ $i ] ] ;
+
+	// 商品発送通知メール送信
+	global	$_SERVER ;
+	$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+	$NRML = sprintf( "http://%s" , $SERVER_NAME ) ;
+	$SSL = sprintf( "https://%s" , $SERVER_NAME ) ;
+
+	// ご注文者
+	$szGuestName = sprintf( "%s" , ${ sprintf( "%s_name" , $mb_alias ) } ) ;
+
+	// 会社情報取得
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	// 送信パラメータ設定
+	$email = "" ;
+	if ( ${ sprintf( "%s_agent_email" , $mb_alias ) } != "" )
+		$email = ${ sprintf( "%s_agent_email" , $mb_alias ) } ;
+
+	$from_email	= EMAILADDR_INQUIRE ;
+	$from_name	= $arCorp[ sprintf( "%s_name" , $obCorp -> alias ) ] ;
+	$to_email	= $email ;
+	$to_name	= $szGuestName ;
+
+	// タイトル
+	$subject1 = sprintf( "[%s] ご注文商品在庫切れのご連絡" , $from_name ) ;
+	$subject2 = sprintf( "在庫切れ通知 [ %s ]" , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+
+	// ヘッダー
+	$header  = sprintf( "%sから ご注文商品在庫切れのご連絡\n" , $from_name ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "この度、ご注文いただきました下記商品につきまして\n" ) ;
+	$header .= sprintf( "残念ながら全商品在庫切れとなってしまいました。\n" ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "商品が入荷され次第、発送いたします。\n" ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "=============================================================\n" ) ;
+	$header .= sprintf( "伝票番号：%s\n" , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "注文内容は以下のリンクからご確認ください。\n" ) ;
+	$header .= sprintf( "また、ご注文をキャンセルする場合も以下のリンクから行ってください：\n" ) ;
+	$header .= sprintf( "%s/member/status.php?sheetno=%s\n" , $NRML , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "-------------------------------------------------------------\n" ) ;
+	$header .= sprintf( "\n" ) ;
+
+	$body = MakeMailBody( $arParam ) ;
+
+	// フッター
+	$footer  = sprintf( "" ) ;
+	$footer .= sprintf( "\n" ) ;
+	$footer .= sprintf( "=============================================================\n" ) ;
+	$footer .= sprintf( "%s－%s\n" , $arCorp[ sprintf( "%s_catch" , $obCorp -> alias ) ] , $arCorp[ sprintf( "%s_name" , $obCorp -> alias ) ] ) ;
+	$footer .= sprintf( "%s\n" , $NRML ) ;
+	$footer .= sprintf( "\n" ) ;
+	$footer .= sprintf( "\n" ) ;
+	$footer .= sprintf( "-------------------------------------------------------------\n" ) ;
+
+	$all = $header . $body . $footer ;
+
+	// メール送信
+	if( $to_email != "" )
+	{
+		// 注文者へ
+		SendMailPlane( $from_email , $from_name , $to_email , $to_name , $subject1 , $all ) ;
+		$error = "・正常に品切れ通知メールを送信しました。\n" ;
+
+		// 運営へ
+		$to_email	= EMAILADDR_ORDERED_FOR_SYSTEM ;
+		$to_name	= "システム運営者" ;
+		$all = "下記内容で品切れ通知のメールを送信しました。\n\n" . $all ;
+		SendMailPlane( $from_email , $from_name , $to_email , $to_name , $subject2 , $all ) ;
+	}
+	else
+	{
+		$error = "・メールアドレスが不明の為、品切れ通知メールを送信しませんでした。\n" ;
+	}
+
+	return $error ;
+}
+
+// 商品確保通知メールを送信
+function	SendStockSaveedMail( $arParam )
+{
+	$error  = "【エラーがあります】\n" ;
+	$error .= "・商品確保通知メールの送信に失敗しました。\n" ;
+/*
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// 商品確保通知メール送信
+	$obDB = new DB_Common() ;
+	if ( $obDB -> isOpen() )
+	{
+		global	$_SERVER ;
+		$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+		$NRML = sprintf( "http://%s" , $SERVER_NAME ) ;
+		$SSL = sprintf( "https://%s" , $SERVER_NAME ) ;
+
+		// ご注文者
+		$szGuestName = GetMemberNameFromID( $conn , $memberid ) ;
+
+		$sql = sprintf( "SELECT * FROM member_data WHERE status = 1 AND memberid = %d " , $memberid ) ;
+		$arResultMember = GetValueAll( $sql , $conn ) ;
+		$agent_email	= $arResultMember[ "agent_email"	] ;
+		$email_port	= $arResultMember[ "email_port"	] ;
+
+		$email = "" ;
+		if ( $agent_email != "" )
+			$email = $agent_email ;
+		else
+		if ( $email_port != "" )
+			$email = $email_port ;
+
+		// 送信パラメータ設定
+		$from_email	= EMAILADDR_STOCKSAVE ;
+		$from_name	= TITLE_CORPORATION ;
+		$to_email	= $email ;
+		$to_name	= $szGuestName ;
+
+		// タイトル
+		$subject1 = sprintf( "[酒楽館] 商品確保のお知らせ" ) ;
+
+		// 本文
+		$body1  = sprintf( "酒楽館から 商品確保のお知らせ\n" ) ;
+		$body1 .= sprintf( "\n" ) ;
+		$body1 .= sprintf( "お客様からご注文頂いた商品を、本日全て確保致しました。\n" ) ;
+		$body1 .= sprintf( "これより「梱包」「発送」と作業を進めて参ります。\n" ) ;
+		$body1 .= sprintf( "\n" ) ;
+		$body1 .= sprintf( "「発送」の際には、再度商品発送のお知らせメールを送信\n" ) ;
+		$body1 .= sprintf( "致しますので、今しばらくお待ち下さいますようお願い致します。\n" ) ;
+		$body1 .= sprintf( "\n" ) ;
+		$body1 .= sprintf( "\n" ) ;
+		$body1 .= sprintf( "=============================================================\n" ) ;
+		$body1 .= sprintf( "伝票番号：%s\n" , $sheetno ) ;
+		$body1 .= sprintf( "\n" ) ;
+		$body1 .= sprintf( "注文内容は以下のリンクからご確認ください：\n" ) ;
+		$body1 .= sprintf( "%s/cart/status.php?id=%s\n" , $NRML , $sessionid ) ;
+		$body1 .= sprintf( "\n" ) ;
+		$body1 .= sprintf( "=============================================================\n" ) ;
+		$body1 .= sprintf( "お問い合わせは伝票番号を添えて、こちらからお願い致します。\n" ) ;
+		$body1 .= sprintf( "%s/cart/inquary.php\n" , $NRML ) ;
+		$body1 .= sprintf( "\n" ) ;
+		$body1 .= sprintf( "-------------------------------------------------------------\n" ) ;
+		$body1 .= sprintf( "洋酒・日本酒 豊富な品揃え－酒楽館\n" ) ;
+		$body1 .= sprintf( "%s\n" , $NRML ) ;
+		$body1 .= sprintf( "\n" ) ;
+		$body1 .= sprintf( "\n" ) ;
+		$body1 .= sprintf( "-------------------------------------------------------------\n" ) ;
+
+		// メール送信
+//		SendMailPlane( $from_email , $from_name , $to_email , $to_name , $subject1 , $body1 ) ;
+		$error = "・正常に商品確保通知メールを送信しました。\n" ;
+
+		
+	}
+*/
+	return $error ;
+}
+
+function	MakeMailBody( $arCart )
+{
+	$arLocal = $arCart ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arLocal ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arLocal[ $keys[ $i ] ] ;
+
+	$keys = array_keys( $arLocal[ "cart_order" ] ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arLocal[ "cart_order" ][ $keys[ $i ] ] ;
+
+	global	$arState ;
+
+	global	$obCart ;
+	global	$obCartItem ;
+	global	$obMember ;
+	global	$obMerchandise ;
+
+	$obMerchandiseMaster	= $obMerchandise -> obMaster ;
+	$obCategory				= $obMerchandise -> obCategory ;
+
+	$obCorp					= new PARTS_Corp() ;
+	$obPrice				= new PARTS_Price() ;
+
+	$ct_alias	= $obCart -> alias ;
+	$ci_alias	= $obCartItem -> alias ;
+	$mb_alias	= $obMember -> alias ;
+	$m_alias	= $obMerchandise -> alias ;
+	$c_alias	= $obCategory -> alias ;
+
+	global	$_SERVER ;
+	$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+	$NRML = sprintf( "http://%s" , $SERVER_NAME ) ;
+	$SSL = sprintf( "https://%s" , $SERVER_NAME ) ;
+
+	// ご注文者
+	$szGuestName = sprintf( "%s" , ${ sprintf( "%s_name" , $mb_alias ) } ) ;
+
+	$szAddress0  = sprintf( "〒%s" , ${ sprintf( "%s_zip" , $mb_alias ) } ) ;
+	$szAddress1  = $arState[ ${ sprintf( "%s_state" , $mb_alias ) } ][ 2 ] ;
+	$szAddress1 .= ${ sprintf( "%s_city" , $mb_alias ) } ;
+	$szAddress1 .= ${ sprintf( "%s_addr1" , $mb_alias ) } ;
+	$szAddress2  = ${ sprintf( "%s_addr2" , $mb_alias ) } ;
+
+	$arTelH			= explode( '-' , ${ sprintf( "%s_tel" , $mb_alias ) } ) ;
+	if ( $arTelH[ 0 ] != "" && $arTelH[ 1 ] != "" && $arTelH[ 2 ] != "" )
+	{
+		$tel_h1 = $arTelH[ 0 ] ;
+		$tel_h2 = $arTelH[ 1 ] ;
+		$tel_h3 = $arTelH[ 2 ] ;
+	}
+
+	if ( $tel_h1 != "" && $tel_h2 != "" && $tel_h3 != "" )
+		$szTel .= sprintf( "%s-%s-%s" , $tel_h1 , $tel_h2 , $tel_h3 ) ;
+	else
+		$szTel = "不明" ;
+
+	// 配送先
+	if ( ${ sprintf( "%s_shipping" , $ct_alias ) } == 0 )
+	{
+		// 配送先住所
+		$szDstAddress0  = $szAddress0 ;
+		$szDstAddress1  = $szAddress1 ;
+		$szDstAddress2  = $szAddress2 ;
+
+		// 配送先名
+		$szDstName = $szGuestName . " 様宛" ;
+
+		// 配送先電話番号
+		$szDstTel = $szTel ;
+	}
+	else
+	{
+		// 配送先住所
+		$szDstAddress0  = sprintf( "〒%s" , ${ sprintf( "%s_zip" , $ct_alias ) } ) ;
+		$szDstAddress1  = $arState[ ${ sprintf( "%s_state" , $ct_alias ) } ][ 2 ] ;
+		$szDstAddress1 .= ${ sprintf( "%s_city" , $ct_alias ) } ;
+		$szDstAddress1 .= ${ sprintf( "%s_addr1" , $ct_alias ) } ;
+		$szDstAddress2  = ${ sprintf( "%s_addr2" , $ct_alias ) } ;
+
+		// 配送先名
+		$szDstName = ${ sprintf( "%s_name" , $ct_alias ) } . " 様宛" ;
+
+		// 配送先電話番号
+		$szDstTel = ${ sprintf( "%s_tel" , $ct_alias ) } ;
+	}
+
+	// 配送指定日
+	if( ${ sprintf( "%s_delivery_date" , $ct_alias ) } != DEF_DATE_MIN )
+	{
+		$obDelivery_date = new DateTime( ${ sprintf( "%s_delivery_date" , $ct_alias ) } ) ;
+		$szDelivery_date = $obDelivery_date -> format( "Y/m/d" ) ;
+	}
+	else
+	{
+		$szDelivery_date = "" ;
+	}
+
+	// 配送指定時間
+	global	$arDeliveryTime ;
+	$szDelivery_time = $arDeliveryTime[ ${ sprintf( "%s_delivery_time" , $ct_alias ) } ] ;
+	if ( $szDelivery_time == "" )
+		$szDelivery_time = "指定なし" ;
+
+	// 決済方法
+	global	$arSettlement ;
+	$szSettlement = $arSettlement[ ${ sprintf( "%s_settlement" , $ct_alias ) } ] ;
+
+	// 請求金額
+	$minus_yen = ${ sprintf( "%s_used_point" , $ct_alias ) } * YEN_PER_POINT ;
+	$purchase_yen = $total_price - $minus_yen ;
+	if( $purchase_yen < 0 )
+		$purchase_yen = 0 ;
+	if ( ${ sprintf( "%s_used_point" , $ct_alias ) } == 0 )
+	{
+		if ( ${ sprintf( "%s_member_flg" , $ct_alias ) } == 1 )
+			$szTotalPrice = sprintf( "%8s 円（税込） （ ポイント使用なし ）" , number_format( $purchase_yen ) ) ;
+		else
+			$szTotalPrice = sprintf( "%8s 円（税込）" , number_format( $purchase_yen ) ) ;
+	}
+	else
+	{
+		$szTotalPrice = sprintf( "%8s 円（税込） （ %dポイント使用 ： ＝ %s 円 － %s 円 ）"
+			, number_format( $purchase_yen ) , ${ sprintf( "%s_used_point" , $ct_alias ) } , number_format( $total_price ) , number_format( $minus_yen ) ) ;
+	}
+
+	// 専用BOXの指定がある場合は、詳細を表示する
+	$szPackageInfo = "" ;
+	if ( is_array( $package ) == TRUE )
+	{
+		$szPackage	= "" ;
+		$keys		= array_keys( $package ) ;
+		$values		= array_values( $package ) ;
+		for ( $pkg = 0 ; $pkg < count( $keys ) ; $pkg ++ )
+		{
+			if ( $szPackage != "" )
+				$szPackage .= " ＋ " ;
+				
+			$szPackage .= sprintf( "%d円 × %d個" , number_format( $keys[ $pkg ] ) , number_format( $values[ $pkg ] ) ) ;
+		}
+		$szPackageInfo  = sprintf( "\n　　　　　　　　：（" ) ;
+		$szPackageInfo .= sprintf( "商品代 %s円" , number_format( $total_item - $minus_yen ) ) ;
+		$szPackageInfo .= sprintf( " ＋ 専用BOX代 %s円［" , number_format( $total_package ) ) ;
+		$szPackageInfo .= sprintf( "%s" , $szPackage ) ;
+		$szPackageInfo .= sprintf( "］" ) ;
+		$szPackageInfo .= sprintf( "）" ) ;
+	}
+
+	// 代引手数料
+	$szPriceCharge = sprintf( "%8s 円" , number_format( $price_charge ) ) ;
+	
+	// 送料
+	$szPriceTransport = sprintf( "%8s 円 （%s 円/個）" , number_format( $price_transport * $package_count ) , number_format( $price_transport ) ) ;
+
+	// 梱包数
+	$szPackageCount = sprintf( "%s 個口" , number_format( $package_count ) ) ;
+
+	// クール便
+	if ( $coolpack > 0 )
+	{
+		$szPackageCount .= sprintf( " （内クール便 %s 個口）" , number_format( $coolpack ) ) ;
+		$szPriceCoolpack = sprintf( "%8s 円 （%s 円/個）" , number_format( $coolpack * PRICE_COOLPACK ) , number_format( PRICE_COOLPACK ) ) ;
+	}
+	else
+	{
+		$szPriceCoolpack = sprintf( "なし" ) ;
+	}
+
+	// 包装
+	global	$arWrapStatus ;
+	$szWrapStatus = $arWrapStatus[ $wrapping_flg ] ;
+
+	// のし
+	global	$arDecorStatus ;
+	$szDecorStatus = $arDecorStatus[ $decoration_flg ] ;
+	if( $decoration_flg == DF_DECORSTATUS_TRUE && $deco_used != -1 )
+	{
+		$szDecorName = GetCategoryNameFromID( -1 , $deco_used , -1 , DEF_CATEGORY_DECORATION ) ;
+		$szDecorStatus .= sprintf( "（%s）" , $szDecorName ) ;
+	}
+
+	// 請求金額
+	$szTotalCharge = sprintf( "%8s 円（税込）" ,
+												number_format(
+																$purchase_yen
+																+ ( $price_transport * $package_count )
+																+ $price_charge
+																+ ( $coolpack * PRICE_COOLPACK )
+															)
+							) ;
+
+	$sessionid = ${ sprintf( "%s_sessionid" , $ct_alias ) } ;
+	
+	// 会社情報取得
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	// 送信パラメータ設定
+	$from_email	= EMAILADDR_INQUIRE ;
+	$from_name	= $arCorp[ sprintf( "%s_name" , $obCorp -> alias ) ] ;
+	$to_email	= ${ sprintf( "%s_agent_email" , $mb_alias ) } ;
+	$to_name	= $szGuestName ;
+
+	$body3  = "" ;
+	$body3 .= sprintf( "// 配送情報とご請求金額\n" ) ;
+	$body3 .= sprintf( "=============================================================\n" ) ;
+	$body3 .= sprintf( "ｅメールアドレス：%s\n" , $to_email ) ;
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "請求先住所：\n" ) ;
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "　%s\n" , $szAddress0 ) ;
+	$body3 .= sprintf( "　%s\n" , $szAddress1 ) ;
+	$body3 .= sprintf( "　%s\n" , $szAddress2 ) ;
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "　%s 様\n" , $szGuestName ) ;
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "請求先電話番号：\n" ) ;
+	$body3 .= sprintf( "　%s\n" , $szTel ) ;
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "注文合計（税込）：\n" ) ;
+	$body3 .= sprintf( "　%8s\n" , $szTotalCharge ) ;
+	$body3 .= sprintf( "\n" ) ;
+//	$body3 .= sprintf( "お届け先：\n" ) ;
+//	$body3 .= sprintf( "\n" ) ;
+//	$body3 .= sprintf( "　%s\n" , $szDstAddress0 ) ;
+//	$body3 .= sprintf( "　%s\n" , $szDstAddress1 ) ;
+//	$body3 .= sprintf( "　%s\n" , $szDstAddress2 ) ;
+//	$body3 .= sprintf( "\n" ) ;
+//	$body3 .= sprintf( "　%s\n" , $szDstName ) ;
+//	$body3 .= sprintf( "\n" ) ;
+//	$body3 .= sprintf( "お届け先電話番号：\n" ) ;
+//	$body3 .= sprintf( "　%s\n" , $szDstTel ) ;
+//	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "その他ご連絡事項：\n%s\n" , ${ sprintf( "%s_comment" , $ct_alias ) } ) ;
+	$body3 .= sprintf( "\n" ) ;
+//	$body3 .= sprintf( "配送予定日時：%s %s\n" , $szDelivery_date , $szDelivery_time ) ;
+//	$body3 .= sprintf( "\n" ) ;
+//	$body3 .= sprintf( "※天候、交通事情、当社都合等により、ご指定の配送日時に配達で\n" ) ;
+//	$body3 .= sprintf( "　きない場合があります。予めご了承ください。\n" ) ;
+//	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "// 注文内容\n" ) ;
+	$body3 .= sprintf( "=============================================================\n" ) ;
+
+	$body3 .= sprintf( "伝票番号：%s\n" , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "注文内容は以下のリンクからご確認ください：\n" ) ;
+	$body3 .= sprintf( "%s/member/status.php?sheetno=%s\n" , $NRML , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "-------------------------------------------------------------\n" ) ;
+	$body3 .= sprintf( "\n" ) ;
+
+	$cnt = count( $cartitem_data ) ;
+	for ( $i = 0 ; $i < $cnt ; $i ++ )
+	{
+		$name			= $cartitem_data[ $i ][ sprintf( "%s_name"		, $obMerchandiseMaster -> alias )	] ;
+		$number			= $cartitem_data[ $i ][ sprintf( "%s_number"	, $ci_alias )			] ;
+		$price			= $cartitem_data[ $i ][ sprintf( "%s_price"		, $obMerchandise -> alias )			] ;
+		$tax			= $cartitem_data[ $i ][ sprintf( "%s_tax"		, $obMerchandise -> alias )			] ;
+		$package		= $cartitem_data[ $i ][ sprintf( "%s_package"	, $ci_alias )			] ;
+		$package_price	= $cartitem_data[ $i ][ "package_price"	] ;
+		$coolpack		= $cartitem_data[ $i ][ sprintf( "%s_coolpack"	, $ci_alias )			] ;
+		$net			= $cartitem_data[ $i ][ sprintf( "%s_net"		, $obMerchandiseMaster -> alias )	] ;
+		$unit			= $cartitem_data[ $i ][ sprintf( "%s_unit"		, $obMerchandiseMaster -> alias )	] ;
+		$tag			= $cartitem_data[ $i ][ sprintf( "%s_tag"		, $obMerchandiseMaster -> alias )	] ;
+
+		$szPackage		= ( $package == 1 ? "有り" : "無し" ) ;
+
+		if ( $price == 0 )
+			$szPrice = sprintf( "　　%7s円（内税）" , number_format( $tax + $package_price ) ) ;
+		else
+			$szPrice = sprintf( "　　%7s円（税込）" , number_format( $tax + $package_price ) ) ;
+
+		$szPriceSum = sprintf( "　　%7s円（税込）" , number_format( ( $tax + $package_price ) * $number ) ) ;
+
+		if ( $unit != 1 )
+			$szUnit = sprintf( "%s%s x %d" , $net , $tag , $unit ) ;
+		else
+			$szUnit = sprintf( "%s%s" , $net , $tag ) ;
+
+		$szCoolpack = "" ;
+//		if ( $coolpack == 1 )
+//			$szCoolpack = sprintf( "※この商品はクール便にて配送いたします。" ) ;
+
+		$body3 .= sprintf( "No.%2d ： 【%s】　内容量： %s\n" , $i + 1 , $name , $szUnit ) ;
+//		$body3 .= sprintf( "%s×%3d個　　　%s\n　　専用BOX [%s]\n　　%s\n" ,
+//							$szPrice , $number ,
+//							$szPriceSum ,
+//							$szPackage ,
+//							$szCoolpack
+//						) ;
+		$body3 .= sprintf( "%s×%3d個　　　%s\n" ,
+							$szPrice , $number ,
+							$szPriceSum 
+							) ;
+		$body3 .= sprintf( "\n" ) ;
+	}
+
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "梱包数　　　　　：%s\n" , $szPackageCount ) ;
+	$body3 .= sprintf( "\n" ) ;
+//	$body3 .= sprintf( "包装　　　　　　：%s\n" , $szWrapStatus ) ;
+//	$body3 .= sprintf( "のし　　　　　　：%s\n" , $szDecorStatus ) ;
+//	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "商品金額合計　　：%s\n" , $szTotalPrice . $szPackageInfo ) ;
+//	$body3 .= sprintf( "送料　　　　　　：%s\n" , $szPriceTransport ) ;
+//	$body3 .= sprintf( "クール便指定　　：%s\n" , $szPriceCoolpack ) ;
+
+	if( ${ sprintf( "%s_settlement" , $ct_alias ) } == DF_SETTLEMENT_COD )
+	{
+		$body3 .= sprintf( "決済方法　　　　：%s\n" , $szSettlement ) ;
+		$body3 .= sprintf( "代金引換手数料　：%s\n" , $szPriceCharge ) ;
+	}
+	else
+	{
+		$body3 .= sprintf( "決済方法　　　　：%s\n" , $szSettlement ) ;
+	}
+	$body3 .= sprintf( "ご請求金額　　　：%s\n" , $szTotalCharge ) ;
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "ポイント分の減額に関しては別途ご連絡差し上げます。\n" ) ;
+	$body3 .= sprintf( "\n" ) ;
+	$body3 .= sprintf( "=============================================================\n" ) ;
+	$body3 .= sprintf( "\n" ) ;
+
+	return $body3 ;
+}
+
+// 商品発送通知メールを送信
+function	SendDeliveredMail( $arParam )
+{
+	$error  = "【エラーがあります】\n" ;
+	$error .= "・商品発送通知メールの送信に失敗しました。\n" ;
+
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+	
+	$obCorp		= new PARTS_Corp() ;
+
+	$arParam = GetData( $arParam[ sprintf( "%s_cartid" , $ct_alias ) ] ) ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$keys = array_keys( $arParam[ "cart_order" ] ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ "cart_order" ][ $keys[ $i ] ] ;
+
+	// 商品発送通知メール送信
+	global	$_SERVER ;
+	$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+	$NRML = sprintf( "http://%s" , $SERVER_NAME ) ;
+	$SSL = sprintf( "https://%s" , $SERVER_NAME ) ;
+
+	// ご注文者
+	$szGuestName = sprintf( "%s" , ${ sprintf( "%s_name" , $mb_alias ) } ) ;
+
+	// 会社情報取得
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	// 送信パラメータ設定
+	$email = "" ;
+	if ( ${ sprintf( "%s_agent_email" , $mb_alias ) } != "" )
+		$email = ${ sprintf( "%s_agent_email" , $mb_alias ) } ;
+
+	$from_email	= EMAILADDR_INQUIRE ;
+	$from_name	= $arCorp[ sprintf( "%s_name" , $obCorp -> alias ) ] ;
+	$to_email	= $email ;
+	$to_name	= $szGuestName ;
+
+	// タイトル
+	$subject1 = sprintf( "[%s] 商品発送のお知らせ" , $from_name ) ;
+	$subject2 = sprintf( "商品発送通知 [ %s ]" , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+
+	// ヘッダー
+	$header  = sprintf( "%sから 商品発送のお知らせ\n" , $from_name ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "お客様からご注文頂いた商品を、本日発送させて頂きました。\n" ) ;
+	$header .= sprintf( "ご注文の処理が完了しましたのでお知らせ致します。\n" ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "ご利用頂き誠にありがとうございました。\n" ) ;
+	$header .= sprintf( "またのご利用をお待ちしております。\n" ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "今回発送する商品は以下の通りです。\n" ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "=============================================================\n" ) ;
+
+	$header .= sprintf( "伝票番号：%s\n" , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "注文内容は以下のリンクからご確認ください：\n" ) ;
+	$header .= sprintf( "%s/member/status.php?sheetno=%s\n" , $NRML , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "-------------------------------------------------------------\n" ) ;
+	$header .= sprintf( "\n" ) ;
+
+	$body = MakeMailBody( $arParam ) ;
+
+	// フッター
+	$footer  = sprintf( "" ) ;
+	$footer .= sprintf( "\n" ) ;
+	$footer .= sprintf( "=============================================================\n" ) ;
+//	$footer .= sprintf( "お問い合わせは伝票番号を添えて、こちらからお願い致します。\n" ) ;
+//	$footer .= sprintf( "%s/cart/inquary.php\n" , $NRML ) ;
+//	$footer .= sprintf( "\n" ) ;
+//	$footer .= sprintf( "ご利用いただき、ありがとうございました。\n" ) ;
+//	$footer .= sprintf( "今後とも%sをよろしくお願い致します。\n" , $from_name ) ;
+//	$footer .= sprintf( "\n" ) ;
+//	$footer .= sprintf( "-------------------------------------------------------------\n" ) ;
+	$footer .= sprintf( "%s－%s\n" , $arCorp[ sprintf( "%s_catch" , $obCorp -> alias ) ] , $arCorp[ sprintf( "%s_name" , $obCorp -> alias ) ] ) ;
+	$footer .= sprintf( "%s\n" , $NRML ) ;
+	$footer .= sprintf( "\n" ) ;
+	$footer .= sprintf( "\n" ) ;
+	$footer .= sprintf( "-------------------------------------------------------------\n" ) ;
+
+	$all = $header . $body . $footer ;
+
+	// メール送信
+	if( $to_email != "" )
+	{
+		// 注文者へ
+		SendMailPlane( $from_email , $from_name , $to_email , $to_name , $subject1 , $all ) ;
+		$error = "・正常に商品発送通知メールを送信しました。\n" ;
+
+		// 運営へ
+		$to_email	= EMAILADDR_ORDERED_FOR_SYSTEM ;
+		$to_name	= "システム運営者" ;
+		$all = "下記内容で商品発送通知のメールを送信しました。\n\n" . $all ;
+		SendMailPlane( $from_email , $from_name , $to_email , $to_name , $subject2 , $all ) ;
+	}
+	else
+	{
+		$error = "・メールアドレスが不明の為、商品発送通知メールを送信しませんでした。\n" ;
+	}
+
+	return $error ;
+}
+
+// キャンセル通知メールを送信
+function	SendCancelMail( $arParam , $conn )
+{
+	$error  = "【エラーがあります】\n" ;
+	$error .= "・キャンセル通知メールの送信に失敗しました。\n" ;
+
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	$obCorp		= new PARTS_Corp() ;
+
+	$arParam = GetData( $arParam[ sprintf( "%s_cartid" , $ct_alias ) ] ) ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	$keys = array_keys( $arParam[ "cart_order" ] ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ "cart_order" ][ $keys[ $i ] ] ;
+
+	// 商品発送通知メール送信
+	global	$_SERVER ;
+	$SERVER_NAME = $_SERVER[ 'SERVER_NAME' ] ;
+	$NRML = sprintf( "http://%s" , $SERVER_NAME ) ;
+	$SSL = sprintf( "https://%s" , $SERVER_NAME ) ;
+
+	// ご注文者
+	$szGuestName = sprintf( "%s" , ${ sprintf( "%s_name" , $mb_alias ) } ) ;
+
+	// 会社情報取得
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+		$arCorp = $arCorp[ 0 ] ;
+
+	// 送信パラメータ設定
+	$email = "" ;
+	if ( ${ sprintf( "%s_agent_email" , $mb_alias ) } != "" )
+		$email = ${ sprintf( "%s_agent_email" , $mb_alias ) } ;
+
+	$from_email	= EMAILADDR_INQUIRE ;
+	$from_name	= $arCorp[ sprintf( "%s_name" , $obCorp -> alias ) ] ;
+	$to_email	= $email ;
+	$to_name	= $szGuestName ;
+
+	// タイトル
+	$subject1 = sprintf( "[%s] ご注文のキャンセル" , $from_name ) ;
+	$subject2 = sprintf( "注文キャンセル通知 [ %s ]" , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+
+	// ヘッダー
+	$header  = sprintf( "以下のご注文をキャンセルしました。\n" ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "ご利用頂き誠にありがとうございました。\n" ) ;
+	$header .= sprintf( "またのご利用をお待ちしております。\n" ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "=============================================================\n" ) ;
+	$header .= sprintf( "伝票番号：%s\n" , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "注文内容は以下のリンクからご確認ください：\n" ) ;
+	$header .= sprintf( "%s/member/status.php?sheetno=%s\n" , $NRML , ${ sprintf( "%s_sheetno" , $ct_alias ) } ) ;
+	$header .= sprintf( "\n" ) ;
+	$header .= sprintf( "-------------------------------------------------------------\n" ) ;
+	$header .= sprintf( "\n" ) ;
+
+	$body = MakeMailBody( $arParam ) ;
+
+	// フッター
+	$footer  = sprintf( "" ) ;
+	$footer .= sprintf( "\n" ) ;
+	$footer .= sprintf( "=============================================================\n" ) ;
+	$footer .= sprintf( "%s－%s\n" , $arCorp[ sprintf( "%s_catch" , $obCorp -> alias ) ] , $arCorp[ sprintf( "%s_name" , $obCorp -> alias ) ] ) ;
+	$footer .= sprintf( "%s\n" , $NRML ) ;
+	$footer .= sprintf( "\n" ) ;
+	$footer .= sprintf( "\n" ) ;
+	$footer .= sprintf( "-------------------------------------------------------------\n" ) ;
+
+	$all = $header . $body . $footer ;
+
+	// メール送信
+	if( $to_email != "" )
+	{
+		// 注文者へ
+		SendMailPlane( $from_email , $from_name , $to_email , $to_name , $subject1 , $all ) ;
+		$error = "・正常にキャンセル通知メールを送信しました。\n" ;
+
+		// 運営へ
+		$to_email	= EMAILADDR_ORDERED_FOR_SYSTEM ;
+		$to_name	= "システム運営者" ;
+		$all = "下記内容でキャンセル通知のメールを送信しました。\n\n" . $all ;
+		SendMailPlane( $from_email , $from_name , $to_email , $to_name , $subject2 , $all ) ;
+	}
+	else
+	{
+		$error = "・メールアドレスが不明の為、キャンセル通知メールを送信しませんでした。\n" ;
+	}
+
+	return $error ;
+}
+
+// member_data を更新する
+function UpdateMember( $arParam )
+{
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// 非会員
+	if( ${ sprintf( "%s_memberid" , $mb_alias ) } == -1 )
+	{
+		// カートIDからメンバーIDを取得
+		$arWhere = array() ;
+		$arWhere[ "cartid" ] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+		$arCart = $obCart -> getData( $arWhere ) ;
+
+		$memberid		= $arCart[ 0 ][ sprintf( "%s_memberid" , $mb_alias ) ] ;
+		$passwd			= $arCart[ 0 ][ sprintf( "%s_passwd" , $mb_alias ) ] ;
+
+		if( $memberid )
+		{
+			$szZip = sprintf( "%s-%s" , ${ sprintf( "%s_zip1" , $mb_alias ) } , ${ sprintf( "%s_zip2" , $mb_alias ) } ) ;
+			$szTel = sprintf( "%s-%s-%s" , 
+					${ sprintf( "%s_tel1" , $mb_alias ) } , 
+					${ sprintf( "%s_tel2" , $mb_alias ) } , 
+					${ sprintf( "%s_tel3" , $mb_alias ) } ) ;
+
+			// 必要な情報を上書き
+			$arMember[ $mb_alias . "_memberid"		] = $memberid ;
+			$arMember[ $mb_alias . "_passwd"		] = $passwd ;
+			$arMember[ $mb_alias . "_state"			] = ${ sprintf( "%s_state"			, $mb_alias ) } ;
+			$arMember[ $mb_alias . "_city"			] = ${ sprintf( "%s_city"			, $mb_alias ) } ;
+			$arMember[ $mb_alias . "_addr1"			] = ${ sprintf( "%s_addr1"			, $mb_alias ) } ;
+			$arMember[ $mb_alias . "_addr2"			] = ${ sprintf( "%s_addr2"			, $mb_alias ) } ;
+			$arMember[ $mb_alias . "_zip"			] = $szZip ;
+			$arMember[ $mb_alias . "_tel"			] = $szTel ;
+			$arMember[ $mb_alias . "_name"			] = ${ sprintf( "%s_name"			, $mb_alias ) } ;
+			$arMember[ $mb_alias . "_kana"			] = ${ sprintf( "%s_kana"			, $mb_alias ) } ;
+			$arMember[ $mb_alias . "_agent_email"	] = ${ sprintf( "%s_agent_email"	, $mb_alias ) } ;
+
+			$obMember -> skip_check = true ;
+			$obMember -> updateData( $arMember ) ;
+			$obMember -> skip_check = false ;
+		}
+	}
+}
+
+// カートのmemberid を更新する
+// 会員から非会員への更新は member_data へ insert する
+function	UpdateCartMember( $arParam )
+{
+	global	$obCart ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	$obSerialno	= new PARTS_Serialno() ;
+	$change_flg	= false ;
+	$result		= false ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// 非会員選択
+	if( ${ sprintf( "%s_memberid" , $mb_alias ) } == -1 )
+	{
+		// ct_memberid で 正規会員か否かを調べる
+		if( $obMember -> inTrueMember( ${ sprintf( "%s_memberid" , $ct_alias ) } ) == TRUE )
+		{
+			// 正規会員であれば、非正規会員への変更なので member_data へ insert
+			$change_flg	= true ;
+
+			$new_id = $obSerialno -> createSerialNo( SERIALNO_TYPE_MEMBER ) ;
+			if ( $new_id == "" )
+			{
+				$memberid = -1 ;
+			}
+			else
+			{
+				$szZip = sprintf( "%s-%s" , ${ sprintf( "%s_zip1" , $mb_alias ) } , ${ sprintf( "%s_zip2" , $mb_alias ) } ) ;
+				$szTel = sprintf( "%s-%s-%s" , 
+						${ sprintf( "%s_tel1" , $mb_alias ) } , 
+						${ sprintf( "%s_tel2" , $mb_alias ) } , 
+						${ sprintf( "%s_tel3" , $mb_alias ) } ) ;
+	
+				$arData = array() ;
+				$arData[ $mb_alias . "_loginid"			] = $new_id ;
+				$arData[ $mb_alias . "_passwd"			] = $new_id ;
+				$arData[ $mb_alias . "_level"			] = DEF_MEMBER_LEVEL_NON ;
+				$arData[ $mb_alias . "_name"			] = ${ sprintf( "%s_name"			, $mb_alias ) } ;
+				$arData[ $mb_alias . "_name_en"			] = "temptemp" ;
+				$arData[ $mb_alias . "_kana"			] = "カリカイイン" ;
+				$arData[ $mb_alias . "_agent_email"		] = ${ sprintf( "%s_agent_email"	, $mb_alias ) } ;
+				$arData[ $mb_alias . "_email_port"		] = "" ;
+				$arData[ $mb_alias . "_state"			] = ${ sprintf( "%s_state"			, $mb_alias ) } ;
+				$arData[ $mb_alias . "_city"			] = ${ sprintf( "%s_city"			, $mb_alias ) } ;
+				$arData[ $mb_alias . "_addr1"			] = ${ sprintf( "%s_addr1"			, $mb_alias ) } ;
+				$arData[ $mb_alias . "_addr2"			] = ${ sprintf( "%s_addr2"			, $mb_alias ) } ;
+				$arData[ $mb_alias . "_zip"				] = $szZip ;
+				$arData[ $mb_alias . "_tel"				] = $szTel ;
+				$arData[ $mb_alias . "_fax"				] = "" ;
+				$arData[ $mb_alias . "_point"			] = 0 ;
+				$arData[ $mb_alias . "_total_point"		] = 0 ;
+				$arData[ $mb_alias . "_magazine"		] = 0 ;
+
+				$result = $obMember -> insertData( $arData ) ;
+				if( $result )
+					$memberid = $arData[ $mb_alias . "_memberid"		] ;
+			}
+		}
+		else
+		{
+			// 非正規会員であれば、member_data を update
+
+			$szZip = sprintf( "%s-%s" , ${ sprintf( "%s_zip1" , $mb_alias ) } , ${ sprintf( "%s_zip2" , $mb_alias ) } ) ;
+			$szTel = sprintf( "%s-%s-%s" , 
+					${ sprintf( "%s_tel1" , $mb_alias ) } , 
+					${ sprintf( "%s_tel2" , $mb_alias ) } , 
+					${ sprintf( "%s_tel3" , $mb_alias ) } ) ;
+
+			$arData = array() ;
+			$arData[ $mb_alias . "_name"		] = ${ sprintf( "%s_name"			, $mb_alias ) } ;
+			$arData[ $mb_alias . "_kana"		] = ${ sprintf( "%s_kana"			, $mb_alias ) } ;
+			$arData[ $mb_alias . "_agent_email"	] = ${ sprintf( "%s_agent_email"	, $mb_alias ) } ;
+			$arData[ $mb_alias . "_state"		] = ${ sprintf( "%s_state"			, $mb_alias ) } ;
+			$arData[ $mb_alias . "_city"		] = ${ sprintf( "%s_city"			, $mb_alias ) } ;
+			$arData[ $mb_alias . "_addr1"		] = ${ sprintf( "%s_addr1"			, $mb_alias ) } ;
+			$arData[ $mb_alias . "_addr2"		] = ${ sprintf( "%s_addr2"			, $mb_alias ) } ;
+			$arData[ $mb_alias . "_zip"			] = $szZip ;
+			$arData[ $mb_alias . "_tel"			] = $szTel ;
+
+			$memberid = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+			if( $memberid )
+			{
+				$arData[ $mb_alias . "_memberid"			] = $memberid ;
+
+				$arMember = array() ;
+				$arMember = $obMember -> getAt( $memberid ) ;
+
+				$arData[ $mb_alias . "_passwd"				] = $arMember[ $mb_alias . "_passwd"		] ;
+				$arData[ $mb_alias . "_clear_passwd"		] = $arMember[ $mb_alias . "_clear_passwd"	] ;
+				$arData[ $mb_alias . "_name_en"				] = $arMember[ $mb_alias . "_name_en"		] ;
+
+				$obMember -> skip_check = true ;
+				$obMember -> updateData( $arData ) ;
+				$obMember -> skip_check = false ;
+			}
+		}
+
+		if( $memberid && ${ sprintf( "%s_cartid" , $ct_alias ) } != -1 )
+		{
+			$arData = array() ;
+			$arData[ $ct_alias . "_memberid"	] = $memberid ;
+			$arData[ $ct_alias . "_member_flg"	] = 0 ;
+			$arData[ $ct_alias . "_used_point"	] = 0 ;
+			$arData[ $ct_alias . "_cartid"		] = ${ sprintf( "%s_cartid"	, $ct_alias ) } ;
+			$result = $obCart -> updateData( $arData ) ;
+
+			// 正規会員から非正規会員への変更の場合は、決済前なら使用ポイントを戻す
+			if( $change_flg == true )
+			{
+				if( ${ sprintf( "%s_billing_status" , $ct_alias ) } == DF_BILLSTATUS_SETTLING )
+				{
+					$arMember = array() ;
+					$arMember = $obMember -> getAt( ${ sprintf( "%s_memberid" , $ct_alias ) } ) ;
+				
+					$point = $arMember[ sprintf( "%s_point" , $mb_alias ) ] ;
+					$total_point = $arMember[ sprintf( "%s_total_point" , $mb_alias ) ] ;
+
+					$arData = array() ;
+					$arData[ $mb_alias . "_point"		] = $point + ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+					$arData[ $mb_alias . "_total_point"	] = $total_point + ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+					$arData[ $mb_alias . "_memberid"	] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+					$obMember -> skip_check = true ;
+					$obMember -> updateData( $arData ) ;
+					$obMember -> skip_check = false ;
+				}
+			}
+		}
+	}
+	else
+	{
+		if( ${ sprintf( "%s_cartid" , $ct_alias ) } != -1 )
+		{
+			$arData = array() ;
+			$arData[ $ct_alias . "_memberid"		] = ${ sprintf( "%s_memberid"	, $mb_alias ) } ;
+			$arData[ $ct_alias . "_member_flg"		] = 1 ;
+			$arData[ $ct_alias . "_cartid"			] = ${ sprintf( "%s_cartid"	, $ct_alias ) } ;
+			$result = $obCart -> updateData( $arData ) ;
+
+			// 決済前が前提
+			// 非会員から正規会員への変更		使用ポイント減算
+			// 正規会員から正規会員への変更		元：使用ポイント戻す　新：使用ポイント減算
+			// 元：ct_memberid　新：mb_memberid
+			if( ${ sprintf( "%s_billing_status" , $ct_alias ) } == DF_BILLSTATUS_SETTLING )
+			{
+				// ct_memberid で 元が正規会員か否かを調べる
+				if( $obMember -> inTrueMember( ${ sprintf( "%s_memberid" , $ct_alias ) } ) == TRUE )
+				{
+					// 正規会員
+					$arOrgMember = $obMember -> getAt( ${ sprintf( "%s_memberid" , $ct_alias ) } ) ;
+
+					$arData = array() ;
+					$arData = $arOrgMember ;
+					$arData[ $mb_alias . "_point"		] = $arOrgMember[ sprintf( "%s_point" , $mb_alias ) ] 
+												+ ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+					$arData[ $mb_alias . "_total_point"	] = $arOrgMember[ sprintf( "%s_total_point" , $mb_alias ) ] 
+												+ ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+					$arData[ $mb_alias . "_memberid"	] = ${ sprintf( "%s_memberid" , $ct_alias ) } ;
+
+					$arData[ $mb_alias . "_monitorid"	] = trim( $arData[ $mb_alias . "_monitorid"	] , "{}" ) ;
+					$arData[ $mb_alias . "_serverid"	] = trim( $arData[ $mb_alias . "_serverid"	] , "{}" ) ;
+					$arData[ $mb_alias . "_monitorno"	] = trim( $arData[ $mb_alias . "_monitorno"	] , "{}" ) ;
+					$arData[ $mb_alias . "_serverno"	] = trim( $arData[ $mb_alias . "_serverno"	] , "{}" ) ;
+
+					$obMember -> skip_check = true ;
+					$obMember -> updateData( $arData ) ;
+					$obMember -> skip_check = false ;
+
+					$arNewMember = $obMember -> getAt( ${ sprintf( "%s_memberid" , $mb_alias ) } ) ;
+
+					$arData = array() ;
+					$arData = $arNewMember ;
+					$arData[ $mb_alias . "_point"		] = $arNewMember[ sprintf( "%s_point" , $mb_alias ) ] 
+												- ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+					$arData[ $mb_alias . "_total_point"	] = $arNewMember[ sprintf( "%s_total_point" , $mb_alias ) ] 
+												- ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+					$arData[ $mb_alias . "_memberid"	] = ${ sprintf( "%s_memberid" , $mb_alias ) } ;
+
+					$arData[ $mb_alias . "_monitorid"	] = trim( $arData[ $mb_alias . "_monitorid"	] , "{}" ) ;
+					$arData[ $mb_alias . "_serverid"	] = trim( $arData[ $mb_alias . "_serverid"	] , "{}" ) ;
+					$arData[ $mb_alias . "_monitorno"	] = trim( $arData[ $mb_alias . "_monitorno"	] , "{}" ) ;
+					$arData[ $mb_alias . "_serverno"	] = trim( $arData[ $mb_alias . "_serverno"	] , "{}" ) ;
+
+					$obMember -> skip_check = true ;
+					$obMember -> updateData( $arData ) ;
+					$obMember -> skip_check = false ;
+				}
+				else
+				{
+					// 非正規会員
+					$arNewMember = $obMember -> getAt( ${ sprintf( "%s_memberid" , $mb_alias ) } ) ;
+
+					$arData = array() ;
+					$arData = $arNewMember ;
+					$arData[ $mb_alias . "_point"		] = $arNewMember[ sprintf( "%s_point" , $mb_alias ) ] 
+												- ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+					$arData[ $mb_alias . "_total_point"	] = $arNewMember[ sprintf( "%s_total_point" , $mb_alias ) ] 
+												- ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+					$arData[ $mb_alias . "_memberid"	] = ${ sprintf( "%s_memberid" , $mb_alias ) } ;
+
+					$obMember -> skip_check = true ;
+					$obMember -> updateData( $arData ) ;
+					$obMember -> skip_check = false ;
+				}
+			}
+		}
+	}
+
+	return $result ;
+}
+
+function	InsertData( $arParam )
+{
+	global	$obCart ;
+	global	$obCartItem ;
+	global	$obMember ;
+	global	$obMerchandise ;
+
+	$ct_alias	= $obCart -> alias ;
+	$ci_alias	= $obCartItem -> alias ;
+	$mb_alias	= $obMember -> alias ;
+	$m_alias	= $obMerchandise -> alias ;
+
+	$obSerialno		= new PARTS_Serialno() ;
+	$result = TRUE ;
+	$arData = array() ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// 既に伝票番号が決定している場合、2重オーダー
+	if ( $result )
+	{
+		$arWhere = array() ;
+		$arWhere[ "cartid" ] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+		$arCart = $obCart -> getData( $arWhere ) ;
+
+		if( $arCart[ 0 ][ sprintf( "%s_sheetno" , $ct_alias ) ] != "9999999999" )
+			$result = FALSE ;
+	}
+
+	// この時点で既に掲載終了商品が、カート内商品に含まれている場合を想定して、それらを削除し、とりあえずエラー終了する
+	if ( $result )
+	{
+		$obNow = new DateTime() ;
+		$now = $obNow -> format( "Ymd" ) ;
+		$arWhere = array() ;
+		$arWhere[ "cartid"	] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+		$arWhere[ "where"	]  = sprintf( "AND ( %s.start_date > to_timestamp( '%s 235959' , 'YYYYMMDD HH24MISS' ) " 
+				, $obMerchandise -> alias , $now ) ;
+		$arWhere[ "where"	] .= sprintf( "OR %s.end_date < to_timestamp( '%s 000000' , 'YYYYMMDD HH24MISS' ) ) " 
+				, $obMerchandise -> alias , $now ) ;
+
+		$arCartItem = $obCartItem -> getData( $arWhere ) ;
+		$cnt = count( $arCartItem ) ;
+
+		// 一つでもあったら、エラー終了して買えなくする
+		if( $cnt != 0 )
+		{
+			for ( $i = 0 ; $i < $cnt ; $i ++ )
+			{
+				$cartitemid = $arCartItem[ $i ][ sprintf( "%s_cartitemid" , $ci_alias ) ] ;
+				$obCartItem -> deleteData( $cartitemid ) ;
+			}
+			$result = FALSE ;
+		}
+
+	}
+
+	if ( $result && ${ sprintf( "%s_used_point" , $ct_alias ) } != 0 && ${ sprintf( "%s_member_flg" , $ct_alias ) } == 1 )
+	{
+		$arWhere = array() ;
+		$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $mb_alias ) } ;
+		$arMember = $obMember -> getData( $arWhere ) ;
+
+		if( ${ sprintf( "%s_used_point" , $ct_alias ) } > $arMember[ 0 ][ sprintf( "%s_point" , $mb_alias ) ] )
+		{
+			// 使用ポイント超過は、エラー
+			$result = FALSE ;
+		}
+		else
+		{
+			// オンラインの場合のみ減算、FAXの場合はここでは減算しない
+			if( ${ sprintf( "%s_orderway" , $ct_alias ) } == DEF_ORDER_ONLINE )
+			{
+				// ポイントを減算する
+				$arWhere = array() ;
+				$arWhere[ "memberid" ] = ${ sprintf( "%s_memberid" , $mb_alias ) } ;
+				$arMemberData = array() ;
+				$arMemberData[ "point"			] = $arMember[ 0 ][ sprintf( "%s_point" , $mb_alias ) ] - ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+				$arMemberData[ "total_point"	] = $arMember[ 0 ][ sprintf( "%s_total_point" , $mb_alias ) ] - ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+				$obMember -> updateData( $arMemberData , $arWhere ) ;
+			}
+		}
+	}
+
+	// 伝票番号取得
+	if ( $result )
+	{
+		$sheetno = $obSerialno -> createSerialNo( SERIALNO_TYPE_SHEETNO ) ;
+		if ( $sheetno == "" )
+			$result = FALSE ;
+		else
+			$arData[ $ct_alias . "_sheetno" ] = $sheetno ;
+	}
+
+	// カート管理情報更新（不足情報追加＆入金待ち状態へ）
+	if ( $result )
+	{
+		// ポイントの有効期限（一年後）算出
+		$obOrder_date = new DateTime( ${ sprintf( "%s_order_date" , $ct_alias ) } ) ;
+		$date_y = $obOrder_date -> format( "Y" ) ;
+		$date_m = $obOrder_date -> format( "n" ) ;
+		$date_d = $obOrder_date -> format( "j" ) ;
+		$temp_date = mktime( 0 , 0 , 0 , $date_m , $date_d , $date_y ) ;
+		$temp_date += ( 86400 * 365 ) ;
+		$limit_date = date( "Y-m-d H:i:s" , $temp_date ) ;
+
+		// 郵便番号、電話を整形
+		$zip	= sprintf( "%s-%s" , ${ sprintf( "%s_zip1" , $ct_alias ) } , ${ sprintf( "%s_zip2" , $ct_alias ) } ) ;
+		$tel	= sprintf( "%s-%s-%s" , 
+					${ sprintf( "%s_tel1" , $ct_alias ) } , 
+					${ sprintf( "%s_tel2" , $ct_alias ) } , 
+					${ sprintf( "%s_tel3" , $ct_alias ) } ) ;
+
+		if( ${ sprintf( "%s_member_flg"	, $ct_alias ) } == 1 )
+			$arData[ $ct_alias . "_memberid"		] = ${ sprintf( "%s_memberid"	, $mb_alias ) } ;
+		$arData[ $ct_alias . "_member_flg"	] = ${ sprintf( "%s_member_flg"	, $ct_alias ) } ;
+		$arData[ $ct_alias . "_settlement"	] = ${ sprintf( "%s_settlement"	, $ct_alias ) } ;
+		$arData[ $ct_alias . "_orderway"	] = ${ sprintf( "%s_orderway"	, $ct_alias ) } ;
+		$arData[ $ct_alias . "_order_date"	] = sprintf( "'%s'" , ${ sprintf( "%s_order_date"	, $ct_alias ) } ) ;
+		$arData[ $ct_alias . "_used_point"	] = ${ sprintf( "%s_used_point"	, $ct_alias ) } ;
+
+		// 購入ポイント
+		$arTempCart = array() ;
+		$arTempCart[ sprintf( "%s_shipping"		, $ct_alias ) ] = ${ sprintf( "%s_shipping"		, $ct_alias ) } ;
+		$arTempCart[ sprintf( "%s_order_date"	, $ct_alias ) ] = ${ sprintf( "%s_order_date"	, $ct_alias ) } ;
+		$arTempCart[ sprintf( "%s_settlement"	, $ct_alias ) ] = ${ sprintf( "%s_settlement"	, $ct_alias ) } ;
+		$arTempCart[ sprintf( "%s_state"		, $ct_alias ) ] = ${ sprintf( "%s_state"		, $ct_alias ) } ;
+		$arTempCart[ sprintf( "%s_state"		, $mb_alias ) ] = ${ sprintf( "%s_state"		, $mb_alias ) } ;
+		$arTempItem = array() ;
+		$arWhere = array() ;
+		$arWhere[ "cartid" ] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+		$arTempItem = $obCartItem -> getData( $arWhere ) ;
+		$arTempOrder = $obCart -> createOtherParam( $arTempCart , $arTempItem ) ;
+
+		$minus_yen = ${ sprintf( "%s_used_point"	, $ct_alias ) } * YEN_PER_POINT ;
+		$purchase_yen = $arTempOrder[ "total_price" ] - $minus_yen ;
+		if( $purchase_yen < 0 )
+			$purchase_yen = 0 ;
+		${ sprintf( "%s_append_point"	, $ct_alias ) } = $purchase_yen / POINT_PER_YEN ;
+		$arData[ $ct_alias . "_append_point"	] = ${ sprintf( "%s_append_point"	, $ct_alias ) } ;
+		$arData[ $ct_alias . "_limit_point"		] = ${ sprintf( "%s_append_point"	, $ct_alias ) } ;
+		$arData[ $ct_alias . "_limit_date"		] = sprintf( "'%s'" , $limit_date ) ;
+
+//		$arData[ $ct_alias . "_delivery_date"	] = sprintf( "'%s'" , ${ sprintf( "%s_delivery_date"	, $ct_alias ) } ) ;
+		$arData[ $ct_alias . "_delivery_time"	] = ${ sprintf( "%s_delivery_time"	, $ct_alias ) } ;
+
+		$arData[ $ct_alias . "_shipping"		] = ${ sprintf( "%s_shipping"		, $ct_alias ) } ;
+		if( ${ sprintf( "%s_shipping"	, $ct_alias ) } == 1 )
+		{
+			$arData[ $ct_alias . "_state"			] = ${ sprintf( "%s_state"		, $ct_alias ) } ;
+			$arData[ $ct_alias . "_city"			] = ${ sprintf( "%s_city"		, $ct_alias ) } ;
+			$arData[ $ct_alias . "_addr1"			] = ${ sprintf( "%s_addr1"		, $ct_alias ) } ;
+			$arData[ $ct_alias . "_addr2"			] = ${ sprintf( "%s_addr2"		, $ct_alias ) } ;
+			$arData[ $ct_alias . "_zip"				] = $zip ;
+			$arData[ $ct_alias . "_tel"				] = $tel ;
+			$arData[ $ct_alias . "_name"			] = ${ sprintf( "%s_name"		, $ct_alias ) } ;
+			$arData[ $ct_alias . "_comment"			] = ${ sprintf( "%s_comment"	, $ct_alias ) } ;
+		}
+
+		if( ${ sprintf( "%s_orderway"	, $ct_alias ) } == DEF_ORDER_FAX )
+			$arData[ $ct_alias . "_shipped_status"	] = DF_STATETRANS_FAX ;
+		$arData[ $ct_alias . "_billing_status"		] = DF_BILLSTATUS_SETTLING ;
+
+		$arData[ $ct_alias . "_cartid"		] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+		$obCart -> updateData( $arData , $arWhere ) ;
+	}
+
+	return $result ;
+}
+
+function	UpdateCartShipinfo( $arParam )
+{
+	global	$obCart ;
+	global	$obCartItem ;
+	global	$obMember ;
+
+	$ct_alias	= $obCart -> alias ;
+	$ci_alias	= $obCartItem -> alias ;
+	$mb_alias	= $obMember -> alias ;
+
+	$result		= false ;
+
+	// ローカル変数へ展開する
+	$keys = array_keys( $arParam ) ;
+	for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+		${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+	// ポイントの更新（差額をmember_dataに更新する）
+	if( $result )
+	{
+		$arWhere = array() ;
+		$arWhere[ "cartid" ] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+		$arTempCart = $obCart -> getData( $arWhere ) ;
+		$tempmemberid = $arTempCart[ 0 ][ sprintf( "%s_memberid" , $ct_alias ) ] ;
+		if( $tempmemberid != -1 )
+		{
+			$arWhere = array() ;
+			$arWhere[ "memberid" ] = $tempmemberid ;
+			$arMember = $obMember -> getData( $arWhere ) ;
+
+			// 今現在のユーザの使用可能ポイント
+			$mem_used_point = $arMember[ 0 ][ sprintf( "%s_point" , $mb_alias ) ] ;
+
+			// 元の使用ポイント
+			$org_used_point = $arTempCart[ 0 ][ sprintf( "%s_used_point" , $ct_alias ) ] ;
+
+			// 更新画面からの使用ポイント
+			$new_used_point = ${ sprintf( "%s_used_point" , $ct_alias ) } ;
+
+			$arData = array() ;
+			$arData[ "point"		] = $mem_used_point + ( $org_used_point - $new_used_point ) ;
+			$arData[ "total_point"	] = $mem_used_point + ( $org_used_point - $new_used_point ) ;
+
+			$result = $obMember -> updateData( $arData , $arWhere ) ;
+		}
+	}
+
+	if( $result )
+	{
+		$szZip = sprintf( "%s-%s" , ${ sprintf( "%s_zip1" , $ct_alias ) } , ${ sprintf( "%s_zip2" , $ct_alias ) } ) ;
+		$szTel = sprintf( "%s-%s-%s" , ${ sprintf( "%s_tel1" , $ct_alias ) }
+									 , ${ sprintf( "%s_tel2" , $ct_alias ) }
+									 , ${ sprintf( "%s_tel3" , $ct_alias ) } ) ;
+		$arWhere = array() ;
+		$arWhere[ "cartid" ] = ${ sprintf( "%s_cartid" , $ct_alias ) } ;
+		$arData = array() ;
+		$arData[ "settlement"		] = ${ sprintf( "%s_settlement"		, $ct_alias ) } ;
+		$arData[ "used_point"		] = ${ sprintf( "%s_used_point"		, $ct_alias ) } ;
+		$arData[ "delivery_date"	] = ${ sprintf( "%s_delivery_date"	, $ct_alias ) } ;
+		$arData[ "delivery_time"	] = ${ sprintf( "%s_delivery_time"	, $ct_alias ) } ;
+		$arData[ "shipping"			] = ${ sprintf( "%s_shipping"		, $ct_alias ) } ;
+		$arData[ "comment"			] = ${ sprintf( "%s_comment"		, $ct_alias ) } ;
+		$arData[ "name"				] = ${ sprintf( "%s_name"			, $ct_alias ) } ;
+		$arData[ "state"			] = ${ sprintf( "%s_state"			, $ct_alias ) } ;
+		$arData[ "city"				] = ${ sprintf( "%s_city"			, $ct_alias ) } ;
+		$arData[ "addr1"			] = ${ sprintf( "%s_addr1"			, $ct_alias ) } ;
+		$arData[ "addr2"			] = ${ sprintf( "%s_addr2"			, $ct_alias ) } ;
+		$arData[ "zip"				] = $szZip ;
+		$arData[ "tel"				] = $szTel ;
+		
+		$result = $obCart -> updateData( $arData , $arWhere ) ;
+	}
+
+	return $result ;
+}
+
+?>

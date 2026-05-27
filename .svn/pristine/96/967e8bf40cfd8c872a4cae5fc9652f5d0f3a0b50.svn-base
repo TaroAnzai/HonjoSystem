@@ -1,0 +1,376 @@
+<?php
+//ini_set( "display_errors" , 1 ) ;
+
+function	autosend()
+{
+	$blams = new BLAMS() ;
+	
+	$blams		= new BLAMS() ;
+	$obCorp		= new PARTS_Corp() ;
+	$obMember	= new PARTS_Member() ;
+	$obMailmag	= new PARTS_Mailmag() ;
+
+	$from_email = "" ;
+	$getdatakey = -1 ;
+	
+	$arCorp = $obCorp -> getOwner() ;
+	if ( count( $arCorp ) > 0 )
+	{
+		$pkey  = $obCorp -> primarykey ;
+		$alias = $obCorp -> alias ;
+		$key   = $alias . "_" . $pkey ;
+		
+		$arCorp = $arCorp[ 0 ] ;
+
+		$getdatakey = $arCorp[ $key ] ;
+		
+		$from_email = $arCorp[ $alias . "_remainder_email" ] ;
+		if ( empty( $from_email ) == true )
+			$from_email = $arCorp[ $alias . "_agent_email" ] ;
+	}
+
+	if ( empty( $from_email ) != true )
+	{
+		$arMailmag	= GetMailmag( $obMailmag ) ;
+		$arMember	= Getmember( $obMember ) ;
+	}
+
+	$cp_alias	= $obCorp -> alias ;
+	$mb_alias	= $obMember -> alias ;
+	$mag_alias	= $obMailmag -> alias ;
+
+	$cnt = count( $arMailmag ) ;
+	foreach ( $arMailmag as $arData )
+	{
+		// メールのステータス更新
+		UpdateMailmag( $arData , $obMailmag ) ;
+		
+		// メールの送信
+		SendMailMultipart( $blams , $arData , $arMember , $arCorp , $mag_alias , $mb_alias , $cp_alias ) ;
+	}
+	
+exit ;
+}
+
+function	GetMailmag( $obMailmag )
+{
+	$arMailmag = array() ;
+
+	$alias = $obMailmag -> alias ;
+	$now = new DateTime() ;
+	
+	$arWhere = array() ;
+	$arWhere[ "send_flg"	]  = DEF_MAILMAG_SENDFLG_OPENED ;
+	$arWhere[ "edit_flg"	]  = DEF_EDITSTATUS_OPENED ;
+
+	$arWhere[ "where"		]  = "" ;
+	$arWhere[ "where"		] .= sprintf( "AND ( " ) ;
+	$arWhere[ "where"		] .= sprintf( " ( %s.send_date = '0001-01-01 00:00:00' " , $alias ) ;
+	$arWhere[ "where"		] .= sprintf( "   AND %s.send_type = %d ) " , $alias , DEF_MAILMAG_SEND_INC ) ;
+	$arWhere[ "where"		] .= sprintf( " OR " ) ;
+	$arWhere[ "where"		] .= sprintf( " ( %s.send_date <= '%s' " , $alias , $now -> format( "Y-m-d H:i:s" ) ) ;
+	$arWhere[ "where"		] .= sprintf( "   AND %s.send_type = %d ) " , $alias , DEF_MAILMAG_SEND_TIME ) ;
+	$arWhere[ "where"		] .= sprintf( ") " ) ;
+
+	$arWhere[ "order"		]  = "" ;
+	$arWhere[ "order"		] .= sprintf( "%s.send_date " , $alias ) ;
+	
+	$arMailmag = $obMailmag -> getData( $arWhere , 0 , false ) ;
+
+	return $arMailmag ;
+}
+
+function	Getmember( $obMember )
+{
+	$arMember = array() ;
+
+	$alias = $obMember -> alias ;
+	
+	$arWhere = array() ;
+
+	$arWhere[ "where"		]  = "" ;
+	$arWhere[ "where"		] .= sprintf( "AND %s.magazine != 0 " , $alias ) ;
+	$arWhere[ "where"		] .= sprintf( "AND ( %s.email_home != '' OR %s.email_port != '' ) " , $alias , $alias ) ;
+
+	$arWhere[ "order"		]  = "" ;
+	$arWhere[ "order"		] .= sprintf( "%s.email_home , %s.email_port " , $alias , $alias ) ;
+	
+	$arMember = $obMember -> getData( $arWhere , 0 , false ) ;
+	
+	return $arMember ;
+}
+
+function	SendMailMultipart( $blams , $arMailmag , $arMember , $arCorp , $mag_alias , $mb_alias , $cp_alias )
+{
+	$from_email = $arCorp[ $cp_alias . "_remainder_email" ] ;
+	if ( empty( $from_email ) == true )
+		$from_email = $arCorp[ $cp_alias . "_agent_email" ] ;
+
+	$from_name = $arCorp[ $cp_alias . "_name" ] ;
+
+	$cnt = count( $arMember ) ;
+	foreach ( $arMember as $arData )
+	{
+		$type = false ;
+		$boundary = "" ;
+		$exheader = "" ;
+		if ( $arMailmag[ $mag_alias . "_type" ] == DEF_MAILMAG_TYPE_HTML )
+		{
+			$seed		= sprintf( "%d" , microtime( false ) ) ;
+			$md5		= md5( $seed ) ;
+			$boundary	= sprintf( "%s-%s" , substr( $md5 , 0 , 8 ) , substr( $md5 , 8 ) ) ;
+
+			$type = true ;
+		}
+		
+		$magazine	= $arData[ $mb_alias . "_magazine"		] ;
+		$email_home	= $arData[ $mb_alias . "_email_home"	] ;
+		$email_port	= $arData[ $mb_alias . "_email_port"	] ;
+
+		$fmt		= mb_convert_encoding( "[%s] %s" , "sjis-win" , "utf8" ) ;
+		$subject	= sprintf( $fmt , $from_name , $arMailmag[ $mag_alias . "_subject" ] ) ;
+
+		$to_name	= sprintf( "%s %s" , $arData[ $mb_alias . "_last_name" ] , $arData[ $mb_alias . "_first_name" ] ) ;
+
+		// PCメールへの配信
+		$obMail = new PARTS_Mail() ;
+	
+		if ( empty( $email_home ) == false && ( $magazine & DEF_MAILTOHOME ) == DEF_MAILTOHOME )
+		{
+			$to_email	= $email_home ;
+
+			$body = MakeMailBody( $blams , $arMailmag , $arData , $arCorp , $mag_alias , $boundary , $exheader ) ;
+			$obMail -> sendPlane( $from_email , $from_name , $to_email , $to_name , $subject , $body , true , $type , "" , $exheader ) ;
+		}
+		
+		// 携帯メールへの配信
+		if ( empty( $email_port ) == false && ( $magazine & DEF_MAILTOPORT ) == DEF_MAILTOPORT )
+		{
+			$to_email	= $email_port ;
+
+			$body = MakeMailBody( $blams , $arMailmag , $arData , $arCorp , $mag_alias , $boundary , $exheader ) ;
+			$obMail -> sendPlane( $from_email , $from_name , $to_email , $to_name , $subject , $body , true , $type , "" , $exheader ) ;
+		}
+	}
+}
+
+// メール本文の作成
+function	MakeMailBody( $blams , $arMailmag , $arMember , $arCorp , $mag_alias , $boundary , &$exheader )
+{
+	$body = "" ;
+
+	$obMail = new PARTS_Mail() ;
+
+	$tmpl = $blams -> tmpl ;
+
+	$tmpl -> assign( "member_data" , $arMember ) ;
+	$header = $tmpl -> fetch( "mailmagazine/mailmag_header.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	$tmpl -> assign( "mailmag_data" , $arMailmag ) ;
+	$sentence_text = $tmpl -> fetch( "mailmagazine/mailmag_plane.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	$tmpl -> assign( "corp_data" , $arCorp ) ;
+	$footer = $tmpl -> fetch( "mailmagazine/mailmag_footer.tmpl" ) ;
+	$tmpl -> clearAllAssign() ;
+
+	$exheader = "" ;
+
+	if ( $arMailmag[ $mag_alias . "_type" ] == DEF_MAILMAG_TYPE_TEXT )
+	{
+		$body  = "" ;
+		$body .= $header ;
+		$body .= $sentence_text ;
+		$body .= $footer ;
+	}
+	else if ( $arMailmag[ $mag_alias . "_type" ] == DEF_MAILMAG_TYPE_HTML )
+	{
+		$sentence = $arMailmag[ $mag_alias . "_sentence_html" ] ;
+
+		$sentence_html  = "" ;
+		$sentence_html .= "<HTML><HEAD><meta http-equiv=\"Content-Type\" content=\"text/html; charset=iso-2022-jp\">" ;
+		$sentence_html .= "<BODY>" ;
+		$sentence_html .= sprintf( "<DIV>%s</DIV>" , nl2br( $header ) ) ;
+		$sentence_html .= $sentence ;
+		$sentence_html .= sprintf( "<DIV>%s</DIV>" , nl2br( $footer ) ) ;
+		$sentence_html .= "</BODY></HTML>" ;
+
+		$arImage = MakeImageList( $sentence_html ) ;
+
+		$sentence_html  = mb_convert_encoding( $sentence_html , "iso-2022-jp" , "sjis-win" ) ;
+		$sentence_html  = $obMail -> quoted_printable_encode( $sentence_html ) ;
+
+		$tmpl -> assign( "boundary" , $boundary ) ;
+		$tmpl -> assign( "image_data"	, $arImage ) ;
+		$exheader = $tmpl -> fetch( "mailmagazine/mailmag_header_ex.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+
+		$tmpl -> assign( "mailmag_data"	, $arMailmag ) ;
+		$tmpl -> assign( "plane"		, $sentence_text ) ;
+		$tmpl -> assign( "html"			, $sentence_html ) ;
+		$tmpl -> assign( "header"		, $header ) ;
+		$tmpl -> assign( "footer"		, $footer ) ;
+		$tmpl -> assign( "boundary"		, $boundary ) ;
+		$tmpl -> assign( "image_data"	, $arImage ) ;
+		$body = $tmpl -> fetch( "mailmagazine/mailmag_html.tmpl" ) ;
+		$tmpl -> clearAllAssign() ;
+	}
+
+	unset( $tmpl ) ;
+	return $body ;
+}
+
+function MakeImageList( &$body , $conn = -1 )
+{
+	$arImage = array() ;
+	
+	// BODYの中にIMG SRCがあるか？
+	$body = str_replace( "alt=\"\" " , ""	, $body ) ;
+	$body = str_replace( "\r\n"	, "\n"		, $body ) ;
+	$body = str_replace( "\r"	, "\n"		, $body ) ;
+	$body = str_replace( "\t" 	, ""		, $body ) ;
+	$body = str_replace( " />"	, ">"		, $body ) ;
+	$body = str_replace( " />"	, ">"		, $body ) ;
+	$body = str_replace( "<p"	, "<DIV"	, $body ) ;
+	$body = str_replace( "/p>"	, "/DIV>"	, $body ) ;
+	$body = str_replace( "<br>"	, "<BR>"	, $body ) ;
+
+	$obPhoto = new PARTS_Photo() ;
+	$alias = $obPhoto -> alias ;
+	
+	$pos = 0 ;
+	$token = substr( $body , $pos ) ;
+	while ( $token != "" )
+	{
+		$num = sizeof( $arImage ) ;
+	
+		$img = strpos( $token , "<img " ) ;
+		if ( $img !== FALSE )
+		{
+			$img = strpos( $token , "src=\"" ) ;
+			if (  $img !== FALSE )
+			{
+				$img_e = strpos( $token , ">" , $img ) ;
+				$pos = $img_e + 1 ;
+				
+				// 画像ファイルの取り出し
+				$img = strpos( $token , "\"" , $img ) ;
+				if ( $img !== FALSE )
+				{
+					$img ++ ;
+					$img_e = strpos( $token , "\"" , $img ) ;
+					
+					$src = substr( $token , $img , $img_e - $img ) ;
+					
+					$dest = sprintf( "%02d@%s" , $num + 1 , date( "ymd.His@____" ) ) ;
+
+					$arImageSrc = GetImgSrc( $src , $obPhoto ) ;
+					
+					// 画像データの取得
+					if ( sizeof( $arImageSrc ) != 0 )
+					{
+						$imagetype = $arImageSrc[ $alias . "_type" ] ;
+						$imagedata = $arImageSrc[ $alias . "_data" ] ;
+
+						switch ( $imagetype )
+						{
+						case	IMAGETYPE_GIF :
+							$imagetype = "image/gif" ;
+							break ;
+						case	IMAGETYPE_JPEG :
+							$imagetype = "image/jpeg" ;
+							break ; 
+						case	IMAGETYPE_PNG :
+							$imagetype = "image/png" ;
+							break ;
+							
+						default	:
+							$imagetype = "application/binary" ;
+						}
+
+						$arData = array() ;
+						$arData[ "Content-Type: "				] = $imagetype . ";" ;
+						$arData[ " name="						] = sprintf( "\"%s\"" , $arImageSrc[ $alias . "_name" ] ) ;
+						$arData[ "Content-Transfer-Encoding: "	] = "base64" ;
+						$arData[ "Content-ID: "					] = sprintf( "<%s>" , $dest ) ;
+						$arData[ "data"							] = $imagedata ;
+						
+						$arImage[] = $arData ;
+						
+						$body = str_replace( $src , "cid:" . $dest , $body ) ;
+					}
+				}
+			}
+		}
+		else
+		{
+			break ;
+		}
+		
+		$token = substr( $token , $pos ) ;
+	}
+
+	return $arImage ;
+}
+
+function	GetImgSrc( $src , $obPhoto )
+{
+	// パスよりパラメータを取得する
+	$path = $src ;
+	$path = str_replace( ".png" , "" , $path ) ;
+	$path = str_replace( ".gif" , "" , $path ) ;
+	$path = str_replace( ".jpg" , "" , $path ) ;
+	$arList = explode( "/" , $path ) ;
+
+	for ( $i = 1 ; $i < sizeof( $arList ) ; $i ++ )
+	{
+		$flg   = substr( $arList[ $i ] , 0 , 1 ) ;
+		$value = substr( $arList[ $i ] , 1 ) ;
+		switch( $flg )
+		{
+		case	"I" :	// color
+			$photoid = $value ;
+			break ;
+		}
+	}
+
+	if ( $photoid == "" )
+		$photoid = -1 ;
+
+	// 写真情報取得
+	$file = null ;
+	$arResult = array() ;
+	if ( $photoid != -1 )
+	{
+		$arWhere = array() ;
+		$arWhere[ "photoid" ] = $photoid ;
+		
+		$arResult = $obPhoto -> getData( $arWhere , 0 , false ) ;
+		if ( count( $arResult ) > 0 )
+			$arResult = $arResult[ 0 ] ;
+	}
+	return $arResult ;
+}
+
+
+function UpdateMailmag( $arMailmag , $obMailmag )
+{
+	$table	= $obMailmag -> tname ;
+	$pkey	= $obMailmag -> primarykey ;
+	$alias	= $obMailmag -> alias ;
+	$key	= $alias . "_" . $pkey ;
+	
+	$sql  = "" ;
+	$sql .= sprintf( "UPDATE %s SET   " , $table ) ;
+	$sql .= sprintf( "send_flg = %d , " , DEF_MAILMAG_SENDFLG_COMP ) ;
+	$sql .= sprintf( "update_date = LOCALTIMESTAMP(0) " ) ;
+	$sql .= sprintf( "WHERE status = 1 " ) ;
+	$sql .= sprintf( "AND %s = %d " , $pkey , $arMailmag[ $key ] ) ;
+
+	$record = $obMailmag -> executeSQL( $sql ) ;
+	if ( $record )
+		$obMailmag -> closeRecord( $record ) ;
+}
+
+?>

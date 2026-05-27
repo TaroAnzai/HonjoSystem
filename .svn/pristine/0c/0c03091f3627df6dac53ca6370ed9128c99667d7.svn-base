@@ -1,0 +1,339 @@
+<?php
+/**
+* BLAMS 基本関数郡 諸設定用クラス
+*
+* 諸設定用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+//
+//	ポイント加算フラグ
+//
+define( "DEF_ADDFLG_OFF"		,	0	) ;		// しない
+define( "DEF_ADDFLG_ON"			,	1	) ;		// する
+
+global $arAddFlg ;
+$arAddFlg = array(
+	DEF_ADDFLG_OFF	=> "しない" ,
+	DEF_ADDFLG_ON	=> "する" ,
+) ;
+
+//
+//	ポイント加算タイミング
+//
+define( "DEF_POINT_INCOME"			,	1	) ;		// 入金時
+define( "DEF_POINT_SHIP"			,	2	) ;		// 発送時
+
+global $arAddTiming ;
+$arAddTiming = array(
+	DEF_POINT_INCOME	=> "入金時" ,
+	DEF_POINT_SHIP		=> "発送時" ,
+) ;
+
+require_once(	'class/db.class.php' ) ;
+require_once(	'class/corp.class.php' ) ;
+
+class PARTS_Config extends DB_Common
+{
+	function	__construct(  $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "config_data" ;
+		$alias		= "cf" ;
+		$primarykey	= "configid" ;
+
+		parent::__construct(  $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+		
+		$this -> per_page		= NUMBER_PER_CORP ;
+
+		$this -> searchkey = array(
+				"S_CORPID"		,
+			) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$alias = $this -> alias ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s   " , $this -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+		
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $this -> primarykey , ${ $this -> primarykey } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+		
+		// 会社ID
+		if ( $corpid != -1 && $corpid != "" )
+			$sql .= sprintf( "AND %s.corpid = '%s' " , $this -> alias , $this -> mb_addslashes( $corpid ) ) ;
+
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.corpid , " , $this -> alias ) ;
+				$sql .= sprintf( "%s.configid " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+	
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+			// 社名
+			if ( ${ $alias . "_corpid" } == -1 )
+			{
+				$error .= "・社名が選択されていません。\n" ;
+			}
+			else
+			{
+				// 入力にエラーが無い場合は、重複チェックを行う
+				$arWhere = array() ;
+				$arWhere[ "corpid"	] = $arParam[ $alias . "_corpid" ] ;
+				if ( $mode == "update" )
+					$arWhere[ "where"	] = sprintf( "AND %s.%s != %d" , $alias , $primarykey , ${ $keyname } ) ;
+
+				$arCheck = $this -> getData( $arWhere ) ;
+				if ( count( $arCheck ) > 0 )
+					$error .= "・同じ社名で既に設定されています。\n" ;
+			}
+
+			// ポイント還元率
+			if ( is_numeric( ${ $alias . "_yen_per_point" } ) == FALSE )
+				$error .= "・ポイント還元率が正しく入力されていません。\n" ;
+	
+			// ポイント加算率
+			if ( is_numeric( ${ $alias . "_point_per_yen" } ) == FALSE )
+				$error .= "・ポイント加算率が正しく入力されていません。\n" ;
+	
+			// ポイント使用単位
+			if ( is_numeric( ${ $alias . "_point_unit" } ) == FALSE )
+				$error .= "・ポイント使用単位が正しく入力されていません。\n" ;
+	
+			// 最低ポイント使用数
+			if ( is_numeric( ${ $alias . "_under_limit" } ) == FALSE )
+				$error .= "・最低ポイント使用数が正しく入力されていません。\n" ;
+	
+			// 包装料金
+			if ( is_numeric( ${ $alias . "_price_wrapping" } ) == FALSE )
+				$error .= "・包装料金が正しく入力されていません。\n" ;
+	
+			// のし料金
+			if ( is_numeric( ${ $alias . "_price_decoration" } ) == FALSE )
+				$error .= "・のし料金が正しく入力されていません。\n" ;
+	
+			// クール便料金
+			if ( is_numeric( ${ $alias . "_price_coolpack" } ) == FALSE )
+				$error .= "・クール便料金が正しく入力されていません。\n" ;
+	
+			// 1箱あたりの内容数
+			if ( is_numeric( ${ $alias . "_unit_per_box" } ) == FALSE )
+				$error .= "・1箱あたりの内容数が正しく入力されていません。\n" ;
+
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias = $this -> alias ;
+		
+//		$now = date( "Y-m-d H:i:s" ) ;
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ "configid"			] = -1	;
+		$arParam[ "corpid"				] = -1	;
+		$arParam[ "yen_per_point"		] = ""	;
+		$arParam[ "point_per_yen"		] = ""	;
+		$arParam[ "point_unit"			] = ""	;
+		$arParam[ "under_limit"			] = ""	;
+		$arParam[ "price_wrapping"		] = ""	;
+		$arParam[ "price_decoration"	] = ""	;
+		$arParam[ "price_coolpack"		] = ""	;
+		$arParam[ "unit_per_box"		] = ""	;
+	
+		$arParam[ "create_date"			] = $now ;
+		$arParam[ "update_date"			] = $now ;
+	}
+
+	//
+	// 新規データ登録
+	//
+	function insertData( &$arParam )
+	{
+		$result = false ;
+
+		$result = parent::insertData( $arParam , -1 , "" ) ;
+		
+		return $result ;
+	}
+
+	//
+	// 新規データ登録
+	//
+	function updateData( $arParam )
+	{
+		$result = false ;
+	
+		$result = parent::updateData( $arParam , -1 , "" ) ;
+
+		return $result ;
+	}
+	
+	// 諸設定を取得する
+	function getConfig( $corpid = -1 )
+	{
+		$arData = array() ;
+
+		// corpid が -1 なら自社の corpid を取得する
+		if( $corpid == -1 )
+		{
+			$arCorp = array() ;
+			$obCorp = new PARTS_Corp( $this -> conn ) ;
+			$arCorp = $obCorp -> getOwner() ;
+			if ( count( $arCorp ) > 0 )
+			{
+				$arCorp = $arCorp[ 0 ] ;
+				$corpid = $arCorp[ sprintf( "%s_corpid" , $obCorp -> alias ) ] ;
+			}
+		}
+
+		if( $corpid != -1 )
+		{
+			$sql  = "" ;
+			$sql .= sprintf( "SELECT * FROM config_data " ) ;
+			$sql .= sprintf( "WHERE status = 1 " ) ;
+			$sql .= sprintf( "AND corpid = '%d' " , $corpid ) ;
+			$arData = $this -> getValueAll( $sql ) ;
+		}
+
+		return $arData ;
+	}
+
+	// メール送信時にconfig_dataに登録されているかチェックする
+	function	in_MailTiming( $timing , $corpid = -1 )
+	{
+		$arConfig = array() ;
+		$arMailTiming = array() ;
+		$result = false ;
+
+		$arConfig = $this -> getConfig( $corpid ) ;
+		if( count( $arConfig ) )
+		{
+			$arMailTiming = BLAMS::makeCategoryArray( $arConfig[ "mail_timing" ] ) ;
+			if( in_array( $timing , $arMailTiming ) )
+				$result = true ;
+		}
+		return $result ;
+	}
+
+	// 配送指定日のデフォルト指定日を設定する
+	// 戻り値はオブジェクトなので注意
+	function	setDelivery_dateDefault()
+	{
+		$obNow = new DateTime() ;
+		$obDelivery_date_default = new DateTime() ;
+		$arConfig = $this -> getConfig() ;
+
+		$now_hour = $obNow -> format( "G" ) ;
+		if( $arConfig[ "deliver_limittime" ] == -1 )
+		{
+			$mod = sprintf( "+%d day" , $arConfig[ "deliver_start" ] ) ;
+			$obDelivery_date_default -> modify( $mod ) ;
+		}
+		else
+		{
+			if ( $now_hour < $arConfig[ "deliver_limittime" ] )
+			{
+				$mod = sprintf( "+%d day" , $arConfig[ "deliver_start" ] ) ;
+				$obDelivery_date_default -> modify( $mod ) ;
+			}
+			else
+			{
+				$mod = sprintf( "+%d day" , $arConfig[ "deliver_start" ]+1 ) ;
+				$obDelivery_date_default -> modify( $mod ) ;
+			}
+		}
+		return $obDelivery_date_default ;
+	}
+}
+?>

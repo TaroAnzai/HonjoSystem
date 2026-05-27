@@ -1,0 +1,246 @@
+<?php
+/**
+* BLAMS 基本関数郡 業務・商品データ用クラス
+*
+* 業務・商品データ用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+define( "NUMBER_PER_PRODUCT"			,	10	) ;		// 行数／ページ
+
+require_once( 'class/db.class.php' ) ;
+require_once( 'class/category.class.php' ) ;
+
+class PARTS_Product extends DB_Common
+{
+	var	$obCategory ;
+	var	$obPhoto ;
+	var $obTopics ;
+	
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "product_data" ;
+		$alias		= "pd" ;
+		$primarykey	= "productid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+	
+		$this -> per_page		= NUMBER_PER_PRODUCT ;
+	
+		$this -> obCategory = new PARTS_Category( $this -> conn ) ;
+		$this -> obPhoto	= new PARTS_Photo( $this -> conn ) ;
+		$this -> obTopics	= new PARTS_Topics( $this -> conn ) ;
+		
+		$this -> searchkey = array(
+				"S_KIND"			,
+				"S_NAME"			,
+				"S_CATEGORYID"		,
+				"S_MAIN_FLG"		,
+				"S_EDIT_FLG"		,
+			) ;
+		
+		$this -> images = array( "photoid" , "photoid1" , "pdfid" ) ;
+	}
+
+	function	getData( $arParam , $page = -1 , $per_page = -1 )
+	{
+		$this -> arData = array() ;
+
+		$arData = array() ;
+		if ( $this -> isOpen() == true )
+		{
+			$fields  = "" ;
+			$fields .= sprintf( "%s , " , $this -> makeAliaseFields() ) ;
+			$fields .= sprintf( "%s   " , $this -> obCategory -> makeAliaseFields() ) ;
+
+			$sql = $this -> makeSQL( $arParam , $fields , $page , $per_page ) ;
+
+			$arData = parent::getData( $sql ) ;
+
+			$this -> arData = $arData ;
+		}
+		
+		return $arData ;
+	}
+
+	function	makeSQL( $arParam , $fields , $page = -1 , $per_page = -1 )
+	{
+		$arParamList = $this -> fields ;
+		$arParamList[] = "where" ;
+		$arParamList[] = "order" ;
+
+		for ( $i = 0 ; $i < count( $arParamList ) ; $i ++ )
+		{
+			if ( isset( $arParam[ $arParamList[ $i ] ] ) != true )
+				$arParam[ $arParamList[ $i ] ] = -1 ;
+		}
+
+		if ( $per_page == -1 )
+			$per_page = $this -> per_page ;
+	
+		// ローカル変数へ展開する
+		$keys = array_keys( $arParam ) ;
+		for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+			${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+
+		$id  = $this -> primarykey ;
+		$cid = $this -> obCategory -> primarykey ;
+
+		$sql  = "" ;
+		$sql .= sprintf( "SELECT " ) ;
+		$sql .= sprintf( "%s " , $fields ) ;
+		$sql .= sprintf( "FROM %s %s " , $this -> tname , $this -> alias ) ;
+		$sql .= sprintf( "LEFT JOIN %s %s ON %s.%s = %s.%s " , 
+							$this -> obCategory -> tname ,
+							$this -> obCategory -> alias ,
+							$this -> alias ,
+							$cid ,
+							$this -> obCategory -> alias ,
+							$cid
+						) ;
+		
+		$sql .= sprintf( "WHERE %s.status = 1 " , $this -> alias ) ;
+
+		$limit = "" ;
+		if ( ${ $this -> primarykey } != -1 )
+			$sql .= sprintf( "AND %s.%s = %d " , $this -> alias , $id , ${ $id } ) ;
+		else
+			if ( $page != -1 )
+				$limit = sprintf( "LIMIT %d OFFSET %d " , $per_page , ( $page * $per_page ) ) ;
+
+		// 名前による検索
+		if ( $name != -1 && $name != "" )
+			$sql .= sprintf( "AND %s.name like '%%%s%%' " , $this -> alias , $this -> mb_addslashes( $name ) ) ;
+
+		// 商品種類による検索
+		if ( $type != -1 )
+			$sql .= sprintf( "AND %s.type = %d " , $this -> alias , $type ) ;
+
+		// 主要商品フラグよる検索
+		if ( $edit_flg != -1 )
+			$sql .= sprintf( "AND %s.edit_flg = %d " , $this -> alias , $edit_flg ) ;
+
+		// 主要商品フラグよる検索
+		if ( $main_flg != -1 )
+			$sql .= sprintf( "AND %s.main_flg = %d " , $this -> alias , $main_flg ) ;
+
+		// カテゴリーによる検索
+		$ccnt = count( ${ $cid } ) ;
+		if ( is_array( ${ $cid } ) == true && $ccnt > 0 )
+		{
+			$sql_category = "" ;
+			for ( $c = 0 ; $c < $ccnt ; $c ++ )
+			{
+				if ( $sql_category != "" )
+					$sql_category .= "OR " ;
+				$sql_category .= sprintf( "%s.%s = %d " , $this -> alias , $cid , ${ $cid }[ $c ] ) ;
+			}
+			
+			if ( $sql_category != "" )
+				$sql .= sprintf( "AND ( %s ) " , $sql_category ) ;
+		}
+		
+		if ( $where != -1 )
+			$sql .= sprintf( "%s " , $where ) ;
+		
+		if ( $order != "" )
+		{
+			if ( $order != -1 )
+			{
+				$sql .= sprintf( "ORDER BY %s " , $order ) ;
+			}
+			else
+			{
+				$sql .= sprintf( "ORDER BY " ) ;
+				$sql .= sprintf( "%s.type      , " , $this -> alias ) ;
+				$sql .= sprintf( "%s.category1 , " , $this -> obCategory -> alias ) ;
+				$sql .= sprintf( "%s.category2 , " , $this -> obCategory -> alias ) ;
+				$sql .= sprintf( "%s.category3 , " , $this -> obCategory -> alias ) ;
+				$sql .= sprintf( "%s.sort      , " , $this -> alias ) ;
+				$sql .= sprintf( "%s.name        " , $this -> alias ) ;
+			}
+		}
+		$sql .= $limit ;
+
+		return $sql ;
+	}
+	
+	// データ検査
+	function	checkData( $mode , $func , &$arParam )
+	{
+		$alias		= $this -> alias ;
+		$primarykey	= $this -> primarykey ;
+		$keyname	= $alias . "_" . $this -> primarykey ;
+	
+		$error = "" ;
+		if ( $this -> isOpen() )
+		{
+			// ローカル変数へ展開する
+			$keys = array_keys( $arParam ) ;
+			for ( $i = 0 ; $i < count( $keys ) ; $i ++ )
+				${ $keys[ $i ] } = $arParam[ $keys[ $i ] ] ;
+		
+			// 詳細
+			if ( ${ $alias . "_detail" } == "" )
+				$error .= "・詳細が入力されていません。\n" ;
+		
+			// カテゴリ
+			if ( ${ $alias . "_categoryid" } == -1 )
+				$error .= "・カテゴリが選択されていません。\n" ;
+			
+			$obPhoto = $this -> obPhoto ;
+			$error .= $obPhoto -> checkData( $alias . "_photoid_img"	, $alias . "_photoid_tmp"	, $arParam	, "img"	, "画像"		) ;
+			$error .= $obPhoto -> checkData( $alias . "_photoid1_img"	, $alias . "_photoid1_tmp"	, $arParam	, "img"	, "アイコン"	) ;
+			$error .= $obPhoto -> checkData( $alias . "_pdfid_img"		, $alias . "_pdfid_tmp"		, $arParam	, "pdf"	, "PDFファイル"	) ;
+		
+			// 編集状態
+			if ( ${ $alias . "_edit_flg" } == -1 )
+				$error .= "・編集状態が選択されていません。\n" ;
+
+		}
+		else
+		{
+			$error .= "・DBに接続できませんでした。\n" ;
+		}
+		return $error ;
+	}
+
+	//
+	// 新規データの初期化
+	//
+	function	initData( &$arParam )
+	{
+		parent::initData( $arParam ) ;
+		
+		$alias		= $this -> alias ;
+				
+		$arParam[ $alias . "_productid"		] = -1 ;
+		$arParam[ $alias . "_linkname"		] = "" ;
+		$arParam[ $alias . "_name"			] = "" ;
+		$arParam[ $alias . "_catch"			] = "" ;
+		$arParam[ $alias . "_detail"		] = "" ;
+		
+		$arParam[ $alias . "_type"			] = -1 ;
+		$arParam[ $alias . "_sort"			] = 0 ;
+		
+		$arParam[ $alias . "_categoryid"	] = -1 ;
+		$arParam[ $alias . "_photoid"		] = -1 ;
+		$arParam[ $alias . "_photoid1"		] = -1 ;
+		$arParam[ $alias . "_pdfid"			] = -1 ;
+		$arParam[ $alias . "_main_flg"		] = -1 ;
+		$arParam[ $alias . "_edit_flg"		] = DEF_EDITSTATUS_EDITTING ;
+
+		$now_date = new DateTime();
+		$now = $now_date -> format( "Y-m-d H:i:s" ) ;
+		$arParam[ $alias . "_create_date"	] = $now ;
+		$arParam[ $alias . "_update_date"	] = $now ;
+
+	}
+	
+}
+?>

@@ -1,0 +1,46 @@
+<?php
+// ‘——¿î•ñ
+function	fetchLink( $type = "top" )
+{
+	global	$arLinkCategory ;
+	
+	$arLink = array() ;
+
+	$func	= GetFuncNumber() ;
+
+	global	$arPresonalFunction ;
+	$funcName = array_search( $func , $arPresonalFunction ) ;
+
+	$tmpl = new HTML_template( DEF_DEFAULT_TEMPLATENAME ) ;
+	
+	$obLink = new PARTS_Link() ;
+	if ( $obLink -> isOpen() )
+	{
+		// ŒfÚ‰Â”\‚È‘——¿î•ñ‚ª‚ ‚é‚©H
+		$arWhere = array() ;
+		$arLink = $obLink -> getData( $arWhere , 0 , false ) ;
+		
+		$cnt = count( $arLink ) ;
+		if ( $cnt != 0 )
+			$tmpl -> assign( "link_data"	, $arLink ) ;
+	}
+	
+	$tmpl -> assign( "func"				, $func ) ;
+	$tmpl -> assign( "funcName"			, $funcName ) ;
+	$tmpl -> assign( "type"				, $type ) ;
+	$tmpl -> assign( "category_data"	, $arLinkCategory	) ;
+
+	if ( $type == "top" )
+		$link = $tmpl -> fetch( "link/link_index.tmpl" ) ;
+	else if ( $type == "sub" )
+		$link = $tmpl -> fetch( "link/link_sub.tmpl" ) ;
+	else if ( $type == "menu" )
+		$link = $tmpl -> fetch( "link/link_menu.tmpl" ) ;
+	else
+		$link = $tmpl -> fetch( "link/link.tmpl" ) ;
+	unset( $tmpl ) ;
+
+	return $link ;
+}
+
+?>

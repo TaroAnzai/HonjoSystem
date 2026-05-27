@@ -1,0 +1,275 @@
+<?php
+	require_once( "../../../lib/system.php") ;
+	require_once( "class/pdf_delivery.class.php" )  ;
+	require_once( "class/cart.class.php" )  ;
+	require_once( "class/member.class.php" )  ;
+	require_once( "class/address.class.php" )  ;
+
+	$obCart		= new PARTS_Cart() ;
+	$obMember	= new PARTS_Member() ;
+
+	if( ${ sprintf( "%s_cartid" , $obCart -> alias ) } == "" )
+	{
+		exit ;
+	}
+	else
+	{
+		if( $obCart -> changePrintStatus( ${ sprintf( "%s_cartid" , $obCart -> alias ) } ) == false )
+			exit ;
+	}
+
+	$arParam = GetData( ${ sprintf( "%s_cartid" , $obCart -> alias ) } ) ;
+
+	$arWrapDeco = array() ;
+
+	// 包装
+	global	$arWrapStatus ;
+	$szWrapStatus = $arWrapStatus[ $arParam[ "cart_order" ][ "wrapping_flg" ] ] ;
+	$arParam[ "szWrapStatus"	] = $szWrapStatus ;
+	$arWrapDeco[ "wrapping_flg" ] = $arParam[ "cart_order" ][ "wrapping_flg" ] ;
+
+	// のし
+	global	$arDecorStatus ;
+	$szDecorStatus = $arDecorStatus[ $arParam[ "cart_order" ][ "decoration_flg" ] ] ;
+	if( $arParam[ "cart_order" ][ "decoration_flg" ] == DF_DECORSTATUS_TRUE && $arParam[ "cart_order" ][ "deco_used" ] != -1 )
+	{
+		$szDecorStatus .= sprintf( "（%s）" , $arParam[ "cart_order" ][ "deco_used_string" ] ) ;
+	}
+	$arParam[ "szDecorStatus"		] = $szDecorStatus ;
+	$arWrapDeco[ "decoration_flg"	] = $arParam[ "cart_order" ][ "decoration_flg" ] ;
+	$arWrapDeco[ "deco_used"		] = $arParam[ "cart_order" ][ "deco_used_string" ] ;
+
+	// 配送時間
+	global	$arDeliveryTime ;
+	$szDeliveryTime = $arDeliveryTime[ $arParam[ sprintf( "%s_delivery_time" , $obCart -> alias ) ] ] ;
+	if( $szDeliveryTime == "" )
+		$szDeliveryTime = "なし" ;
+	$arParam[ "szDeliveryTime"		] = $szDeliveryTime ;
+
+	$minus_yen = $arParam[ sprintf( "%s_used_point" , $obCart -> alias ) ] * YEN_PER_POINT ;
+//	$purchase_yen = $arParam[ "cart_order" ][ "total_price" ] - $minus_yen ;
+	$purchase_yen = $arParam[ "cart_order" ][ "total_price" ] + ( $arParam[ "cart_order" ][ "total_price" ] * count( $arParam[ "add_address" ] ) ) - $minus_yen ;
+
+	if( $purchase_yen < 0 )
+		$purchase_yen = 0 ;
+	$arParam[ "szTotalPrice"		] = $purchase_yen ;
+	$arParam[ "szMinus_yen"			] = $minus_yen ;
+
+	// 送料
+//	$arParam[ "szPriceTransport"	] = $arParam[ "cart_order" ][ "price_transport" ] * $arParam[ "cart_order" ][ "package_count" ] ;
+//	$arParam[ "szPriceTransport"	] = $arParam[ "cart_order" ][ "price_transport_all" ] ;
+	$arParam[ "szPriceTransport"	] = $arParam[ "cart_order" ][ "price_transport_all_all" ] ;
+
+	// クール便
+	$arParam[ "szPriceCoolpack"		] = $arParam[ "cart_order" ][ "coolpack" ] * PRICE_COOLPACK ;
+
+	// 請求金額
+	$arParam[ "szTotalCharge"		] = $purchase_yen
+										+ $arParam[ "szPriceTransport" ]
+										+ $arParam[ "cart_order" ][ "price_charge" ]
+										+ $arParam[ "szPriceCoolpack" ] ;
+
+	$pdf = new PDFDelivery( ${ sprintf( "%s_cartid" , $obCart -> alias ) } ) ; 
+	$pdf -> SetHeaderMargin( PDF_HEADER_MARGIN ) ;
+	$pdf -> SetFooterMargin( PDF_FOOTER_MARGIN ) ;
+	$pdf -> SetMargins( PDF_LEFT_MARGIN , PDF_TOP_MARGIN , PDF_RIGHT_MARGIN ) ;
+	$pdf -> setPrintHeader( false ) ;
+
+	$arCartOrder = $arParam[ "cartitem_data" ] ;
+
+	if ( ( DEF_DELIVERY_SHEET & DEF_DELIVERY_SHEET_ORDER ) != 0 )
+	{
+		$pdf -> AddPage();
+		$pdf -> PDFLineTitle( "注文書" ) ;
+		$pdf -> PDFOrder( $arParam ) ;
+		$pdf -> PDFOrderList( $arCartOrder ) ;
+	}
+
+	if ( ( DEF_DELIVERY_SHEET & DEF_DELIVERY_SHEET_BILL ) != 0 )
+	{
+		$pdf -> AddPage();
+		$pdf -> PDFLineTitle( "納品書" ) ;
+		$pdf -> PDFOrder( $arParam ) ;
+		$pdf -> PDFOrderList( $arCartOrder ) ;
+	}
+	
+	if ( ( DEF_DELIVERY_SHEET & ( DEF_DELIVERY_SHEET_ORDER | DEF_DELIVERY_SHEET_BILL ) ) != 0 )
+	{
+		if( count( $arParam[ "add_address" ] ) > 0 )
+		{
+			$pdf -> AddPage();
+			$pdf -> PDFLineTitle( "追加配送先" ) ;
+			$pdf -> PDFAddAddress( $arParam[ "add_address" ] ) ;
+		}
+	}
+	
+	if ( ( DEF_DELIVERY_SHEET & DEF_DELIVERY_SHEET_CHECK ) != 0 )
+	{
+		$pdf -> AddPage();
+		$pdf -> PDFLineTitle( "梱包チェックシート" ) ;
+		$pdf -> PDFCheckSheet( $arCartOrder , $arWrapDeco ) ;
+	}
+	
+	$filename = sprintf( "order_%s.pdf" , $arParam[ "sheetno" ] ) ;
+	$pdf -> Output( $filename , "I" ) ;
+
+	exit ;
+
+// データ取得
+function	GetData( $getdatakey )
+{
+	$obCart		= new PARTS_Cart() ;
+	$ct_alias	= $obCart -> alias ;
+	$obMember	= new PARTS_Member() ;
+	
+	$arWhere = array() ;
+	$arWhere[ "cartid" ] = $getdatakey ;
+	$arCart = $obCart -> getData( $arWhere , 0 , false ) ;
+	
+	$arCart = $arCart[ 0 ] ;
+	$arResult = $arCart ;
+
+	$shipping	= $arCart[ sprintf( "%s_shipping" , $obCart -> alias ) ] ;
+
+	global	$arState ;
+	if ( $shipping == 0 )
+	{
+		// お届け先指定なしの場合は、mb_ から取得
+		$state		= $arCart[ sprintf( "%s_state"	, $obMember -> alias ) ] ;
+		$city		= $arCart[ sprintf( "%s_city"	, $obMember -> alias ) ] ;
+		$addr1		= $arCart[ sprintf( "%s_addr1"	, $obMember -> alias ) ] ;
+		$addr2		= $arCart[ sprintf( "%s_addr2"	, $obMember -> alias ) ] ;
+		$arZip		= explode( '-' , $arCart[ sprintf( "%s_zip"			, $obMember -> alias ) ] ) ;
+		$arTelH		= explode( '-' , $arCart[ sprintf( "%s_tel_home"	, $obMember -> alias ) ] ) ;
+		$arTelP		= explode( '-' , $arCart[ sprintf( "%s_tel_port"	, $obMember -> alias ) ] ) ;
+		$name		= sprintf( "%s %s" , $arCart[ sprintf( "%s_last_name" , $obMember -> alias ) ] , $arCart[ sprintf( "%s_first_name" , $obMember -> alias ) ] ) ;
+
+		$arMember[ "state"		] = $state ;
+		$arMember[ "city"		] = $city ;
+		$arMember[ "addr1"		] = $addr1 ;
+		$arMember[ "addr2"		] = $addr2 ;
+		$arMember[ "name"		] = $name ;
+		$arMember[ "zip1"		] = $arZip[ 0 ] ;
+		$arMember[ "zip2"		] = $arZip[ 1 ] ;
+		if ( $arTelH[ 0 ] != "" && $arTelH[ 1 ] != "" && $arTelH[ 2 ] != "" )
+		{
+			$arMember[ "tel1"		] = $arTelH[ 0 ] ;
+			$arMember[ "tel2"		] = $arTelH[ 1 ] ;
+			$arMember[ "tel3"		] = $arTelH[ 2 ] ;
+		}
+		else
+		{
+			$arMember[ "tel1"		] = $arTelP[ 0 ] ;
+			$arMember[ "tel2"		] = $arTelP[ 1 ] ;
+			$arMember[ "tel3"		] = $arTelP[ 2 ] ;
+		}
+
+		$state = $arMember[ "state" ] ;
+		$szState  = $arState[ $state ][ 2 ] ;
+		$arMember[ "szState" ] = $szState ;
+
+		// 配送先も請求先も同じ
+		$arResult[ "dst"	] = $arMember ;
+		$arResult[ "bill"	] = $arMember ;
+	}
+	elseif ( $shipping == 1 )
+	{
+		// 配送先は ct_ から 請求先は mb_ から取得
+		// 配送先
+		$arResult[ "dst" ][ "state"		] = $arCart[ sprintf( "%s_state"	, $obCart -> alias ) ] ;
+		$arResult[ "dst" ][ "city"		] = $arCart[ sprintf( "%s_city"		, $obCart -> alias ) ] ;
+		$arResult[ "dst" ][ "addr1"		] = $arCart[ sprintf( "%s_addr1"	, $obCart -> alias ) ] ;
+		$arResult[ "dst" ][ "addr2"		] = $arCart[ sprintf( "%s_addr2"	, $obCart -> alias ) ] ;
+		$arResult[ "dst" ][ "name"		] = sprintf( "%s %s" , $arCart[ sprintf( "%s_last_name" , $obCart -> alias ) ] , $arCart[ sprintf( "%s_first_name" , $obCart -> alias ) ] ) ;
+
+		$arDstZip	= explode( '-' , $arCart[ sprintf( "%s_zip"	, $obCart -> alias ) ] ) ;
+		$arDstTel	= explode( '-' , $arCart[ sprintf( "%s_tel"	, $obCart -> alias ) ] ) ;
+		$arResult[ "dst" ][ "zip1"		] = $arDstZip[ 0 ] ;
+		$arResult[ "dst" ][ "zip2"		] = $arDstZip[ 1 ] ;
+		$arResult[ "dst" ][ "tel1"		] = $arDstTel[ 0 ] ;
+		$arResult[ "dst" ][ "tel2"		] = $arDstTel[ 1 ] ;
+		$arResult[ "dst" ][ "tel3"		] = $arDstTel[ 2 ] ;
+
+		$state = $arResult[ "dst" ][ "state" ] ;
+		$szState  = $arState[ $state ][ 2 ] ;
+		$arResult[ "dst" ][ "szState" ] = $szState ;
+
+		// 請求先
+		$state		= $arCart[ sprintf( "%s_state"	, $obMember -> alias ) ] ;
+		$city		= $arCart[ sprintf( "%s_city"	, $obMember -> alias ) ] ;
+		$addr1		= $arCart[ sprintf( "%s_addr1"	, $obMember -> alias ) ] ;
+		$addr2		= $arCart[ sprintf( "%s_addr2"	, $obMember -> alias ) ] ;
+		$arZip		= explode( '-' , $arCart[ sprintf( "%s_zip"			, $obMember -> alias ) ] ) ;
+		$arTelH		= explode( '-' , $arCart[ sprintf( "%s_tel_home"	, $obMember -> alias ) ] ) ;
+		$arTelP		= explode( '-' , $arCart[ sprintf( "%s_tel_port"	, $obMember -> alias ) ] ) ;
+		$name		= sprintf( "%s %s" , $arCart[ sprintf( "%s_last_name" , $obMember -> alias ) ] , $arCart[ sprintf( "%s_first_name" , $obMember -> alias ) ] ) ;
+
+		$arResult[ "bill" ][ "state"	] = $state ;
+		$arResult[ "bill" ][ "city"		] = $city ;
+		$arResult[ "bill" ][ "addr1"	] = $addr1 ;
+		$arResult[ "bill" ][ "addr2"	] = $addr2 ;
+		$arResult[ "bill" ][ "name"		] = $name ;
+		$arResult[ "bill" ][ "zip1"		] = $arZip[ 0 ] ;
+		$arResult[ "bill" ][ "zip2"		] = $arZip[ 1 ] ;
+		if ( $arTelH[ 0 ] != "" && $arTelH[ 1 ] != "" && $arTelH[ 2 ] != "" )
+		{
+			$arResult[ "bill" ][ "tel1"		] = $arTelH[ 0 ] ;
+			$arResult[ "bill" ][ "tel2"		] = $arTelH[ 1 ] ;
+			$arResult[ "bill" ][ "tel3"		] = $arTelH[ 2 ] ;
+		}
+		else
+		{
+			$arResult[ "bill" ][ "tel1"		] = $arTelP[ 0 ] ;
+			$arResult[ "bill" ][ "tel2"		] = $arTelP[ 1 ] ;
+			$arResult[ "bill" ][ "tel3"		] = $arTelP[ 2 ] ;
+		}
+
+		$state = $arResult[ "bill" ][ "state" ] ;
+		$szState  = $arState[ $state ][ 2 ] ;
+		$arResult[ "bill" ][ "szState" ] = $szState ;
+	}
+
+	// 追加配送先
+	$obAddress = new PARTS_Address() ;
+	$ar_alias = $obAddress -> alias ;
+	$arAddress = array() ;
+	if( $arCart[ sprintf( "%s_addressid"	, $ct_alias ) ] != "{-1}" )
+	{
+		$arWhere = array() ;
+		$arWhere[ "where" ] = sprintf( "AND %s.addressid in (%s) " , $ar_alias , trim( $arCart[ sprintf( "%s_addressid"	, $ct_alias ) ] , "{}" ) ) ;
+		$arAddress = $obAddress -> getData( $arWhere , 0 , false ) ;
+	}
+
+	global $arState ;
+	$arMulti = array() ;
+	$cnt_address = count( $arAddress ) ;
+	for( $i = 0 ; $i < $cnt_address ; $i ++ )
+	{
+		$arAData = $arAddress[ $i ] ;
+		$szAddAddress = sprintf( "〒%s %s%s%s%s" , 
+									$arAData[ $ar_alias . "_zip" ] , 
+									$arState[ $arAData[ $ar_alias . "_state" ] ][ 2 ] , 
+									$arAData[ $ar_alias . "_city" ] ,
+									$arAData[ $ar_alias . "_addr1" ] , 
+									$arAData[ $ar_alias . "_addr2" ] 
+							) ;
+		$szName = sprintf( "%s%s(%s%s)" , 
+							$arAData[ $ar_alias . "_last_name" ] ,
+							$arAData[ $ar_alias . "_first_name" ] , 
+							$arAData[ $ar_alias . "_last_kana" ] ,
+							$arAData[ $ar_alias . "_first_kana" ] 
+						) ;
+		$szTel = sprintf( "%s" , 
+							$arAData[ $ar_alias . "_tel" ] 
+						) ;
+		$arMulti[ $i ][ "szAddress"	] = $szAddAddress ;
+		$arMulti[ $i ][ "szName"	] = $szName ;
+		$arMulti[ $i ][ "szTel"		] = $szTel ;
+		$arMulti[ $i ][ "szTrans"	] = number_format( $arCart[ "cart_order" ][ "price_transport_each" ][ $i ] ) ;
+	}
+	$arResult[ "add_address" ] = $arMulti ;
+
+	return $arResult ;
+}
+
+?>

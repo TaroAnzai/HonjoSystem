@@ -1,0 +1,40 @@
+<?php
+/*
+* BLAMS
+*
+* ファイル転送関数<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+	require_once( "../../../lib/system.php" ) ;
+
+	$filename = "" ;
+	$error = -1 ;
+	$upload = array() ;
+
+	$obPhoto = new PARTS_Photo() ;
+	$error = $obPhoto -> uploadExist( "upload" , $upload ) ;
+	$msg = $obPhoto -> errorMessage( $error ) ;
+	if ( $error == UPLOAD_ERR_OK )
+	{
+		$id = -1 ;
+		$type = $obPhoto -> checkFileType( $upload[ "tmp_name" ] , "img" ) ;
+		if ( $type != -1 )
+			$id = $obPhoto -> insertData( $upload[ "tmp_name" ] , $upload[ "name" ] , $type , DEF_UPLOAD_CKEDITOR , "/" ) ;
+		else
+			$msg = "アップロードされたファイルの形式が不正です。" ;
+		
+		if ( $id != -1 )
+			$filename = sprintf( "/img/planeimage/I%d.%s" , $id , $obPhoto -> getExt( $type ) ) ;
+	}
+	
+	$funcNum = preg_replace( "/[^0-9]/" , "" , $_GET[ "CKEditorFuncNum" ] ) ;
+
+	header( 'Content-Type: text/html; charset=Shift_JIS' ) ;
+	printf( "<script type=\"text/javascript\">" ) ;
+	printf( "window.parent.CKEDITOR.tools.callFunction( %d , '%s' , '%s' );" , $funcNum , $filename , $msg ) ;
+	printf( "</script>" ) ;
+?>

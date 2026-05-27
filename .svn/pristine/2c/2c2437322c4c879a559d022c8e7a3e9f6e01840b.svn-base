@@ -1,0 +1,47 @@
+<?php
+/**
+* BLAMS 基本関数郡 イベント用クラス
+*
+* イベント用クラス<br>
+* 
+* @author H.Saitoh <hsaitoh@blazinghills.com>
+* @copyright Copyright(c)  Blazinghills.com. All rights reserved.
+* @filesource
+* @package BLAMS Blazinghills Contents Managemant System.
+*/
+//ini_set( "display_errors" ,1 ) ;
+
+//
+// 掲載種類
+//
+$_FUNC = 1 ;
+define( "EVENT_SORT_NORMAL"			,	$_FUNC ++	) ;		// 標準
+global $arEventTitle ;
+$arEventTitle = array(
+	EVENT_SORT_NORMAL	=> "標準" ,
+) ;
+
+define( "NUMBER_PER_EVENT"		,	3	) ;		// 行数／ページ
+define( "NUMBER_PER_EVENT_TOP"	,	3	) ;		// 行数／ページ
+
+require_once( 'class/db.class.php' ) ;
+
+class PARTS_Event extends DB_Common
+{
+	var	$db ;
+
+	function	__construct( $dbname = "" , $user = "" , $passwd = "" , $host = "" , $port = "" )
+	{
+		$tname		= "event_data" ;
+		$alias		= "evt" ;
+		$primarykey	= "eventid" ;
+
+		parent::__construct( $dbname , $user , $passwd , $host , $port , $tname , $alias , $primarykey ) ;
+	}
+
+	function	getData( $arParam , $page = -1 )
+	{
+		return $arData ;
+	}
+}
+?>
