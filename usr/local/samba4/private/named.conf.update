@@ -1,0 +1,6 @@
+/* this file is auto-generated - do not edit */
+update-policy {
+	grant BOTTLEMGR.LOCALNET ms-self * A AAAA;
+	grant Administrator@BOTTLEMGR.LOCALNET wildcard * A AAAA SRV CNAME;
+	grant ND1$@bottlemgr.localnet wildcard * A AAAA SRV CNAME;
+};

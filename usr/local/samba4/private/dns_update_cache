@@ -1,0 +1,27 @@
+A nd1.bottlemgr.localnet 172.18.32.159
+A bottlemgr.localnet 172.18.32.159
+SRV _ldap._tcp.bottlemgr.localnet nd1.bottlemgr.localnet 389
+SRV _ldap._tcp.dc._msdcs.bottlemgr.localnet nd1.bottlemgr.localnet 389
+SRV _ldap._tcp.5aa2b3c6-21f1-4e89-9302-aa64b09786bb.domains._msdcs.bottlemgr.localnet nd1.bottlemgr.localnet 389
+SRV _kerberos._tcp.bottlemgr.localnet nd1.bottlemgr.localnet 88
+SRV _kerberos._udp.bottlemgr.localnet nd1.bottlemgr.localnet 88
+SRV _kerberos._tcp.dc._msdcs.bottlemgr.localnet nd1.bottlemgr.localnet 88
+SRV _kpasswd._tcp.bottlemgr.localnet nd1.bottlemgr.localnet 464
+SRV _kpasswd._udp.bottlemgr.localnet nd1.bottlemgr.localnet 464
+CNAME 6da231cc-5ea9-4f9f-8d28-b173a774b389._msdcs.bottlemgr.localnet nd1.bottlemgr.localnet
+SRV _ldap._tcp.Default-First-Site-Name._sites.bottlemgr.localnet nd1.bottlemgr.localnet 389
+SRV _ldap._tcp.Default-First-Site-Name._sites.dc._msdcs.bottlemgr.localnet nd1.bottlemgr.localnet 389
+SRV _kerberos._tcp.Default-First-Site-Name._sites.bottlemgr.localnet nd1.bottlemgr.localnet 88
+SRV _kerberos._tcp.Default-First-Site-Name._sites.dc._msdcs.bottlemgr.localnet nd1.bottlemgr.localnet 88
+SRV _ldap._tcp.pdc._msdcs.bottlemgr.localnet nd1.bottlemgr.localnet 389
+A gc._msdcs.bottlemgr.localnet 172.18.32.159
+SRV _gc._tcp.bottlemgr.localnet nd1.bottlemgr.localnet 3268
+SRV _ldap._tcp.gc._msdcs.bottlemgr.localnet nd1.bottlemgr.localnet 3268
+SRV _gc._tcp.Default-First-Site-Name._sites.bottlemgr.localnet nd1.bottlemgr.localnet 3268
+SRV _ldap._tcp.Default-First-Site-Name._sites.gc._msdcs.bottlemgr.localnet nd1.bottlemgr.localnet 3268
+A DomainDnsZones.bottlemgr.localnet 172.18.32.159
+SRV _ldap._tcp.DomainDnsZones.bottlemgr.localnet nd1.bottlemgr.localnet 389
+SRV _ldap._tcp.Default-First-Site-Name._sites.DomainDnsZones.bottlemgr.localnet nd1.bottlemgr.localnet 389
+A ForestDnsZones.bottlemgr.localnet 172.18.32.159
+SRV _ldap._tcp.ForestDnsZones.bottlemgr.localnet nd1.bottlemgr.localnet 389
+SRV _ldap._tcp.Default-First-Site-Name._sites.ForestDnsZones.bottlemgr.localnet nd1.bottlemgr.localnet 389

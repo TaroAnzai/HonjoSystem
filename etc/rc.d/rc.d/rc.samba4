@@ -1,0 +1,43 @@
+#!/bin/sh
+#
+# /etc/rc.d/rc.samba
+#
+# Start/stop/restart the Samba SMB file/print server.
+#
+# To make Samba start automatically at boot, make this
+# file executable:  chmod 755 /etc/rc.d/rc.samba
+#
+
+samba_start() {
+  if [ -x /usr/local/samba4/sbin/samba -a -r /usr/local/samba4/etc/smb.conf ]; then
+    echo "Starting Samba:  /usr/local/samba4/sbin/samba"
+    /usr/local/samba4/sbin/samba -D
+  fi
+}
+
+samba_stop() {
+  killall samba
+}
+
+samba_restart() {
+  samba_stop
+  sleep 2
+  samba_start
+}
+
+case "$1" in
+'start')
+  samba_start
+  ;;
+'stop')
+  samba_stop
+  ;;
+'restart')
+  samba_restart
+  ;;
+*)
+  # Default is "start", for backwards compatibility with previous
+  # Slackware versions.  This may change to a 'usage' error someday.
+  samba_start
+esac
+
